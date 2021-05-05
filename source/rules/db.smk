@@ -118,7 +118,7 @@ rule download_fungi_transcripts:
     output:
         temp("resources/JGI/fungi/fungi_transcripts.fasta")
     params:
-        url = config["fungi_transcript_url"]
+        url = config["fungi_url"]
     shell:
         """
         curl -L -s -o {output[0]}.gz {params.url}

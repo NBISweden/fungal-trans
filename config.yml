@@ -5,8 +5,8 @@ sample_file_list: "sample_list.tsv"
 datadir: "data/raw"
 mem_per_cpu: 6
 ## data for filtering
-fungi_transcript_url: "https://zenodo.org/record/3550762/files/fungi_transcripts.fasta.gz?download=1"
-spruce_transcript_url: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
+fungi_url: "https://zenodo.org/record/3550762/files/fungi_transcripts.fasta.gz?download=1"
+host_url: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
 ## mapping
 bowtie2_params: "--very-sensitive"
 fc_params: "-B -p -t CDS -g gene_id -Q 10"
