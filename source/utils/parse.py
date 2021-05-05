@@ -14,7 +14,7 @@ def parse_sample_list(f, config):
     suffices = {'unfiltered': 'cut.trim.fastq.gz',
                 'filtered': 'filtered.union.fastq.gz',
                 'taxmapper': 'cut.trim.filtered.fastq.gz',
-                'bowtie2': 'fungi.nospruce.fastq.gz'}
+                'bowtie2': 'fungi.nohost.fastq.gz'}
     # Read sample list
     df = pd.read_csv(f, comment='#', header=0, sep='\t', index_col=0, dtype=str)
     df.fillna('', inplace=True)
