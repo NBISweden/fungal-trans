@@ -1,7 +1,7 @@
 if config["paired_strategy"] == "concordant":
     localrules:
         collate_fungi,
-        collate_spruce
+        collate_host
 
     rule collate_fungi:
         input:
@@ -12,11 +12,11 @@ if config["paired_strategy"] == "concordant":
             """
             mv {input} {output} 
             """
-    rule collate_spruce:
+    rule collate_host:
         input:
-            "results/bowtie2/{sample_id}/{sample_id}_{pair}.fungi.nospruce.conc.fastq.gz"
+            "results/bowtie2/{sample_id}/{sample_id}_{pair}.fungi.nohost.conc.fastq.gz"
         output:
-            "results/bowtie2/{sample_id}/{sample_id}_{pair}.fungi.nospruce.fastq.gz"
+            "results/bowtie2/{sample_id}/{sample_id}_{pair}.fungi.nohost.fastq.gz"
         shell:
             """
             mv {input} {output}
@@ -42,20 +42,20 @@ elif config["paired_strategy"] == "both-mapped":
             mv {params.R1}.gz {output.R1}
             mv {params.R2}.gz {output.R2}
             """
-    rule collate_spruce:
+    rule collate_host:
         """Extracts paired reads where neither mate is mapped"""
         input:
-            "results/bowtie2/{sample_id}/{sample_id}.spruce.bam"
+            "results/bowtie2/{sample_id}/{sample_id}.host.bam"
         output:
-            R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz",
-            R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nospruce.fastq.gz"
+            R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz",
+            R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nohost.fastq.gz"
         params:
-            R1="$TMPDIR/{sample_id}_R1.fungi.nospruce.fastq",
-            R2="$TMPDIR/{sample_id}_R2.fungi.nospruce.fastq",
-            only_this_end="$TMPDIR/{sample_id}.fungi.nospruce.only_this_end.bam",
-            only_that_end="$TMPDIR/{sample_id}.fungi.nospruce.only_that_end.bam",
-            both_unmapped="$TMPDIR/{sample_id}.fungi.nospruce.both_unmapped.bam",
-            merged="$TMPDIR/{sample_id}.fungi.nospruce.merged.bam"
+            R1="$TMPDIR/{sample_id}_R1.fungi.nohost.fastq",
+            R2="$TMPDIR/{sample_id}_R2.fungi.nohost.fastq",
+            only_this_end="$TMPDIR/{sample_id}.fungi.nohost.only_this_end.bam",
+            only_that_end="$TMPDIR/{sample_id}.fungi.nohost.only_that_end.bam",
+            both_unmapped="$TMPDIR/{sample_id}.fungi.nohost.both_unmapped.bam",
+            merged="$TMPDIR/{sample_id}.fungi.nohost.merged.bam"
         resources:
             runtime = lambda wildcards, attempt: attempt**2*30
         shell:
@@ -109,18 +109,18 @@ else:
             mv {params.R2}.gz {output.R2}
             rm {params.merged} {params.bothends} {params.only_that_end} {params.only_this_end}
             """
-    rule collate_spruce:
+    rule collate_host:
         """Extracts only unmapped reads with no mapped mate"""
         input:
-             "results/bowtie2/{sample_id}/{sample_id}.spruce.bam"
+             "results/bowtie2/{sample_id}/{sample_id}.host.bam"
         output:
-             R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz",
-             R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nospruce.fastq.gz"
+             R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz",
+             R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nohost.fastq.gz"
         resources:
             runtime = lambda wildcards, attempt: attempt**2*30
         params:
-            R1="$TMPDIR/{sample_id}_R1.fungi.nospruce.fastq",
-            R2="$TMPDIR/{sample_id}_R2.fungi.nospruce.fastq"
+            R1="$TMPDIR/{sample_id}_R1.fungi.nohost.fastq",
+            R2="$TMPDIR/{sample_id}_R2.fungi.nohost.fastq"
         shell:
             """
             # Extract only reads where neither read in a pair is mapped

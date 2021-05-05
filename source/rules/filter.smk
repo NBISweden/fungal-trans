@@ -49,13 +49,13 @@ rule bowtie_build_fungi:
         rm -r {params.tmpdir}
         """
 
-rule bowtie_build_spruce:
+rule bowtie_build_host:
     input:
-        "resources/spruce/spruce.fna"
+        "resources/host/host.fna"
     output:
-        expand("resources/spruce/spruce.fna.{index}.bt2l", index=range(1,5))
+        expand("resources/host/host.fna.{index}.bt2l", index=range(1,5))
     log:
-        "resources/spruce/bowtie2.log"
+        "resources/host/bowtie2.log"
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60
     shell:
@@ -130,26 +130,26 @@ rule get_all_mapped_fungal_refs:
         cat {input} | sort -u > {output[0]}
         """
 
-rule bowtie_map_spruce:
+rule bowtie_map_host:
     input:
-        db = expand("resources/spruce/spruce.fna.{index}.bt2l", index=range(1,5)),
+        db = expand("resources/host/host.fna.{index}.bt2l", index=range(1,5)),
         R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
         R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.fastq.gz"
     output:
-        bam="results/bowtie2/{sample_id}/{sample_id}.spruce.bam",
-        R1f="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.conc.fastq.gz",
-        R2f="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nospruce.conc.fastq.gz"
+        bam="results/bowtie2/{sample_id}/{sample_id}.host.bam",
+        R1f="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.conc.fastq.gz",
+        R2f="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nohost.conc.fastq.gz"
     params:
-        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.spruce.bam",
-        no_al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.nospruce.conc.fastq.gz",
-        R1f = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.nospruce.conc.fastq.gz",
-        R2f = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.nospruce.conc.fastq.gz",
+        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.host.bam",
+        no_al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.nohost.conc.fastq.gz",
+        R1f = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.nohost.conc.fastq.gz",
+        R2f = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.nohost.conc.fastq.gz",
         tmpdir = "$TMPDIR/{sample_id}",
-        prefix = "resources/spruce/spruce.fna",
+        prefix = "resources/host/host.fna",
         setting = config["bowtie2_params"]
     log:
-        bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.spruce.log",
-        samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.spruce.log"
+        bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.host.log",
+        samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.host.log"
     threads: 10
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60
@@ -174,9 +174,9 @@ rule bowtie_map_spruce:
 rule bowtie2_report:
     input:
         btlog = expand("results/bowtie2/{sample_id}/{sample_id}.bowtie2.{taxa}.log",
-            sample_id = samples.keys(), taxa = ["fungi","spruce"]),
+            sample_id = samples.keys(), taxa = ["fungi","host"]),
         bam = expand("results/bowtie2/{sample_id}/{sample_id}.{taxa}.bam",
-            sample_id = samples.keys(), taxa = ["fungi","spruce"])
+            sample_id = samples.keys(), taxa = ["fungi","host"])
     output:
         "results/report/filtering/bowtie2_filter_report.html"
     params:
@@ -319,9 +319,9 @@ rule count_reads:
             sample_id = samples.keys()),
         R1bt = expand("results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
             sample_id = samples.keys()),
-        R1btf = expand("results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz",
+        R1btf = expand("results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz",
             sample_id = samples.keys()),
-        R1bts = expand("results/bowtie2/{sample_id}/{sample_id}_R1.fungi.spruce.fastq.gz",
+        R1bts = expand("results/bowtie2/{sample_id}/{sample_id}_R1.fungi.host.fastq.gz",
             sample_id = samples.keys())
     output:
         "results/report/filtering/filtered_read_counts.tsv"
@@ -329,8 +329,8 @@ rule count_reads:
         counts = {}
         for i,sample in enumerate(samples.keys(), start=1):
             print("{} ({}/{})".format(sample, i, len(samples.keys())))
-            counts[sample] = {"taxmapper_tot": 0,"bowtie_tot": 0,"bowtie_nonspruce_tot": 0,"bowtie_spruce_tot": 0,
-                "taxmapper_bowtie": 0, "taxmapper_bowtie_nonspruce": 0, "taxmapper_bowtie_spruce": 0,
+            counts[sample] = {"taxmapper_tot": 0,"bowtie_tot": 0,"bowtie_nonhost_tot": 0,"bowtie_host_tot": 0,
+                "taxmapper_bowtie": 0, "taxmapper_bowtie_nonhost": 0, "taxmapper_bowtie_host": 0,
                 "union": 0}
             # Taxmapper read ids
             tmfile = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz".format(sample_id=sample)
@@ -338,24 +338,24 @@ rule count_reads:
             # Bowtie read ids
             btfile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz".format(sample_id=sample)
             btids = get_ids(btfile)
-            # Bowtie read ids non spruce
-            btffile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz".format(sample_id=sample)
+            # Bowtie read ids non host
+            btffile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz".format(sample_id=sample)
             btfids = get_ids(btffile)
-            # Bowtie read ids spruce
-            btsfile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.spruce.fastq.gz".format(sample_id=sample)
+            # Bowtie read ids host
+            btsfile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.host.fastq.gz".format(sample_id=sample)
             btsids = get_ids(btsfile)
             # Count reads common and unique
             counts[sample]["taxmapper_tot"] = len(tmids)
             counts[sample]["bowtie_tot"] = len(btids)
-            counts[sample]["bowtie_nonspruce_tot"] = len(btfids)
-            counts[sample]["bowtie_spruce_tot"] = len(btsids)
+            counts[sample]["bowtie_nonhost_tot"] = len(btfids)
+            counts[sample]["bowtie_host_tot"] = len(btsids)
             counts[sample]["taxmapper_bowtie"] = len(tmids.intersection(btids))
-            counts[sample]["taxmapper_bowtie_nonspruce"] = len(tmids.intersection(btfids))
-            counts[sample]["taxmapper_bowtie_spruce"] = len(tmids.intersection(btsids))
+            counts[sample]["taxmapper_bowtie_nonhost"] = len(tmids.intersection(btfids))
+            counts[sample]["taxmapper_bowtie_host"] = len(tmids.intersection(btsids))
             counts[sample]["union"] = len(tmids.union(btfids))
         df = pd.DataFrame(counts).T
         df.index.name="Sample"
-        df = df[["taxmapper_tot","bowtie_nonspruce_tot","union","bowtie_tot","bowtie_spruce_tot","taxmapper_bowtie","taxmapper_bowtie_nonspruce","taxmapper_bowtie_spruce"]]
+        df = df[["taxmapper_tot","bowtie_nonhost_tot","union","bowtie_tot","bowtie_host_tot","taxmapper_bowtie","taxmapper_bowtie_nonhost","taxmapper_bowtie_host"]]
         df.to_csv(output[0], sep="\t")
 
 ###########################
@@ -390,8 +390,8 @@ rule union_filtered_reads:
     input:
         R1_taxmapper = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz",
         R2_taxmapper = "results/taxmapper/{sample_id}/{sample_id}_R2.cut.trim.filtered.fastq.gz",
-        R1_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz",
-        R2_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nospruce.fastq.gz"
+        R1_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz",
+        R2_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nohost.fastq.gz"
     output:
         R1 = "results/filtered/{sample_id}/{sample_id}_R1.filtered.union.fastq.gz",
         R2 = "results/filtered/{sample_id}/{sample_id}_R2.filtered.union.fastq.gz"

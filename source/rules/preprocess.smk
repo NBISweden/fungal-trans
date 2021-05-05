@@ -72,11 +72,11 @@ rule avg_seq_length_taxmapper:
 
 rule avg_seq_length_bowtie:
     input:
-        "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz"
+        "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz"
     output:
         temp("results/sample_info/{sample_id}.bowtie2_read_lengths.tab")
     run:
-        calc_read_lengths(input, output, "_R1.fungi.nospruce.fastq.gz")
+        calc_read_lengths(input, output, "_R1.fungi.nohost.fastq.gz")
 
 rule avg_seq_length_filtered:
     input:
