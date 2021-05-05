@@ -5,7 +5,7 @@ localrules:
     press_dbCAN,
     get_kegg_files,
     download_refseq_db,
-    download_spruce_transcripts,
+    download_host,
     download_fungi_transcripts,
     prepare_diamond_JGI
 
@@ -125,7 +125,7 @@ rule download_fungi_transcripts:
         gunzip {output[0]}.gz
         """
 
-## Spruce data ##
+## Host data ##
 rule download_host:
     """
     Downloads host sequences for filtering 
