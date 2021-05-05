@@ -128,7 +128,7 @@ rule download_fungi_transcripts:
 ## Spruce data ##
 rule download_host:
     """
-    Downloads spruce transcripts 
+    Downloads host sequences for filtering 
     """
     output:
         "resources/host/host.fna"
