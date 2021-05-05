@@ -1,0 +1,23 @@
+name: jupyter_street
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - ipykernel=5.1.4=py36h39e3cac_0
+  - ipython=7.12.0=py36h5ca1d4c_0
+  - ipython_genutils=0.2.0=py36_0
+  - jupyter=1.0.0=py36_7
+  - matplotlib=3.1.3=py36_0
+  - numpy=1.18.1=py36h7241aed_0
+  - pandas=1.0.1=py36h6c726b0_0
+  - python=3.6.10=h359304d_0
+  - scikit-bio=0.5.2=py36h917ab60_0
+  - scikit-learn=0.22.1=py36h27c97d8_0
+  - scipy=1.4.1=py36h9fa6033_0
+  - seaborn=0.10.0=py_0
+  - umap-learn=0.3.10=py36_1
+  - pip=20.0.2=py36_1
+  - ete3=3.1.1=py36_0
+  - pip:
+    - matplotlib-venn==0.11.5

@@ -1,0 +1,7 @@
+name: entap
+channels:
+  - bioconda
+dependencies:
+  - python=2.7
+  - diamond=0.8.31
+  - matplotlib=2.2.3

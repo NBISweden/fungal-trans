@@ -1,0 +1,7 @@
+name: contigtax
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - contigtax

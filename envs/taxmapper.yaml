@@ -1,0 +1,8 @@
+name: taxmapper
+channels:
+ - bioconda
+ - conda-forge
+ - defaults
+dependencies:
+ - rapsearch
+ - taxmapper

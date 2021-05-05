@@ -1,0 +1,20 @@
+name: fungal-trans
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - snakemake-minimal
+  - biopython
+  - pandas
+  - hmmer
+  - wget
+  - multiqc
+  - bowtie2
+  - samtools=1.9
+  - ete3
+  - fastuniq
+  - subread
+  - seqtk
+  - tbb

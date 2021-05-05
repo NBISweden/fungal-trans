@@ -1,0 +1,117 @@
+$schema: "http://json-schema.org/draft-06/schema#"
+description: Configuration schema
+properties:
+  mem_per_cpu:
+    type: number
+    default: 6
+    description: GB RAM per CPU available
+  ## PATHS ##
+  workdir:
+    type: string
+    default: .
+    description: Work directory for workflow
+  sample_file_list:
+    type: string
+    description: Sample information file
+    default: "sample_list.tsv"
+  datadir:
+    type: string
+    description: Directory with raw sequence files
+    default: "data/raw"
+  ## SRA DOWNLOAD ##
+  dlparams:
+    type: string
+    description: Parameters to supply to sra-tools for development purposes
+    default: ""
+  ## MAPPING ##
+  bowtie2_params:
+    type: string
+    description: Parameters for bowtie2 aligner
+    default: "--very-sensitive"
+  fc_params:
+    type: string
+    description: Parameters for featureCounts
+    default: "-p -B -t CDS -g gene_id -Q 10"
+  ## ASSEMBLY ##
+  co-assembly:
+    type: boolean
+    description: Whether to create co-assemblies
+    default: true
+  single-assembly:
+    type: boolean
+    description: Whether to create single-assemblies
+    default: false
+  assembler:
+    type: string
+    description: Assembler to use
+    default: "transabyss"
+    enum: ["trinity", "megahit", "transabyss"]
+  transabyss_kmers:
+    type: array
+    description: Kmer lengths to use for transabyss
+    default: [21, 25, 29, 31, 65, 75, 85, 95]
+    items:
+      type: integer
+  min_contig_len:
+    type: integer
+    description: Minimum contig length for megahit assembler
+    default: 200
+  ## FILTERING ##
+  paired_strategy:
+    type: string
+    description: "How to treat paired alignments: 'concordant' = only keep concordantly mapping reads,
+      'both-mapped' = requires that both ends are mapped or 'one-mapped' = keep paired reads even if only one end maps"
+    default: "both-mapped"
+    enum: ["concordant","both-mapped","one-mapped"]
+  fungi_transcript_url:
+    type: string
+    description: Dataset url for fungal transcripts to use in filtering
+    default: "https://zenodo.org/record/3550762/files/fungi_transcripts.fasta.gz?download=1"
+  spruce_transcript_url:
+    type: string
+    description: Dataset url for spruce transcripts to use in filtering
+    default: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
+  read_source:
+    type: string
+    description: Method to use for fungal read filtering
+    enum: ["taxmapper","bowtie2","filtered","unfiltered"]
+    default: "filtered"
+  ## DIAMOND DATABASE ##
+  diamond_fasta_url:
+    type: string
+    description: Dataset url for fasta file to use for diamond database
+    default: "https://zenodo.org/record/3737678/files/fasta.gz?download=1"
+  diamond_nodes_url:
+    type: string
+    description: Dataset url for nodes.dmp file to use for diamond database
+    default: "https://zenodo.org/record/3737678/files/nodes.dmp.gz?download=1"
+  diamond_taxonmap_url:
+    type: string
+    description: Dataset url for taxonmap.gz file to use for diamond database
+    default: "https://zenodo.org/record/3737678/files/taxonmap.gz?download=1"
+  ## PREPROCESSING ##
+  trimmomatic_home:
+    type: string
+    description: Trimmomatic home path (will be detected automatically)
+    default: ""
+  qc_trim_settings:
+    type: string
+    description: Trimmomatic trim settings
+    default: "LEADING:25 TRAILING:25 SLIDINGWINDOW:4:15 HEADCROP:2 MINLEN:50"
+  dbCAN_eval:
+    type: number
+    description: E-value to use for dbCAN parsing
+    default: 0.00000000000000001
+  dbCAN_cov:
+    type: number
+    description: Coverage threshold for dbCAN parsing
+    default: 0.45
+  tax_rank:
+    type: string
+    description: Taxonomic rank to summarize eggNOG annotations for
+    default: "kingdom"
+    enum: ["superkingdom","kingdom","phylum","class","order","family","genus","species"]
+  tax_name:
+    type: string
+    description: Taxonomic name at which to summarize eggNOG annotations for
+    default: "Fungi"

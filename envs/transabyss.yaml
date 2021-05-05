@@ -1,0 +1,7 @@
+name: transabyss
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - transabyss

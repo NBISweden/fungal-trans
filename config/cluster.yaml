@@ -1,0 +1,12 @@
+__default__:
+  account: "snic2018-8-230"
+  time: "03:00:00"
+  n: 1
+  partition: "core"
+  extra: ""
+
+fastuniq_filtered:
+  time: "48:00:00"
+  partition: "node"
+  extra: "-C mem256GB"
+  n: 20

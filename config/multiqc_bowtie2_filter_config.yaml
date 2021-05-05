@@ -1,0 +1,9 @@
+title: "N_Street_1801"
+subtitle: "Sample report for read filtering"
+intro_text: ""
+
+extra_fn_clean_exts:
+    - '.cut'
+    - '.cut.trim'
+    - '.bt.log'
+    - '.bowtie.log'

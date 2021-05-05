@@ -1,0 +1,5 @@
+name: blobtools
+channels:
+  - bioconda
+dependencies:
+  - blobtools

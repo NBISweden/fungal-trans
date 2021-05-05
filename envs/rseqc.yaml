@@ -1,0 +1,6 @@
+name: rseqc
+channels:
+  - bioconda
+dependencies:
+  - rseqc
+  - bedops
