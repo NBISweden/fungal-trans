@@ -126,18 +126,18 @@ rule download_fungi_transcripts:
         """
 
 ## Spruce data ##
-rule download_spruce_transcripts:
+rule download_host:
     """
     Downloads spruce transcripts 
     """
     output:
-        "resources/spruce/spruce.fna"
+        "resources/host/host.fna"
     params:
-        url = config["spruce_transcript_url"]
+        url = config["host_url"]
     shell:
         """
         curl -L -s -o {output[0]}.gz {params.url}
-        gunzip {output[0]}.gz
+        gunzip -c {output[0]}.gz > {output[0]}
         """
 
 ## Protein databases ##
