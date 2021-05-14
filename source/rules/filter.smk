@@ -130,7 +130,10 @@ rule get_all_mapped_fungal_refs:
         cat {input} | sort -u > {output[0]}
         """
 
-rule bowtie_map_host:
+rule fungi_map_host:
+    """
+    Maps putative fungal reads against host sequences 
+    """
     input:
         db = expand("resources/host/host.fna.{index}.bt2l", index=range(1,5)),
         R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
@@ -142,6 +145,9 @@ rule bowtie_map_host:
     params:
         temp_bam = "$TMPDIR/{sample_id}/{sample_id}.host.bam",
         no_al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.nohost.conc.fastq.gz",
+        al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.host.conc.fastq.gz",
+        R1h = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.host.conc.fastq.gz",
+        R2h ="$TMPDIR/{sample_id}/{sample_id}_R2.fungi.host.conc.fastq.gz",
         R1f = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.nohost.conc.fastq.gz",
         R2f = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.nohost.conc.fastq.gz",
         tmpdir = "$TMPDIR/{sample_id}",
@@ -163,7 +169,7 @@ rule bowtie_map_host:
             -x {params.prefix} \
             -1 {input.R1} \
             -2 {input.R2} \
-            --un-conc-gz {params.no_al_path} 2>{log.bt2} | \
+            --al-conc-gz {params.al_path} --un-conc-gz {params.no_al_path} 2>{log.bt2} | \
         samtools view -b -h 2>/dev/null | \
         samtools sort -n -O BAM -o {params.temp_bam} -  2>/dev/null
         mv {params.temp_bam} {output.bam}
