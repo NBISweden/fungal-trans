@@ -141,7 +141,9 @@ rule fungi_map_host:
     output:
         bam="results/bowtie2/{sample_id}/{sample_id}.host.bam",
         R1f="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.conc.fastq.gz",
-        R2f="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nohost.conc.fastq.gz"
+        R2f="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nohost.conc.fastq.gz",
+        R1h="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.host.conc.fastq.gz",
+        R2h="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.host.conc.fastq.gz"
     params:
         temp_bam = "$TMPDIR/{sample_id}/{sample_id}.host.bam",
         no_al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.nohost.conc.fastq.gz",
@@ -171,10 +173,12 @@ rule fungi_map_host:
             -2 {input.R2} \
             --al-conc-gz {params.al_path} --un-conc-gz {params.no_al_path} 2>{log.bt2} | \
         samtools view -b -h 2>/dev/null | \
-        samtools sort -n -O BAM -o {params.temp_bam} -  2>/dev/null
+            samtools sort -n -O BAM -o {params.temp_bam} -  2>/dev/null
         mv {params.temp_bam} {output.bam}
         mv {params.R1f} {output.R1f}
         mv {params.R2f} {output.R2f}
+        mv {params.R1h} {output.R1h}
+        mv {params.R2h} {output.R2h}
         """
 
 rule bowtie2_report:
