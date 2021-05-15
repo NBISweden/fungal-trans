@@ -67,6 +67,13 @@ rule bowtie_build_host:
         """
 
 rule bowtie_map_fungi:
+    """
+    Maps preprocessed reads against fungal transcripts.
+    
+    Reads that do or do not map concordantly in this step are saved directly
+    in separate fastq files. If the 'paired_strategy' is set to 'concordant' 
+    these files will be used to separate host and fungal reads.
+    """
     input:
         R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
         R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
@@ -74,12 +81,17 @@ rule bowtie_map_fungi:
     output:
         bam="results/bowtie2/{sample_id}/{sample_id}.fungi.bam",
         R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.conc.fastq.gz",
-        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.conc.fastq.gz"
+        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.conc.fastq.gz",
+        R1u="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.noconc.fastq.gz",
+        R2u="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.noconc.fastq.gz",
     params:
         prefix = "resources/JGI/fungi/fungi_transcripts.fasta",
         al_conc_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.conc.fastq.gz",
+        un_conc_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.noconc.fastq.gz",
         R1 = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.conc.fastq.gz",
         R2 = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.conc.fastq.gz",
+        R1u = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.noconc.fastq.gz",
+        R2u = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.noconc.fastq.gz",
         tmpdir = "$TMPDIR/{sample_id}",
         temp_bam = "$TMPDIR/{sample_id}/{sample_id}.fungi.bam",
         setting = config["bowtie2_params"]
@@ -89,6 +101,7 @@ rule bowtie_map_fungi:
     threads: 10
     resources:
         runtime = lambda wildcards, attempt: attempt**2*240
+    #TODO: Update output from bowtie run
     shell:
         """
         exec &> {log.samtools}
@@ -99,12 +112,15 @@ rule bowtie_map_fungi:
             -x {params.prefix} \
             -1 {input.R1} \
             -2 {input.R2} \
-            --al-conc-gz {params.al_conc_path} 2> {log.bt2}| \
+            --al-conc-gz {params.al_conc_path} --un-conc-gz {params.un_conc_path} 
+            2> {log.bt2}| \
         samtools view -b -h - | \
-        samtools sort -n -o {params.temp_bam} -O BAM - 
+            samtools sort -n -o {params.temp_bam} -O BAM - 
         mv {params.temp_bam} {output.bam}
         mv {params.R1} {output.R1} 
         mv {params.R2} {output.R2}
+        mv {params.R1u} {output.R1u}
+        mv {params.R2u} {output.R2u}
         """
 
 rule get_mapped_fungal_refs:
