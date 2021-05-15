@@ -77,7 +77,7 @@ preprocess += ["results/report/preprocess/preprocess_report.html"]
 taxmapper_filter = expand("results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz", sample_id = samples.keys())
 taxmapper_filter += expand("results/report/taxmapper/taxa_freq_norm_lvl{i}.svg", i = [1,2])
 ## Bowtie filter
-bowtie_filter = expand("results/bowtie2/{sample_id}/{sample_id}_R{i}.fungi.nospruce.fastq.gz",
+bowtie_filter = expand("results/bowtie2/{sample_id}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
             sample_id = samples.keys(), i = [1,2])
 bowtie_filter += ["results/report/filtering/bowtie2_filter_report.html"]
 ## Union filter
