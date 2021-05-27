@@ -138,8 +138,8 @@ rule bowtie_map_fungi:
             -2 {input.R2} \
             --al-conc-gz {params.al_conc_path} --un-conc-gz {params.un_conc_path} 
             2> {log.bt2}| \
-        samtools view -b -h - 2>{log.st_view}| \
-            samtools sort -n -o {params.temp_bam} -O BAM - 2>{log.st_sort} 
+        samtools view -b -h - 2>{log.st_view} | \
+            samtools sort -n -o {params.temp_bam} -O BAM - >/dev/null 2>{log.st_sort} 
         mv {params.temp_bam} {output.bam}
         mv {params.R1} {output.R1} 
         mv {params.R2} {output.R2}
