@@ -131,13 +131,17 @@ rule download_host:
     Downloads host sequences for filtering 
     """
     output:
-        "resources/host/host.fna"
+        "resources/host/host.{suff}"
+    log:
+        "resources/host/host.{suff}.download.log"
     params:
-        url = config["host_url"]
+        url = lambda wildcards: config["host_"+wildcards.suff+"_url"]
     shell:
         """
-        curl -L -s -o {output[0]}.gz {params.url}
+        exec &>{log}
+        curl -L -o {output[0]}.gz {params.url}
         gunzip -c {output[0]}.gz > {output[0]}
+        rm {output[0]}.gz
         """
 
 ## Protein databases ##
