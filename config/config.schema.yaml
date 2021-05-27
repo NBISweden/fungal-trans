@@ -23,11 +23,23 @@ properties:
     type: string
     description: Parameters to supply to sra-tools for development purposes
     default: ""
+  host_fna_url:
+    type: string
+    description: URL to host fasta file
+    default: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
+  host_gtf_url:
+    type: string
+    description: URL to host GTF file
+    default: ""
   ## MAPPING ##
   bowtie2_params:
     type: string
     description: Parameters for bowtie2 aligner
     default: "--very-sensitive"
+  star_overhang:
+    type: integer
+    description: this length should be equal to the ReadLength-1, where ReadLength is the length of the reads
+    default: 99
   fc_params:
     type: string
     description: Parameters for featureCounts
