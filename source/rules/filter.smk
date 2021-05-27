@@ -170,9 +170,39 @@ rule get_all_mapped_fungal_refs:
         cat {input} | sort -u > {output[0]}
         """
 
-rule fungi_map_host:
+rule star_map_host:
     """
-    Maps putative fungal reads against host sequences 
+    Maps putative fungal reads against host with STAR
+    """
+    input:
+        db=expand("resources/host/{f}",
+            f=["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
+               "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"]),
+        R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
+        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.fastq.gz"
+    output:
+        "results/star/{sample_id}/{sample_id}.host.bam"
+    log:
+        star="results/star/{sample_id}/{sample_id}.log",
+        all="results/star/{sample_id}/map.log",
+    params:
+        prefix = "results/star/{sample_id}/{sample_id}.",
+        genomedir = lambda wildcards, input: os.path.dirname(input.db[0]),
+    conda: "../../envs/star.yaml"
+    threads: 20
+    resources:
+        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
+    shell:
+        """
+        exec &>{log.all}
+        STAR --outFileNamePrefix {params.prefix} --runThreadN {threads} \
+            --genomeDir {params.genomedir} --readFilesIn {input.R1} {input.R2} \
+            --readFilesCommand 'gunzip -c' --outSAMtype BAM Unsorted 2>{log.star}
+        """
+
+rule bowtie_map_host:
+    """
+    Maps putative fungal reads against host sequences with bowtie2 
     """
     input:
         db = expand("resources/host/host.fna.{index}.bt2l", index=range(1,5)),
