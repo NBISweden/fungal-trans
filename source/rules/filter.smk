@@ -122,7 +122,6 @@ rule bowtie_map_fungi:
         setting = config["bowtie2_params"]
     log:
         bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
-        st_view = "results/bowtie2/{sample_id}/{sample_id}.samtools_view.fungi.log",
         st_sort = "results/bowtie2/{sample_id}/{sample_id}.samtools_sort.fungi.log",
     threads: 10
     resources:
@@ -130,16 +129,9 @@ rule bowtie_map_fungi:
     shell:
         """
         mkdir -p {params.tmpdir}
-        bowtie2 \
-            {params.setting} \
-            -p {threads} \
-            -x {params.prefix} \
-            -1 {input.R1} \
-            -2 {input.R2} \
-            --al-conc-gz {params.al_conc_path} --un-conc-gz {params.un_conc_path} 
-            2> {log.bt2}| \
-        samtools view -b -h - 2>{log.st_view} | \
-            samtools sort -n -o {params.temp_bam} -O BAM - >/dev/null 2>{log.st_sort} 
+        bowtie2 {params.setting} -p {threads} -x {params.prefix} -1 {input.R1} \
+            -2 {input.R2} --al-conc-gz {params.al_conc_path} \
+            --un-conc-gz {params.un_conc_path} 2> {log.bt2} | samtools sort -n -O BAM - >{params.temp_bam} 2>{log.st_sort} 
         mv {params.temp_bam} {output.bam}
         mv {params.R1} {output.R1} 
         mv {params.R2} {output.R2}
