@@ -49,6 +49,31 @@ rule bowtie_build_fungi:
         rm -r {params.tmpdir}
         """
 
+rule star_build_host:
+    input:
+        expand("resources/host/host.{suff}", suff = ["fna","gtf"] if config["host_gtf_url"] != "" else ["fna"])
+    output:
+        expand("resources/host/{f}",
+            f = ["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
+                 "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"])
+    log:
+        "resources/host/Log.out"
+    params:
+        overhang = "--sjdbOverhang "+str(config["star_overhang"]) if config["host_gtf_url"] != "" else "",
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        gtfstring = "--sjdbGTFfile resources/host/host.gtf" if config["host_gtf_url"] != "" else ""
+    threads: 20
+    resources:
+        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
+    conda: "../../envs/star.yaml"
+    shell:
+        """
+        exec &>{log}
+         STAR --runThreadN {threads} --runMode genomeGenerate --genomeDir {params.outdir} \
+            --genomeFastaFiles {input[0]} {params.overhang} {params.gtfstring}
+        """
+
+
 rule bowtie_build_host:
     input:
         "resources/host/host.fna"
@@ -101,7 +126,6 @@ rule bowtie_map_fungi:
     threads: 10
     resources:
         runtime = lambda wildcards, attempt: attempt**2*240
-    #TODO: Update output from bowtie run
     shell:
         """
         exec &> {log.samtools}
