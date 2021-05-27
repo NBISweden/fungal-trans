@@ -122,13 +122,13 @@ rule bowtie_map_fungi:
         setting = config["bowtie2_params"]
     log:
         bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
-        samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.fungi.log"
+        st_view = "results/bowtie2/{sample_id}/{sample_id}.samtools_view.fungi.log",
+        st_sort = "results/bowtie2/{sample_id}/{sample_id}.samtools_sort.fungi.log",
     threads: 10
     resources:
         runtime = lambda wildcards, attempt: attempt**2*240
     shell:
         """
-        exec &> {log.samtools}
         mkdir -p {params.tmpdir}
         bowtie2 \
             {params.setting} \
@@ -138,8 +138,8 @@ rule bowtie_map_fungi:
             -2 {input.R2} \
             --al-conc-gz {params.al_conc_path} --un-conc-gz {params.un_conc_path} 
             2> {log.bt2}| \
-        samtools view -b -h - | \
-            samtools sort -n -o {params.temp_bam} -O BAM - 
+        samtools view -b -h - 2>{log.st_view}| \
+            samtools sort -n -o {params.temp_bam} -O BAM - 2>{log.st_sort} 
         mv {params.temp_bam} {output.bam}
         mv {params.R1} {output.R1} 
         mv {params.R2} {output.R2}
@@ -186,8 +186,9 @@ rule star_map_host:
         star="results/star/{sample_id}/{sample_id}.log",
         all="results/star/{sample_id}/map.log",
     params:
-        prefix = "results/star/{sample_id}/{sample_id}.",
+        prefix = "$TMPDIR/{sample_id}/{sample_id}.",
         genomedir = lambda wildcards, input: os.path.dirname(input.db[0]),
+        temp_bam= "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam"
     conda: "../../envs/star.yaml"
     threads: 20
     resources:
