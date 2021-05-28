@@ -181,9 +181,9 @@ blobtools_co += expand("results/annotation/co-assembly/{assembler}/{assembly}/ta
 inputs = []
 inputs += preprocess
 
-if config["co-assembly"]:
+if config["co_assembly"]:
     inputs += [eggnog_co, map_co, co_assembly_stats, abundance_co, abundance_co_tax, dbCAN_co, taxonomy_co, dbCAN_co_tax, eggnog_co_tax]
-if config["single-assembly"]:
+if config["single_assembly"]:
     inputs += [eggnog, dbCAN, taxonomy]
 
 if config["read_source"] == "bowtie2":

@@ -17,8 +17,8 @@ star_overhang: 99
 # Choose between 'megahit', 'trinity', 'transabyss'
 assembler: transabyss
 transabyss_kmers: [21, 25, 29, 31, 65, 75, 85, 95]
-co-assembly: True
-single-assembly: False
+co_assembly: True
+single_assembly: False
 min_contig_len: 200
 ## filtering
 # Choose between 'concordant', 'both-mapped' or 'one-mapped'
