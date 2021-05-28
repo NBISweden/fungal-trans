@@ -32,6 +32,11 @@ properties:
     description: URL to host GTF file
     default: ""
   ## MAPPING ##
+  host_aligner:
+    type: string
+    description: Aligner to use for mapping reads against host
+    default: "star"
+    enum: ["star", "bowtie2"]
   bowtie2_params:
     type: string
     description: Parameters for bowtie2 aligner

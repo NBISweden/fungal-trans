@@ -9,6 +9,7 @@ fungi_url: "https://zenodo.org/record/3550762/files/fungi_transcripts.fasta.gz?d
 host_fna_url: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
 host_gtf_url: ""
 ## mapping
+host_aligner: "star"
 bowtie2_params: "--very-sensitive"
 fc_params: "-B -p -t CDS -g gene_id -Q 10"
 star_overhang: 99
