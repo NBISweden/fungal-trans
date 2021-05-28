@@ -85,7 +85,7 @@ rule featurecount:
 rule normalize_featurecount:
     input:
         "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab",
-        "results/sample_info/{filter_source}_read_lengths.tab"
+        "results/sample_info/{sample_id}.{filter_source}_read_lengths.tab"
     output:
         "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tpm.tab",
         "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.raw.tab"
