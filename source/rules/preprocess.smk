@@ -86,6 +86,14 @@ rule avg_seq_length_filtered:
     run:
         calc_read_lengths(input, output, "_R1.filtered.union.fastq.gz")
 
+rule avg_seq_length_unfiltered:
+    input:
+        "results/preprocess/{sample_id}_R1.cut.trim.fastq.gz"
+    output:
+        temp("results/sample_info/{sample_id}.unfiltered_read_lengths.tab")
+    run:
+        calc_read_lengths(input, output, "_R1.cut.trim.fastq.gz")
+
 rule link_files:
     input:
         lambda wildcards: samples[wildcards.sample_id][wildcards.pair]
