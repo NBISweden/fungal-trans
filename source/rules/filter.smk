@@ -25,16 +25,16 @@ include: "paired_strategy.smk"
 
 rule bowtie_build_fungi:
     input:
-        "resources/JGI/fungi/fungi_transcripts.fasta"
+        "resources/fungi/fungi_transcripts.fasta"
     output:
-        expand("resources/JGI/fungi/fungi_transcripts.fasta.{index}.bt2l",
+        expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l",
                index=range(1,5))
     log:
-        "resources/JGI/fungi/bowtie2.log"
+        "resources/fungi/bowtie2.log"
     params:
         tmp = "$TMPDIR/fungi_transcripts/fungi_transcripts.fasta",
         tmpdir = "$TMPDIR/fungi_transcripts",
-        outdir = "resources/JGI/fungi/"
+        outdir = "resources/fungi/"
     threads: 20
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60*120
@@ -102,7 +102,7 @@ rule bowtie_map_fungi:
     input:
         R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
         R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
-        db=expand("resources/JGI/fungi/fungi_transcripts.fasta.{index}.bt2l", index=range(1,5))
+        db=expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l", index=range(1,5))
     output:
         bam="results/bowtie2/{sample_id}/{sample_id}.fungi.bam",
         R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.conc.fastq.gz",
@@ -110,7 +110,7 @@ rule bowtie_map_fungi:
         R1u="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.noconc.fastq.gz",
         R2u="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.noconc.fastq.gz",
     params:
-        prefix = "resources/JGI/fungi/fungi_transcripts.fasta",
+        prefix = "resources/fungi/fungi_transcripts.fasta",
         al_conc_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.conc.fastq.gz",
         un_conc_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.noconc.fastq.gz",
         R1 = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.conc.fastq.gz",

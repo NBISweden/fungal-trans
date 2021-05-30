@@ -116,7 +116,7 @@ rule download_fungi_transcripts:
     Downloads snapshot of fungal transcripts obtained from JGI 
     """
     output:
-        temp("resources/JGI/fungi/fungi_transcripts.fasta")
+        temp("resources/fungi/fungi_transcripts.fasta")
     params:
         url = config["fungi_url"]
     shell:
