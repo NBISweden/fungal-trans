@@ -1,7 +1,7 @@
 localrules:
     extract_fungi_reads,
     get_all_mapped_fungal_refs,
-    bowtie2_report,
+    alignment_report,
     count_reads,
     link_unfiltered
 
@@ -18,9 +18,9 @@ rule link_unfiltered:
         ln -s $(pwd)/{input} $(pwd)/{output}
         """
 
-#####################
-## Bowtie2 mapping ##
-#####################
+##########################
+## Bowtie2/STAR mapping ##
+##########################
 include: "paired_strategy.smk"
 
 rule bowtie_build_fungi:
@@ -180,7 +180,8 @@ rule star_map_host:
     params:
         prefix = "$TMPDIR/{sample_id}/{sample_id}.",
         genomedir = lambda wildcards, input: os.path.dirname(input.db[0]),
-        temp_bam= "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam"
+        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam",
+        temp_log = "$TMPDIR/{sample_id}/{sample_id}.Log.out"
     conda: "../../envs/star.yaml"
     threads: 20
     resources:
@@ -190,7 +191,9 @@ rule star_map_host:
         exec &>{log.all}
         STAR --outFileNamePrefix {params.prefix} --runThreadN {threads} \
             --genomeDir {params.genomedir} --readFilesIn {input.R1} {input.R2} \
-            --readFilesCommand 'gunzip -c' --outSAMtype BAM Unsorted 2>{log.star}
+            --readFilesCommand 'gunzip -c' --outSAMtype BAM Unsorted
+        mv {params.temp_bam} {output[0]}
+        mv {params.temp_log} {log.star}
         """
 
 rule bowtie_map_host:
@@ -250,6 +253,7 @@ rule host_reads:
         R1 = "results/host/{sample_id}_R1.host.fastq.gz",
         R2 = "results/host/{sample_id}_R2.host.fastq.gz"
     params:
+        tmpids="$TMPDIR/{sample_id}.tmp",
         ids = "$TMPDIR/{sample_id}.ids",
         R1 = "$TMPDIR/{sample_id}_R1.host.fastq.gz",
         R2 = "$TMPDIR/{sample_id}_R2.host.fastq.gz"
@@ -258,7 +262,20 @@ rule host_reads:
     shell:
         """
         exec &>{log}
-        gunzip -c {input.R1_1} {input.R1_2} | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' | sort -u > {params.ids}
+        touch {params.tmpids}
+        for f in {input.R1_1} {input.R1_2};
+        do
+            if [ -s $f ]; then
+                gunzip -c $f | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' >> {params.tmpids}
+            fi
+        done
+        for f in {input.R2_1} {input.R2_2};
+        do
+            if [ -s $f ]; then
+                gunzip -c $f | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' >> {params.tmpids}
+            fi
+        done
+        cat {params.tmpids} | sort -u > {params.ids}
         seqtk subseq {input.R1} {params.ids} | gzip -c > {params.R1}
         seqtk subseq {input.R2} {params.ids} | gzip -c > {params.R2}
         mv {params.R1} {output.R1}
@@ -289,7 +306,7 @@ rule alignment_report:
         cp {input.fungallogs} {params.tmpdir}
         multiqc \
             -f -c {params.config} \
-            -n bowtie2_filter_report \
+            -n filter_report \
             -o results/report/filtering {params.tmpdir}
         rm -r {params.tmpdir}
         """
