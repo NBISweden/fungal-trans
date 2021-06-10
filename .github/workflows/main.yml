@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+    branches:
+      - main
+  pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+    branches:
+      - main
+env:
+  TMPDIR: /tmp
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: fungal-trans
+          environment-file: environment.yml
+          auto-activate-base: false
+      - name: Dry-run
+        run: |
+          snakemake --use-conda -rpk -j 4 -n
+      - name: Preprocess
+        run: |
+          snakemake --use-conda -rpk --config dlparams="-X 10000" -j 4 preprocess
+      - name: Filter one-mapped
+        run: |
+          snakemake --use-conda -rpk --config paired_strategy="one_mapped" -j 4 filter
