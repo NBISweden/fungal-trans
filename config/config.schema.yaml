@@ -77,9 +77,9 @@ properties:
   paired_strategy:
     type: string
     description: "How to treat paired alignments: 'concordant' = only keep concordantly mapping reads,
-      'both-mapped' = requires that both ends are mapped or 'one-mapped' = keep paired reads even if only one end maps"
-    default: "both-mapped"
-    enum: ["concordant","both-mapped","one-mapped"]
+      'both_mapped' = requires that both ends are mapped or 'one_mapped' = keep paired reads even if only one end maps"
+    default: "both_mapped"
+    enum: ["concordant","both_mapped","one_mapped"]
   fungi_transcript_url:
     type: string
     description: Dataset url for fungal transcripts to use in filtering
