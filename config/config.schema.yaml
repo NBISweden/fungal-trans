@@ -45,6 +45,10 @@ properties:
     type: integer
     description: this length should be equal to the ReadLength-1, where ReadLength is the length of the reads
     default: 99
+  star_params:
+    type: string
+    description: Extra parameters for star aligner
+    default: ""
   fc_params:
     type: string
     description: Parameters for featureCounts
