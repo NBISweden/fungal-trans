@@ -21,17 +21,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: conda-incubator/setup-miniconda@v2
-        with:
-          activate-environment: fungal-trans
-          environment-file: environment.yml
-          auto-activate-base: false
+      - uses: s-weigand/setup-conda@v1
+      - name: Install the conda environment
+        run: conda env update -n base -f environment.yml
       - name: Dry-run
         run: |
           snakemake --use-conda -rpk -j 4 -n
+      - name: Prep test data
+        run: |
+          bash test/prep_data.sh
       - name: Preprocess
         run: |
-          snakemake --use-conda -rpk --config dlparams="-X 10000" -j 4 preprocess
-      - name: Filter one-mapped
+          snakemake --use-conda --config datadir=test/data qc_trim_settings="TAILCROP:5" -j 4 -rpk preprocess
+      - name: Prepare resources
         run: |
-          snakemake --use-conda -rpk --config paired_strategy="one_mapped" -j 4 filter
+          mkdir -p resources/host resources/fungi
+          cp test/data/fungi_transcripts.100k.fasta resources/fungi/fungi_transcripts.fasta
+          cp test/data/host.sampled.100.fna resources/host/host.fna
+          snakemake --use-conda -rpk -j 4 star_build_host bowtie_build_fungi
+      - name: Both-mapped
+        run: |
+          snakemake --config paired_strategy=both_mapped datadir=test/data -rpk -j 4 --use-conda filter
+          python test/count_reads.py
+          rm -r results/star results/bowtie2 results/host results/report/filtering
+      - name: One-mapped
+        run: |
+          snakemake --config host_aligner=bowtie2 paired_strategy=one_mapped datadir=test/data -rpk -j 4 --use-conda filter
+          python test/count_reads.py
+          rm -r results/star results/bowtie2 results/host results/report/filtering
+      - name: Concordant
+        run: |
+          snakemake --config paired_strategy=concordant datadir=test/data -rpk -j 4 --use-conda filter
+          python test/count_reads.py
+          rm -r results/star results/bowtie2 results/host results/report/filtering
