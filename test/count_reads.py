@@ -5,6 +5,7 @@ import sys
 from Bio.SeqIO import parse
 import gzip as gz
 import pandas as pd
+from argparse import ArgumentParser
 
 
 def count_host_fungi(f):
@@ -18,7 +19,8 @@ def count_host_fungi(f):
     return counts
 
 
-def main():
+def main(args):
+    aligner = args.host_aligner
     c = {}
     for sample in ["needle", "root"]:
         for pair in [1, 2]:
@@ -27,8 +29,8 @@ def main():
                       f"results/preprocess/{sample}_R{pair}.cut.trim.fastq.gz",
                       f"results/bowtie2/{sample}/{sample}_R{pair}.fungi.fastq.gz",
                       f"results/bowtie2/{sample}/{sample}_R{pair}.nonfungi.fastq.gz",
-                      f"results/star/{sample}/{sample}_R{pair}.fungi.nohost.fastq.gz",
-                      f"results/star/{sample}/{sample}_R{pair}.fungi.putative-host.fastq.gz",
+                      f"results/{aligner}/{sample}/{sample}_R{pair}.fungi.nohost.fastq.gz",
+                      f"results/{aligner}/{sample}/{sample}_R{pair}.fungi.putative-host.fastq.gz",
                       f"results/host/{sample}_R{pair}.host.fastq.gz"]:
                 c[os.path.basename(f)] = count_host_fungi(f)
 
@@ -44,4 +46,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument("--host_aligner", default="star", type=str,
+                        help="Host aligner directory")
+    args = parser.parse_args()
+    main(args)
