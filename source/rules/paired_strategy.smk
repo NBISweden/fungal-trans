@@ -1,7 +1,7 @@
 if config["paired_strategy"] == "concordant":
     localrules:
-        collate_fungi,
-        collate_host
+        fungi_concordant,
+        bt_host_concordant
 
     rule fungi_concordant:
         """
@@ -36,7 +36,7 @@ if config["paired_strategy"] == "concordant":
             """
     rule star_host_concordant:
         input:
-            "results/star/{sample_id}/{sample_id}.fungi.bam"
+            "results/bowtie2/{sample_id}/{sample_id}.fungi.bam"
         output:
             R1f = "results/star/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz",
             R2f = "results/star/{sample_id}/{sample_id}_R2.fungi.nohost.fastq.gz",
