@@ -177,11 +177,14 @@ rule star_map_host:
     log:
         star="results/star/{sample_id}/{sample_id}.host.log",
         all="results/star/{sample_id}/map.log",
+        stat="results/star/{sample_id}/{sample_id}.Log.final.out"
     params:
         prefix = "$TMPDIR/{sample_id}/{sample_id}.",
         genomedir = lambda wildcards, input: os.path.dirname(input.db[0]),
         temp_bam = "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam",
-        temp_log = "$TMPDIR/{sample_id}/{sample_id}.Log.out"
+        temp_log = "$TMPDIR/{sample_id}/{sample_id}.Log.out",
+        temp_stat = "$TMPDIR/{sample_id}/{sample_id}.Log.final.out",
+        setting = config["star_params"]
     conda: "../../envs/star.yaml"
     threads: 20
     resources:
@@ -191,9 +194,11 @@ rule star_map_host:
         exec &>{log.all}
         STAR --outFileNamePrefix {params.prefix} --runThreadN {threads} \
             --genomeDir {params.genomedir} --readFilesIn {input.R1} {input.R2} \
-            --readFilesCommand 'gunzip -c' --outSAMtype BAM Unsorted
+            --readFilesCommand 'gunzip -c' --outSAMtype BAM Unsorted \
+            --outSAMunmapped Within KeepPairs {params.setting}
         mv {params.temp_bam} {output[0]}
         mv {params.temp_log} {log.star}
+        mv {params.temp_stat} {log.stat}
         """
 
 rule bowtie_map_host:
@@ -222,7 +227,7 @@ rule bowtie_map_host:
         prefix = "resources/host/host.fna",
         setting = config["bowtie2_params"]
     log:
-        bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.host.log",
+        bt2 = "results/bowtie2/{sample_id}/{sample_id}.host.log",
         samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.host.log"
     threads: 10
     resources:
@@ -261,6 +266,7 @@ rule host_reads:
         "results/host/{sample_id}.log"
     shell:
         """
+        set +o pipefail;
         exec &>{log}
         touch {params.tmpids}
         for f in {input.R1_1} {input.R1_2};
@@ -281,6 +287,7 @@ rule host_reads:
         mv {params.R1} {output.R1}
         mv {params.R2} {output.R2}
         rm {params.ids}
+        rm {params.tmpids}
         """
 
 def get_host_logs(config, samples):
