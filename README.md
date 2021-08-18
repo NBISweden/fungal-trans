@@ -93,3 +93,17 @@ The `-j 4` parameter tells snakemake to run with 4 cores.
 
 The workflow is divided into steps that you can run separately. Below
 are descriptions of these targets, their output and how to run them.
+
+## Description of filtering strategy
+
+**Both-mapped**
+
+Here reads are treated as 'mapped' only if both ends in a pair are mapped. This
+means that when mapping against host, only reads with both ends mapped are 'host'
+while reads with no or only 1 mapped end are 'non-host'.
+
+**One-mapped**
+
+Here reads are treated as mapped if at least one of the ends in a pair are mapped.
+This means that when mapping against host, reads with one or more ends mapped are
+'host'.
