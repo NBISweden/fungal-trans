@@ -42,6 +42,8 @@ if config["paired_strategy"] == "concordant":
             R2f = "results/star/{sample_id}/{sample_id}_R2.fungi.nohost.fastq.gz",
             R1h = "results/star/{sample_id}/{sample_id}_R1.fungi.putative-host.fastq.gz",
             R2h = "results/star/{sample_id}/{sample_id}_R2.fungi.putative-host.fastq.gz"
+        log:
+            "results/star/{sample_id}/{sample_id}.host_concordant.log"
         params:
             R1f = "$TMPDIR/{sample_id}_R1.fungi.nohost.fastq",
             R2f = "$TMPDIR/{sample_id}_R2.fungi.nohost.fastq",
@@ -49,6 +51,7 @@ if config["paired_strategy"] == "concordant":
             R2h = "$TMPDIR/{sample_id}_R2.fungi.putative-host.fastq",
         shell:
             """
+            exec &> {log}
             # Extract reads mapped in proper pairs
             samtools fastq -f 2 -1 {params.R1f} -2 {params.R2f} -s /dev/null -0 /dev/null {input}
             # Extract reads not mapped in proper pairs
