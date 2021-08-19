@@ -1,9 +1,10 @@
 __default__:
-  account: "snic2018-8-230"
-  time: "03:00:00"
-  n: 1
-  partition: "core"
-  extra: ""
+  # exchange <staff> with your SLURM account id below
+  account: staff
+
+  # directories for slurm logs (no need to change these)
+  output: "slurm/logs/{rule}.{wildcards}.out"
+  error: "slurm/err/{rule}.{wildcards}.err"
 
 fastuniq_filtered:
   time: "48:00:00"
