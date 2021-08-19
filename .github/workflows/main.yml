@@ -1,6 +1,10 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    branches:
+      - main
+      - filtering
   push:
     paths-ignore:
       - 'README.md'
@@ -47,7 +51,7 @@ jobs:
           snakemake --config host_aligner=star paired_strategy=both_mapped datadir=test/data -rpk -j 4 --use-conda filter
           python test/count_reads.py --host_aligner star
           rm -rf results/report/filtering results/host results/bowtie2 results/star
-      - name: Bowtie2 one-mapped
+      - name: One-mapped
         run: |
           snakemake --config host_aligner=bowtie2 paired_strategy=one_mapped datadir=test/data -rpk -j 4 --use-conda filter
           python test/count_reads.py --host_aligner bowtie2
@@ -55,7 +59,7 @@ jobs:
           snakemake --config host_aligner=star paired_strategy=one_mapped datadir=test/data -rpk -j 4 --use-conda filter
           python test/count_reads.py --host_aligner star
           rm -rf results/report/filtering results/host results/bowtie2 results/star
-      - name: Bowtie2 concordant
+      - name: Concordant
         run: |
           snakemake --config host_aligner=bowtie2 paired_strategy=concordant datadir=test/data -rpk -j 4 --use-conda filter
           python test/count_reads.py --host_aligner bowtie2
