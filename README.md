@@ -25,8 +25,12 @@ conda env create -f environment.yml
 
 The [GeneMarkS-T](http://exon.gatech.edu/GeneMark/) gene caller software used in this workflow can be 
 downloaded for Linux from [this download page](http://topaz.gatech.edu/GeneMark/license_download.cgi).
-Activate the workflow environment created in the step above, then follow the 
-instructions to install GeneMarkS-T into the activated environment.
+Activate the workflow environment created in the step above, then you can install 
+GeneMarkS-T by extracting the archive directly into the environment path:
+
+```bash
+tar -C $CONDA_PREFIX/bin/ -xvf gmst_linux_64.tar.gz
+```
 
 **IMPORTANT**: Because the workflow relies on conda to handle dependencies for
 most steps it is important to always add the `--use-conda` flag to snakemake. 
@@ -60,9 +64,6 @@ then run the workflow for these samples with:
 snakemake -p --use-conda -n
 ```
 
-See below for more information on how to **configure** and **run** the
-workflow.
-
 ### Option2: Data in a sequence read archive
 
 If you have data in a public data repository such as the [SRA](https://www.ncbi.nlm.nih.gov/sra)
@@ -77,10 +78,13 @@ This will make the workflow download the fastq data using `sra-tools` prior
 to starting.
 
 ## Running the workflow
+
+### Configuration
 By default the workflow uses the configuration file `config.yml`.
 You can either make changes in that config file or copy the file and make
-your changes in the copy. To run the workflow with another config file
-specify `--configfile <yourconfig>` on the snakemake command line.
+your changes in the copy (_e.g._ `cp config.yml myconfig.yml`). To run the 
+workflow with another config file, lets say `myconfig.yml`, specify 
+`--configfile myconfig.yml` on the snakemake command line.
 
 ### Running the full workflow
 To get an overview of the jobs that will be executed do:
@@ -91,5 +95,18 @@ snakemake --use-conda -j 4 -np
 the jobs to be run are printed to stdout (`-p` also prints the bash commands). 
 The `-j 4` parameter tells snakemake to run with 4 cores.
 
+### Running parts of the workflow
 The workflow is divided into steps that you can run separately. Below
 are descriptions of these targets, their output and how to run them.
+
+#### Preprocessing
+
+The preprocessing part will download fastq files for your samples, unless you
+start with files locally on disk as described above. Adapter trimming is 
+performed using cutadapt followed by quality trimming with trimmomatic. FastQC
+is then run on the trimmed sequences and summarized into a report using MultiQC.
+
+Here's an example of running the preprocessing part of the workflow: 
+```
+snakemake -j 10 -p preprocess
+```
