@@ -18,3 +18,4 @@ dependencies:
   # utilities
   - wget
   - tbb
+  - mamba
