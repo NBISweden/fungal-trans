@@ -77,6 +77,7 @@ rule featurecount_co:
         runtime = lambda wildcards, attempt: attempt*attempt*20
     params:
         setting = config["fc_params"]
+    conda: "../../envs/featurecount.yaml"
     threads: 4
     shell:
         """
@@ -431,6 +432,7 @@ rule dbcan_scan_co:
     threads: 10
     resources:
         runtime=lambda wildcards, attempt: attempt**2*60*4
+    conda: "../../envs/hmmer.yaml"
     shell:
         """
         hmmscan --cpu {threads} --domtblout {output[0]} {input.db} {input.fasta} > {output[1]}

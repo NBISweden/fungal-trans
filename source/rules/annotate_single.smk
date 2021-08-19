@@ -74,6 +74,7 @@ rule featurecount:
         summary = "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab.summary"
     resources:
         runtime = lambda wildcards, attempt: attempt*attempt*20
+    conda: "../../envs/featurecount.yaml"
     params:
         setting = config["fc_params"]
     threads: 4
@@ -258,6 +259,7 @@ rule dbcan_scan:
         "results/annotation/{assembler}/{filter_source}/{sample_id}/dbCAN/dbCAN.out.dm",
         "results/annotation/{assembler}/{filter_source}/{sample_id}/dbCAN/dbCAN.out"
     threads: 1
+    conda: "../../envs/hmmer.yaml"
     resources:
         runtime=lambda wildcards, attempt: attempt**2*30
     shell:
