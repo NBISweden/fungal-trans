@@ -122,6 +122,21 @@ filtering step and put into a 'host' sequence file under
 `results/host/{sample_id}_R{1,2}.fastq.gz`. Reads that do not map to the host db
 at this stage are used for downstream assembly and annotation.
 
+The type of filtering performed is determined by the `read_source` config parameter.
+
+- With `read_source: bowtie2` filtering is done as described as above.
+- With `read_source: taxmapper` fungal reads are identified using [Taxmapper](https://bitbucket.org/dbeisser/taxmapper/src/master/).
+- With `read_source: filtered` both bowtie2 and taxmapper are used to identify 
+fungal reads and the union of reads identified by these methods are used for 
+downstream analyses.
+- With `read_source: unfiltered` no filtering is performed and preprocessed reads 
+  are directly used for downstream analyses.
+
+Here's an example of running up to and including the filtering part of the workflow: 
+```
+snakemake -j 10 -p filter
+```
+
 #### Assembly
 
 Assemblies can be generated for single samples or by combining multiple samples
@@ -142,5 +157,21 @@ When `co-assembly` is set to `True`, the `sample_file_list` must contain an
 |sample3|sample3_1.fastq.gz|sample3_2.fastq.gz|assembly2|
 
 In this example, preprocessed and filtered reads from sample2 and sample3 will be
-combined into a co-assembly named `assembly2`.
+combined into a co-assembly named `assembly2`. Note that prior to generating 
+co-assemblies, reads are deduplicated using `fastuniq`.
  
+Here's an example of running the preprocessing part of the workflow: 
+```
+snakemake -j 10 -p assemble
+```
+
+To generate co-assemblies:
+
+```
+snakemake -j 10 -p co_assemble
+```
+
+#### Annotation
+
+Gene calling is done on assemblies using [GeneMarkS-T](http://topaz.gatech.edu/GeneMark/license_download.cgi).
+Translated amino acid sequences are then annotated using [eggnog-mapper] 
