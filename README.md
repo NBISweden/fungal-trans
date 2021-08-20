@@ -110,3 +110,9 @@ Here's an example of running the preprocessing part of the workflow:
 ```
 snakemake -j 10 -p preprocess
 ```
+
+#### Filter
+
+Preprocessed reads are filtered to separate fungal and host reads. This is done
+by first mapping reads to fungal transcripts, thus generating files with 
+putative fungi and non-fungi reads.
