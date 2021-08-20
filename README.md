@@ -115,4 +115,32 @@ snakemake -j 10 -p preprocess
 
 Preprocessed reads are filtered to separate fungal and host reads. This is done
 by first mapping reads to fungal transcripts, thus generating files with 
-putative fungi and non-fungi reads.
+putative fungi and non-fungi reads. The putative fungal reads are then mapped
+to a host database of choice, _e.g._ spruce, either using `bowtie2` or `STAR`. 
+Reads mapping to the host are combined with the non-fungal reads from the first
+filtering step and put into a 'host' sequence file under 
+`results/host/{sample_id}_R{1,2}.fastq.gz`. Reads that do not map to the host db
+at this stage are used for downstream assembly and annotation.
+
+#### Assembly
+
+Assemblies can be generated for single samples or by combining multiple samples
+into co-assemblies. You can choose to assemble with either [Trinity](https://github.com/trinityrnaseq/trinityrnaseq),
+[Trans-ABySS](https://github.com/bcgsc/transabyss) or [Megahit](https://github.com/voutcn/megahit)
+assemblers, configurable via the `assembler` config parameter. 
+
+When `single-assembly` is set to `True` in the config, preprocessed and filtered 
+reads from each sample are individually assembled using the configured assembler.
+
+When `co-assembly` is set to `True`, the `sample_file_list` must contain an 
+'assembly' column that groups samples into co-assembly groups, _e.g._:
+
+| sample | Read_file | Pair_file | assembly |
+|--------|-----------|-----------|----------|
+|sample1|sample1_1.fastq.gz|sample1_2.fastq.gz|assembly1|
+|sample2|sample2_1.fastq.gz|sample2_2.fastq.gz|assembly2|
+|sample3|sample3_1.fastq.gz|sample3_2.fastq.gz|assembly2|
+
+In this example, preprocessed and filtered reads from sample2 and sample3 will be
+combined into a co-assembly named `assembly2`.
+ 
