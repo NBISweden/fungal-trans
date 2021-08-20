@@ -108,7 +108,7 @@ is then run on the trimmed sequences and summarized into a report using MultiQC.
 
 Here's an example of running the preprocessing part of the workflow: 
 ```
-snakemake -j 10 -p preprocess
+snakemake --use-conda -j 10 -p preprocess
 ```
 
 #### Filter
@@ -134,7 +134,7 @@ downstream analyses.
 
 Here's an example of running up to and including the filtering part of the workflow: 
 ```
-snakemake -j 10 -p filter
+snakemake --use-conda -j 10 -p filter
 ```
 
 #### Assembly
@@ -160,18 +160,53 @@ In this example, preprocessed and filtered reads from sample2 and sample3 will b
 combined into a co-assembly named `assembly2`. Note that prior to generating 
 co-assemblies, reads are deduplicated using `fastuniq`.
  
-Here's an example of running the preprocessing part of the workflow: 
+Here's an example of running up to and including the assembly part of the workflow: 
 ```
-snakemake -j 10 -p assemble
+snakemake --use-conda -j 10 -p assemble
 ```
 
 To generate co-assemblies:
 
 ```
-snakemake -j 10 -p co_assemble
+snakemake --use-conda -j 10 -p co_assemble
 ```
 
 #### Annotation
 
 Gene calling is done on assemblies using [GeneMarkS-T](http://topaz.gatech.edu/GeneMark/license_download.cgi).
-Translated amino acid sequences are then annotated using [eggnog-mapper] 
+Translated amino acid sequences are then annotated functionally using [eggnog-mapper](https://github.com/eggnogdb/eggnog-mapper) and 
+the [dbCAN database](https://bcb.unl.edu/dbCAN/), and taxonomically using 
+[contigtax](https://github.com/NBISweden/contigtax).
+
+Here's an example of running up to and including the annotation part of the workflow: 
+```
+snakemake --use-conda -j 10 -p annotate
+```
+
+And to annotate co-assemblies:
+
+```
+snakemake --use-conda -j 10 -p annotate_co
+```
+
+### Running the workflow on a compute cluster
+
+The workflow comes with support for job-handling on compute clusters with the
+SLURM workload manager. Simply set your SLURM account id in the `config/cluster.yaml`
+file:
+
+````yaml
+__default__:
+  account: staff # <- REPLACE 'staff' with your account id
+````
+
+Then you can run the workflow as:
+
+```
+snakemake --use-conda --profile slurm -j 10 -p
+```
+
+Another option is to simply submit the entire workflow (in whole or in part) as
+one big SLURM job. The benefit of using `--profile slurm` is that resources are
+handled in a more fine grained way and that failed jobs can be resubmitted 
+automatically with longer run times.
