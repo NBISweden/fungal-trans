@@ -1,4 +1,4 @@
-name: CI
+name: Testing
 
 on:
   workflow_dispatch:
@@ -21,7 +21,7 @@ env:
   TMPDIR: /tmp
 
 jobs:
-  test:
+  test_workflow:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo + LFS
@@ -37,38 +37,3 @@ jobs:
       - name: Dry-run
         run: |
           snakemake --use-conda -rpk -j 4 -n
-      - name: Prep test data
-        run: |
-          bash test/prep_data.sh
-      - name: Preprocess
-        run: |
-          snakemake --use-conda --config datadir=test/data qc_trim_settings="TAILCROP:5" -j 4 -rpk preprocess
-      - name: Prepare resources
-        run: |
-          mkdir -p resources/host resources/fungi
-          cp test/data/fungi_transcripts.100k.fasta resources/fungi/fungi_transcripts.fasta
-          cp test/data/host.sampled.100.fna resources/host/host.fna
-          snakemake --use-conda -rpk -j 4 star_build_host bowtie_build_fungi
-      - name: Both-mapped
-        run: |
-          snakemake --config host_aligner=bowtie2 paired_strategy=both_mapped datadir=test/data -rpk -j 4 --use-conda filter
-          python test/count_reads.py --host_aligner bowtie2
-          rm -rf results/report/filtering results/host
-          snakemake --config host_aligner=star paired_strategy=both_mapped datadir=test/data -rpk -j 4 --use-conda filter
-          python test/count_reads.py --host_aligner star
-          rm -rf results/report/filtering results/host results/bowtie2 results/star
-      - name: One-mapped
-        run: |
-          snakemake --config host_aligner=bowtie2 paired_strategy=one_mapped datadir=test/data -rpk -j 4 --use-conda filter
-          python test/count_reads.py --host_aligner bowtie2
-          rm -rf results/report/filtering results/host
-          snakemake --config host_aligner=star paired_strategy=one_mapped datadir=test/data -rpk -j 4 --use-conda filter
-          python test/count_reads.py --host_aligner star
-          rm -rf results/report/filtering results/host results/bowtie2 results/star
-      - name: Concordant
-        run: |
-          snakemake --config host_aligner=bowtie2 paired_strategy=concordant datadir=test/data -rpk -j 4 --use-conda filter
-          python test/count_reads.py --host_aligner bowtie2
-          rm -rf results/report/filtering results/host
-          snakemake --config host_aligner=star paired_strategy=concordant datadir=test/data -rpk -j 4 --use-conda filter
-          python test/count_reads.py --host_aligner star
