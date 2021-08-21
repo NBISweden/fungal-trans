@@ -18,11 +18,8 @@ RUN apt-get update && \
 # Add environment file
 COPY environment.yml .
 
-# Install mamba
-RUN conda install -c conda-forge -n base mamba
-
 # Install environment into base
-RUN mamba env update -n base -f environment.yml && mamba clean -a
+RUN conda env update -n base -f environment.yml && conda clean -a
 
 # Add workflow
 COPY config config

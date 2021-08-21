@@ -7,7 +7,7 @@ def assembly_input(wildcards):
     suffices = {'unfiltered': 'cut.trim.fastq.gz',
                 'filtered': 'filtered.union.fastq.gz',
                 'taxmapper': 'cut.trim.filtered.fastq.gz',
-                'bowtie2': 'fungi.nospruce.fastq.gz'}
+                'bowtie2': 'fungi.nohost.fastq.gz'}
     R1 = 'results/{source}/{sample}/{sample}_R1.{suff}'.format(source=wildcards.filter_source,
         sample=wildcards.sample_id,suff=suffices[wildcards.filter_source])
     R2 = 'results/{source}/{sample}/{sample}_R2.{suff}'.format(source=wildcards.filter_source,
@@ -49,8 +49,8 @@ rule transabyss_merge:
             k = config["transabyss_kmers"])
     output:
         fa = "results/assembly/transabyss/{filter_source}/{sample_id}/final.fa",
-        R1 = "results/assembly/transabyss/{filter_source}/{sample_id}_R1.fastq.gz",
-        R2= "results/assembly/transabyss/{filter_source}/{sample_id}_R2.fastq.gz"
+        R1 = "results/assembly/transabyss/{filter_source}/{sample_id}/{sample_id}_R1.fastq.gz",
+        R2= "results/assembly/transabyss/{filter_source}/{sample_id}/{sample_id}_R2.fastq.gz"
     log:
         "results/logs/transabyss/{sample_id}.{filter_source}.merge.log"
     conda:

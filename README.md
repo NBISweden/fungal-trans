@@ -64,6 +64,9 @@ then run the workflow for these samples with:
 snakemake -p --use-conda -n
 ```
 
+See below for more information on how to **configure** and **run** the
+workflow.
+
 ### Option2: Data in a sequence read archive
 
 If you have data in a public data repository such as the [SRA](https://www.ncbi.nlm.nih.gov/sra)

@@ -5,7 +5,7 @@ localrules:
     press_dbCAN,
     get_kegg_files,
     download_refseq_db,
-    download_spruce_transcripts,
+    download_host,
     download_fungi_transcripts,
     prepare_diamond_JGI
 
@@ -116,28 +116,32 @@ rule download_fungi_transcripts:
     Downloads snapshot of fungal transcripts obtained from JGI 
     """
     output:
-        temp("resources/JGI/fungi/fungi_transcripts.fasta")
+        temp("resources/fungi/fungi_transcripts.fasta")
     params:
-        url = config["fungi_transcript_url"]
+        url = config["fungi_url"]
     shell:
         """
         curl -L -s -o {output[0]}.gz {params.url}
         gunzip {output[0]}.gz
         """
 
-## Spruce data ##
-rule download_spruce_transcripts:
+## Host data ##
+rule download_host:
     """
-    Downloads spruce transcripts 
+    Downloads host sequences for filtering 
     """
     output:
-        "resources/spruce/spruce.fna"
+        "resources/host/host.{suff}"
+    log:
+        "resources/host/host.{suff}.download.log"
     params:
-        url = config["spruce_transcript_url"]
+        url = lambda wildcards: config["host_"+wildcards.suff+"_url"]
     shell:
         """
-        curl -L -s -o {output[0]}.gz {params.url}
-        gunzip {output[0]}.gz
+        exec &>{log}
+        curl -L -o {output[0]}.gz {params.url}
+        gunzip -c {output[0]}.gz > {output[0]}
+        rm {output[0]}.gz
         """
 
 ## Protein databases ##

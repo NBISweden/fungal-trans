@@ -23,11 +23,32 @@ properties:
     type: string
     description: Parameters to supply to sra-tools for development purposes
     default: ""
+  host_fna_url:
+    type: string
+    description: URL to host fasta file
+    default: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
+  host_gtf_url:
+    type: string
+    description: URL to host GTF file
+    default: ""
   ## MAPPING ##
+  host_aligner:
+    type: string
+    description: Aligner to use for mapping reads against host
+    default: "star"
+    enum: ["star", "bowtie2"]
   bowtie2_params:
     type: string
     description: Parameters for bowtie2 aligner
     default: "--very-sensitive"
+  star_overhang:
+    type: integer
+    description: this length should be equal to the ReadLength-1, where ReadLength is the length of the reads
+    default: 99
+  star_params:
+    type: string
+    description: Extra parameters for star aligner
+    default: ""
   fc_params:
     type: string
     description: Parameters for featureCounts
@@ -60,9 +81,9 @@ properties:
   paired_strategy:
     type: string
     description: "How to treat paired alignments: 'concordant' = only keep concordantly mapping reads,
-      'both-mapped' = requires that both ends are mapped or 'one-mapped' = keep paired reads even if only one end maps"
-    default: "both-mapped"
-    enum: ["concordant","both-mapped","one-mapped"]
+      'both_mapped' = requires that both ends are mapped or 'one_mapped' = keep paired reads even if only one end maps"
+    default: "both_mapped"
+    enum: ["concordant","both_mapped","one_mapped"]
   fungi_transcript_url:
     type: string
     description: Dataset url for fungal transcripts to use in filtering

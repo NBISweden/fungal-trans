@@ -1,7 +1,7 @@
 localrules:
     extract_fungi_reads,
     get_all_mapped_fungal_refs,
-    bowtie2_report,
+    alignment_report,
     count_reads,
     link_unfiltered
 
@@ -18,23 +18,23 @@ rule link_unfiltered:
         ln -s $(pwd)/{input} $(pwd)/{output}
         """
 
-#####################
-## Bowtie2 mapping ##
-#####################
+##########################
+## Bowtie2/STAR mapping ##
+##########################
 include: "paired_strategy.smk"
 
 rule bowtie_build_fungi:
     input:
-        "resources/JGI/fungi/fungi_transcripts.fasta"
+        "resources/fungi/fungi_transcripts.fasta"
     output:
-        expand("resources/JGI/fungi/fungi_transcripts.fasta.{index}.bt2l",
+        expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l",
                index=range(1,5))
     log:
-        "resources/JGI/fungi/bowtie2.log"
+        "resources/fungi/bowtie2.log"
     params:
         tmp = "$TMPDIR/fungi_transcripts/fungi_transcripts.fasta",
         tmpdir = "$TMPDIR/fungi_transcripts",
-        outdir = "resources/JGI/fungi/"
+        outdir = "resources/fungi/"
     threads: 20
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60*120
@@ -49,13 +49,38 @@ rule bowtie_build_fungi:
         rm -r {params.tmpdir}
         """
 
-rule bowtie_build_spruce:
+rule star_build_host:
     input:
-        "resources/spruce/spruce.fna"
+        expand("resources/host/host.{suff}", suff = ["fna","gtf"] if config["host_gtf_url"] != "" else ["fna"])
     output:
-        expand("resources/spruce/spruce.fna.{index}.bt2l", index=range(1,5))
+        expand("resources/host/{f}",
+            f = ["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
+                 "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"])
     log:
-        "resources/spruce/bowtie2.log"
+        "resources/host/Log.out"
+    params:
+        overhang = "--sjdbOverhang "+str(config["star_overhang"]) if config["host_gtf_url"] != "" else "",
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        gtfstring = "--sjdbGTFfile resources/host/host.gtf" if config["host_gtf_url"] != "" else ""
+    threads: 20
+    resources:
+        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
+    conda: "../../envs/star.yaml"
+    shell:
+        """
+        exec &>{log}
+         STAR --runThreadN {threads} --runMode genomeGenerate --genomeDir {params.outdir} \
+            --genomeFastaFiles {input[0]} {params.overhang} {params.gtfstring}
+        """
+
+
+rule bowtie_build_host:
+    input:
+        "resources/host/host.fna"
+    output:
+        expand("resources/host/host.fna.{index}.bt2l", index=range(1,5))
+    log:
+        "resources/host/bowtie2.log"
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60
     shell:
@@ -67,44 +92,51 @@ rule bowtie_build_spruce:
         """
 
 rule bowtie_map_fungi:
+    """
+    Maps preprocessed reads against fungal transcripts.
+    
+    Reads that do or do not map concordantly in this step are saved directly
+    in separate fastq files. If the 'paired_strategy' is set to 'concordant' 
+    these files will be used to separate host and fungal reads.
+    """
     input:
         R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
         R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
-        db=expand("resources/JGI/fungi/fungi_transcripts.fasta.{index}.bt2l", index=range(1,5))
+        db=expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l", index=range(1,5))
     output:
         bam="results/bowtie2/{sample_id}/{sample_id}.fungi.bam",
         R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.conc.fastq.gz",
-        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.conc.fastq.gz"
+        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.conc.fastq.gz",
+        R1u="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.noconc.fastq.gz",
+        R2u="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.noconc.fastq.gz",
     params:
-        prefix = "resources/JGI/fungi/fungi_transcripts.fasta",
+        prefix = "resources/fungi/fungi_transcripts.fasta",
         al_conc_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.conc.fastq.gz",
+        un_conc_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.noconc.fastq.gz",
         R1 = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.conc.fastq.gz",
         R2 = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.conc.fastq.gz",
+        R1u = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.noconc.fastq.gz",
+        R2u = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.noconc.fastq.gz",
         tmpdir = "$TMPDIR/{sample_id}",
         temp_bam = "$TMPDIR/{sample_id}/{sample_id}.fungi.bam",
         setting = config["bowtie2_params"]
     log:
         bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
-        samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.fungi.log"
+        st_sort = "results/bowtie2/{sample_id}/{sample_id}.samtools_sort.fungi.log",
     threads: 10
     resources:
         runtime = lambda wildcards, attempt: attempt**2*240
     shell:
         """
-        exec &> {log.samtools}
         mkdir -p {params.tmpdir}
-        bowtie2 \
-            {params.setting} \
-            -p {threads} \
-            -x {params.prefix} \
-            -1 {input.R1} \
-            -2 {input.R2} \
-            --al-conc-gz {params.al_conc_path} 2> {log.bt2}| \
-        samtools view -b -h - | \
-        samtools sort -n -o {params.temp_bam} -O BAM - 
+        bowtie2 {params.setting} -p {threads} -x {params.prefix} -1 {input.R1} \
+            -2 {input.R2} --al-conc-gz {params.al_conc_path} \
+            --un-conc-gz {params.un_conc_path} 2> {log.bt2} | samtools sort -n -O BAM - >{params.temp_bam} 2>{log.st_sort} 
         mv {params.temp_bam} {output.bam}
         mv {params.R1} {output.R1} 
         mv {params.R2} {output.R2}
+        mv {params.R1u} {output.R1u}
+        mv {params.R2u} {output.R2u}
         """
 
 rule get_mapped_fungal_refs:
@@ -130,26 +162,73 @@ rule get_all_mapped_fungal_refs:
         cat {input} | sort -u > {output[0]}
         """
 
-rule bowtie_map_spruce:
+rule star_map_host:
+    """
+    Maps putative fungal reads against host with STAR
+    """
     input:
-        db = expand("resources/spruce/spruce.fna.{index}.bt2l", index=range(1,5)),
+        db=expand("resources/host/{f}",
+            f=["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
+               "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"]),
         R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
         R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.fastq.gz"
     output:
-        bam="results/bowtie2/{sample_id}/{sample_id}.spruce.bam",
-        R1f="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.conc.fastq.gz",
-        R2f="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nospruce.conc.fastq.gz"
+        "results/star/{sample_id}/{sample_id}.host.bam"
+    log:
+        star="results/star/{sample_id}/{sample_id}.host.log",
+        all="results/star/{sample_id}/map.log",
+        stat="results/star/{sample_id}/{sample_id}.Log.final.out"
     params:
-        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.spruce.bam",
-        no_al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.nospruce.conc.fastq.gz",
-        R1f = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.nospruce.conc.fastq.gz",
-        R2f = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.nospruce.conc.fastq.gz",
+        prefix = "$TMPDIR/{sample_id}/{sample_id}.",
+        genomedir = lambda wildcards, input: os.path.dirname(input.db[0]),
+        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam",
+        temp_log = "$TMPDIR/{sample_id}/{sample_id}.Log.out",
+        temp_stat = "$TMPDIR/{sample_id}/{sample_id}.Log.final.out",
+        setting = config["star_params"]
+    conda: "../../envs/star.yaml"
+    threads: 20
+    resources:
+        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
+    shell:
+        """
+        exec &>{log.all}
+        STAR --outFileNamePrefix {params.prefix} --runThreadN {threads} \
+            --genomeDir {params.genomedir} --readFilesIn {input.R1} {input.R2} \
+            --readFilesCommand 'gunzip -c' --outSAMtype BAM Unsorted \
+            --outSAMunmapped Within KeepPairs {params.setting}
+        mv {params.temp_bam} {output[0]}
+        mv {params.temp_log} {log.star}
+        mv {params.temp_stat} {log.stat}
+        """
+
+rule bowtie_map_host:
+    """
+    Maps putative fungal reads against host sequences with bowtie2 
+    """
+    input:
+        db = expand("resources/host/host.fna.{index}.bt2l", index=range(1,5)),
+        R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
+        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.fastq.gz"
+    output:
+        bam="results/bowtie2/{sample_id}/{sample_id}.host.bam",
+        R1f="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.host.noconc.fastq.gz",
+        R2f="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.host.noconc.fastq.gz",
+        R1h="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.host.conc.fastq.gz",
+        R2h="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.host.conc.fastq.gz"
+    params:
+        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.host.bam",
+        no_al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.host.noconc.fastq.gz",
+        al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.host.conc.fastq.gz",
+        R1h = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.host.conc.fastq.gz",
+        R2h ="$TMPDIR/{sample_id}/{sample_id}_R2.fungi.host.conc.fastq.gz",
+        R1f = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.host.noconc.fastq.gz",
+        R2f = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.host.noconc.fastq.gz",
         tmpdir = "$TMPDIR/{sample_id}",
-        prefix = "resources/spruce/spruce.fna",
+        prefix = "resources/host/host.fna",
         setting = config["bowtie2_params"]
     log:
-        bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.spruce.log",
-        samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.spruce.log"
+        bt2 = "results/bowtie2/{sample_id}/{sample_id}.host.log",
+        samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.host.log"
     threads: 10
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60
@@ -157,38 +236,84 @@ rule bowtie_map_spruce:
         """
         exec &> {log.samtools}
         mkdir -p {params.tmpdir}
-        bowtie2 \
-            {params.setting} \
-            -p {threads} \
-            -x {params.prefix} \
-            -1 {input.R1} \
-            -2 {input.R2} \
-            --un-conc-gz {params.no_al_path} 2>{log.bt2} | \
-        samtools view -b -h 2>/dev/null | \
-        samtools sort -n -O BAM -o {params.temp_bam} -  2>/dev/null
+        bowtie2 {params.setting} -p {threads} -x {params.prefix} -1 {input.R1} \
+            -2 {input.R2} --al-conc-gz {params.al_path} --un-conc-gz {params.no_al_path} \
+            2>{log.bt2} | samtools sort -n -O BAM - > {params.temp_bam} 2>{log.samtools}
         mv {params.temp_bam} {output.bam}
         mv {params.R1f} {output.R1f}
         mv {params.R2f} {output.R2f}
+        mv {params.R1h} {output.R1h}
+        mv {params.R2h} {output.R2h}
         """
 
-rule bowtie2_report:
+rule host_reads:
     input:
-        btlog = expand("results/bowtie2/{sample_id}/{sample_id}.bowtie2.{taxa}.log",
-            sample_id = samples.keys(), taxa = ["fungi","spruce"]),
-        bam = expand("results/bowtie2/{sample_id}/{sample_id}.{taxa}.bam",
-            sample_id = samples.keys(), taxa = ["fungi","spruce"])
+        R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
+        R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
+        R1_1 = "results/bowtie2/{sample_id}/{sample_id}_R1.nonfungi.fastq.gz",
+        R2_1 = "results/bowtie2/{sample_id}/{sample_id}_R2.nonfungi.fastq.gz",
+        R1_2 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R1.fungi.putative-host.fastq.gz",
+        R2_2 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R2.fungi.putative-host.fastq.gz"
     output:
-        "results/report/filtering/bowtie2_filter_report.html"
+        R1 = "results/host/{sample_id}_R1.host.fastq.gz",
+        R2 = "results/host/{sample_id}_R2.host.fastq.gz"
     params:
-        tmpdir = "multiqc_bowtie2_filter",
-        config = "config/multiqc_bowtie2_filter_config.yaml"
+        tmpids="$TMPDIR/{sample_id}.tmp",
+        ids = "$TMPDIR/{sample_id}.ids",
+        R1 = "$TMPDIR/{sample_id}_R1.host.fastq.gz",
+        R2 = "$TMPDIR/{sample_id}_R2.host.fastq.gz"
+    log:
+        "results/host/{sample_id}.log"
+    shell:
+        """
+        set +o pipefail;
+        exec &>{log}
+        touch {params.tmpids}
+        for f in {input.R1_1} {input.R1_2};
+        do
+            if [ -s $f ]; then
+                gunzip -c $f | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' >> {params.tmpids}
+            fi
+        done
+        for f in {input.R2_1} {input.R2_2};
+        do
+            if [ -s $f ]; then
+                gunzip -c $f | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' >> {params.tmpids}
+            fi
+        done
+        cat {params.tmpids} | sort -u > {params.ids}
+        seqtk subseq {input.R1} {params.ids} | gzip -c > {params.R1}
+        seqtk subseq {input.R2} {params.ids} | gzip -c > {params.R2}
+        mv {params.R1} {output.R1}
+        mv {params.R2} {output.R2}
+        rm {params.ids}
+        rm {params.tmpids}
+        """
+
+def get_host_logs(config, samples):
+    if config["host_aligner"] == "star":
+        return expand("results/star/{sample_id}/{sample_id}.host.log", sample_id = samples.keys())
+    elif config["host_aligner"] == "bowtie2":
+        return expand("results/bowtie2/{sample_id}/{sample_id}.host.log", sample_id = samples.keys())
+
+rule alignment_report:
+    input:
+        hostlogs = get_host_logs(config, samples),
+        fungallogs = expand("results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
+            sample_id = samples.keys())
+    output:
+        "results/report/filtering/filter_report.html"
+    params:
+        tmpdir = "multiqc_filter",
+        config = "config/multiqc_filter_config.yaml"
     shell:
         """
         mkdir -p {params.tmpdir}
-        cp {input.btlog} {params.tmpdir}
+        cp {input.hostlogs} {params.tmpdir}
+        cp {input.fungallogs} {params.tmpdir}
         multiqc \
             -f -c {params.config} \
-            -n bowtie2_filter_report \
+            -n filter_report \
             -o results/report/filtering {params.tmpdir}
         rm -r {params.tmpdir}
         """
@@ -316,21 +441,21 @@ def get_ids(f):
 rule count_reads:
     input:
         R1tm = expand("results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz",
-            sample_id = samples.keys()),
+            sample_id = samples.keys()) if config["read_source"] in ["taxmapper", "filtered"] else [],
         R1bt = expand("results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
             sample_id = samples.keys()),
-        R1btf = expand("results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz",
-            sample_id = samples.keys()),
-        R1bts = expand("results/bowtie2/{sample_id}/{sample_id}_R1.fungi.spruce.fastq.gz",
-            sample_id = samples.keys())
+        R1btf = expand("results/{aligner}/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz",
+            sample_id = samples.keys(), aligner = config["host_aligner"]),
+        R1bts = expand("results/{aligner}/{sample_id}/{sample_id}_R1.fungi.putative-host.fastq.gz",
+            sample_id = samples.keys(), aligner = config["host_aligner"])
     output:
         "results/report/filtering/filtered_read_counts.tsv"
     run:
         counts = {}
         for i,sample in enumerate(samples.keys(), start=1):
             print("{} ({}/{})".format(sample, i, len(samples.keys())))
-            counts[sample] = {"taxmapper_tot": 0,"bowtie_tot": 0,"bowtie_nonspruce_tot": 0,"bowtie_spruce_tot": 0,
-                "taxmapper_bowtie": 0, "taxmapper_bowtie_nonspruce": 0, "taxmapper_bowtie_spruce": 0,
+            counts[sample] = {"taxmapper_tot": 0,"bowtie_tot": 0,"bowtie_nonhost_tot": 0,"bowtie_host_tot": 0,
+                "taxmapper_bowtie": 0, "taxmapper_bowtie_nonhost": 0, "taxmapper_bowtie_host": 0,
                 "union": 0}
             # Taxmapper read ids
             tmfile = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz".format(sample_id=sample)
@@ -338,24 +463,24 @@ rule count_reads:
             # Bowtie read ids
             btfile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz".format(sample_id=sample)
             btids = get_ids(btfile)
-            # Bowtie read ids non spruce
-            btffile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz".format(sample_id=sample)
+            # Bowtie read ids non host
+            btffile = "results/{aligner}/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz".format(sample_id=sample)
             btfids = get_ids(btffile)
-            # Bowtie read ids spruce
-            btsfile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.spruce.fastq.gz".format(sample_id=sample)
+            # Bowtie read ids host
+            btsfile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.host.fastq.gz".format(sample_id=sample)
             btsids = get_ids(btsfile)
             # Count reads common and unique
             counts[sample]["taxmapper_tot"] = len(tmids)
             counts[sample]["bowtie_tot"] = len(btids)
-            counts[sample]["bowtie_nonspruce_tot"] = len(btfids)
-            counts[sample]["bowtie_spruce_tot"] = len(btsids)
+            counts[sample]["bowtie_nonhost_tot"] = len(btfids)
+            counts[sample]["bowtie_host_tot"] = len(btsids)
             counts[sample]["taxmapper_bowtie"] = len(tmids.intersection(btids))
-            counts[sample]["taxmapper_bowtie_nonspruce"] = len(tmids.intersection(btfids))
-            counts[sample]["taxmapper_bowtie_spruce"] = len(tmids.intersection(btsids))
+            counts[sample]["taxmapper_bowtie_nonhost"] = len(tmids.intersection(btfids))
+            counts[sample]["taxmapper_bowtie_host"] = len(tmids.intersection(btsids))
             counts[sample]["union"] = len(tmids.union(btfids))
         df = pd.DataFrame(counts).T
         df.index.name="Sample"
-        df = df[["taxmapper_tot","bowtie_nonspruce_tot","union","bowtie_tot","bowtie_spruce_tot","taxmapper_bowtie","taxmapper_bowtie_nonspruce","taxmapper_bowtie_spruce"]]
+        df = df[["taxmapper_tot","bowtie_nonhost_tot","union","bowtie_tot","bowtie_host_tot","taxmapper_bowtie","taxmapper_bowtie_nonhost","taxmapper_bowtie_host"]]
         df.to_csv(output[0], sep="\t")
 
 ###########################
@@ -390,8 +515,8 @@ rule union_filtered_reads:
     input:
         R1_taxmapper = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz",
         R2_taxmapper = "results/taxmapper/{sample_id}/{sample_id}_R2.cut.trim.filtered.fastq.gz",
-        R1_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nospruce.fastq.gz",
-        R2_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nospruce.fastq.gz"
+        R1_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz",
+        R2_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nohost.fastq.gz"
     output:
         R1 = "results/filtered/{sample_id}/{sample_id}_R1.filtered.union.fastq.gz",
         R2 = "results/filtered/{sample_id}/{sample_id}_R2.filtered.union.fastq.gz"

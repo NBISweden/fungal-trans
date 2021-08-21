@@ -5,23 +5,31 @@ sample_file_list: "sample_list.tsv"
 datadir: "data/raw"
 mem_per_cpu: 6
 ## data for filtering
-fungi_transcript_url: "https://zenodo.org/record/3550762/files/fungi_transcripts.fasta.gz?download=1"
-spruce_transcript_url: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
+fungi_url: "https://zenodo.org/record/3550762/files/fungi_transcripts.fasta.gz?download=1"
+host_fna_url: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
+host_gtf_url: ""
 ## mapping
+host_aligner: "star"
 bowtie2_params: "--very-sensitive"
+# if STAR aligner fails to map reads to host, consider lowering the values below
+# in order to increase sensitivity of the aligner. WARNING: Note that this may
+# increase the number of false positive host reads meaning that fungal reads
+# may end up in the 'host' bin
+star_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
 fc_params: "-B -p -t CDS -g gene_id -Q 10"
+star_overhang: 99
 ## assembly
 # Choose between 'megahit', 'trinity', 'transabyss'
-assembler: transabyss
+assembler: trinity
 transabyss_kmers: [21, 25, 29, 31, 65, 75, 85, 95]
-co-assembly: True
-single-assembly: False
+co_assembly: True
+single_assembly: False
 min_contig_len: 200
 ## filtering
-# Choose between 'concordant', 'both-mapped' or 'one-mapped'
-paired_strategy: "both-mapped"
+# Choose between 'concordant', 'both_mapped' or 'one_mapped'
+paired_strategy: "one_mapped"
 # Choose between 'unfiltered', 'bowtie2', 'taxmapper' or 'filtered' (using a combination)
-read_source: "filtered"
+read_source: "bowtie2"
 # trimmomatic
 trimmomatic_home: ""
 qc_trim_settings: "LEADING:25 TRAILING:25 SLIDINGWINDOW:4:15 HEADCROP:2 MINLEN:50"

@@ -73,16 +73,23 @@ include: "source/rules/kraken.smk"
 ## Preprocessing
 preprocess = expand("results/preprocess/{sample_id}_R{i}.cut.trim.fastq.gz", sample_id = samples.keys(), i = [1,2])
 preprocess += ["results/report/preprocess/preprocess_report.html"]
+
+## Host reads
+host_reads = expand("results/host/{sample_id}_R{i}.host.fastq.gz",
+            sample_id = samples.keys(), i = [1,2])
 ## Taxmapper filter
 taxmapper_filter = expand("results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz", sample_id = samples.keys())
 taxmapper_filter += expand("results/report/taxmapper/taxa_freq_norm_lvl{i}.svg", i = [1,2])
 ## Bowtie filter
-bowtie_filter = expand("results/bowtie2/{sample_id}/{sample_id}_R{i}.fungi.nospruce.fastq.gz",
-            sample_id = samples.keys(), i = [1,2])
-bowtie_filter += ["results/report/filtering/bowtie2_filter_report.html"]
+bowtie_filter = expand("results/{aligner}/{sample_id}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
+            sample_id = samples.keys(), i = [1,2], aligner = config["host_aligner"])
+bowtie_filter += ["results/report/filtering/filter_report.html"]
+bowtie_filter += host_reads
 ## Union filter
 union_filter = expand("results/filtered/{sample_id}/{sample_id}_R{i}.filtered.union.fastq.gz",
             sample_id = samples.keys(), i = [1,2])
+union_filter += host_reads
+
 ## Sourmash
 sourmash = expand("results/sourmash/{sample_id}/{sample_id}.{source}.sig",
             sample_id = samples.keys(), source = config["read_source"])
@@ -174,9 +181,9 @@ blobtools_co += expand("results/annotation/co-assembly/{assembler}/{assembly}/ta
 inputs = []
 inputs += preprocess
 
-if config["co-assembly"]:
+if config["co_assembly"]:
     inputs += [eggnog_co, map_co, co_assembly_stats, abundance_co, abundance_co_tax, dbCAN_co, taxonomy_co, dbCAN_co_tax, eggnog_co_tax]
-if config["single-assembly"]:
+if config["single_assembly"]:
     inputs += [eggnog, dbCAN, taxonomy]
 
 if config["read_source"] == "bowtie2":
