@@ -4,17 +4,18 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python
-  - snakemake-minimal
-  - biopython
-  - pandas
-  - hmmer
-  - wget
-  - multiqc
-  - bowtie2
+  - python=3.8
+  - snakemake-minimal=6.2.1
+  - biopython=1.78
+  - pandas=1.2.4
+  - multiqc=1.10.1
+  - bowtie2=2.4.2
   - samtools=1.9
-  - ete3
-  - fastuniq
-  - subread
-  - seqtk
+  - ete3=3.1.2
+  - fastuniq=1.1
+  - seqtk=1.3
+
+  # utilities
+  - wget
   - tbb
+  - mamba
