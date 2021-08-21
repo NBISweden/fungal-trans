@@ -1,4 +1,4 @@
-name: CI
+name: Testing
 
 on:
   workflow_dispatch:
@@ -21,7 +21,7 @@ env:
   TMPDIR: /tmp
 
 jobs:
-  test:
+  test_workflow:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo + LFS
