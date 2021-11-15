@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 import pandas as pd
 import json
 import os
-import urllib
+import urllib.request
 import logging
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
