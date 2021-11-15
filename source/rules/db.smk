@@ -105,6 +105,7 @@ rule press_dbCAN:
         "resources/dbCAN/dbCAN-fam-HMMs.txt"
     output:
         expand("resources/dbCAN/dbCAN-fam-HMMs.txt.h3{suffix}", suffix = ["f","i","m","p"])
+    conda: "../../envs/hmmer.yaml"
     shell:
         """
         hmmpress {input[0]}
@@ -239,6 +240,7 @@ rule build_diamond_JGI:
         nodes = "resources/diamond/nodes.dmp"
     output:
         db = "resources/diamond/diamond.dmnd"
+    conda: "../../envs/diamond.yaml"
     params:
         tmpdir = "$TMPDIR/diamond"
     threads: 4
