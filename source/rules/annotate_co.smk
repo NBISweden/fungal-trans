@@ -317,9 +317,9 @@ rule contigtax_search_co:
         fa = "results/co-assembly/{assembler}/{assembly}/final.fa"
     output:
         diamond = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.tsv.gz",
-        logfile = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.log",
-        out_dir = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy",
+        logfile = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.log"
     params:
+        out_dir = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy",
         tmp_out = "$TMPDIR/{assembly}/diamond.tsv",
         tmp_log = "$TMPDIR/{assembly}/diamond.log",
         tmp_dir = "$TMPDIR/{assembly}"
