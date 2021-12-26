@@ -2,8 +2,9 @@ name: eggnog-mapper
 
 channels:
 - bioconda
+- conda-forge
 - defaults
 
 dependencies:
-- python=2.7
-- eggnog-mapper=2.0.1
+- boost-cpp >= 1.74.0
+- eggnog-mapper >= 2.1.6
