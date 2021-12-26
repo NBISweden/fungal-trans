@@ -41,13 +41,13 @@ rule frame_selection_co:
         mkdir -p {params.tmpdir}
         mkdir -p {params.outdir}
         cd {params.tmpdir}
-        ln -s $wd/{input.fa} final.fa
+        ln -sf $wd/{input.fa} final.fa
         gmst.pl --output final --format GFF --fnn --faa final.fa
         rm final.fa
         mv final $wd/{params.outdir}/final.gff
-        mv {params.tmpdir}/* $wd/{params.outdir}
+        mv {params.tmpdir}/* $wd/{params.outdir}/
         cd $wd
-        rm -r {params.tmpdir}
+        rmdir {params.tmpdir}
         """
 
 rule reformat_fasta_co:
@@ -170,7 +170,8 @@ rule emapper_search_co:
 rule emapper_annotate_hits_co:
     input:
         "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results.emapper.seed_orthologs",
-        "resources/eggnog/eggnog.db"
+        "resources/eggnog/eggnog.db",
+        "resources/eggnog/eggnog_proteins.dmnd"
     output:
         "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results.emapper.annotations"
     params:
@@ -188,7 +189,7 @@ rule emapper_annotate_hits_co:
         """
         #Copy eggnog.db to /dev/shm
         mkdir -p /dev/shm/$SLURM_JOB_ID
-        cp {input[1]} /dev/shm/$SLURM_JOB_ID
+        cp {input[1]} {input[2]} /dev/shm/$SLURM_JOB_ID
         #Run annotation of hits table
         emapper.py {params.flags} --cpu {threads} --annotate_hits_table {input[0]} -o {params.out} \
         --data_dir /dev/shm/$SLURM_JOB_ID --usemem 2>{log}
@@ -227,7 +228,7 @@ rule quantify_eggnog_co:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{fc}.tsv"
     params:
         src = "source/utils/eggnog-parser.py",
-        tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}")
+        tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "{db}")
     threads: 4
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60*4
@@ -255,7 +256,7 @@ rule quantify_eggnog_normalized_co:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.norm.{fc}.tsv"
     params:
         src = "source/utils/eggnog-parser.py",
-        tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "norm")
+        tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "norm", "{db}")
     threads: 4
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60*4
@@ -312,11 +313,12 @@ rule contigtax_search_co:
     Runs blastx of contigs against protein database and reports best LCA
     """
     input:
-        db = "resources/diamond/diamond.dmnd",
+        db = "resources/diamond_legacy/diamond.dmnd",
         fa = "results/co-assembly/{assembler}/{assembly}/final.fa"
     output:
         diamond = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.tsv.gz",
-        logfile = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.log"
+        logfile = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.log",
+        out_dir = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy",
     params:
         tmp_out = "$TMPDIR/{assembly}/diamond.tsv",
         tmp_log = "$TMPDIR/{assembly}/diamond.log",
@@ -328,8 +330,9 @@ rule contigtax_search_co:
     shell:
         """
         mkdir -p {params.tmp_dir}
+        mkdir -p {params.out_dir}
         contigtax search -m blastx -p {threads} --top 10 -e 0.001 -b 20 -c 1 \
-            -t {params.tmp_dir} {input.fa} {input.db} {params.tmp_out}
+            -t {params.tmp_dir} {input.fa} {input.db} {params.tmp_out} > {params.tmp_log}
         mv {params.tmp_out}.gz {output.diamond}
         mv {params.tmp_log} {output.logfile}
         """
