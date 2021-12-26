@@ -49,7 +49,7 @@ rule multiqc_map_report_co:
         fc_logs = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tab.summary",
             sample_id = samples.keys())
     output:
-        "results/report/map/{assembler}/{assembly}_map_report.html"
+        "results/report/map/{assembler}.{assembly}_map_report.html"
     params:
         name = "{assembler}.{assembly}_map_report.html",
         tmpdir = "$TMPDIR/{assembly}"
@@ -74,7 +74,7 @@ rule bowtie_build:
         prefix = "results/map/{assembler}/{source}/{sample_id}/final.fa"
     threads: 1
     resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*30
+        runtime = lambda wildcards, attempt: attempt*attempt*60
     shell:
         """
         bowtie2-build --large-index --threads {threads} {input[0]} {params.prefix}

@@ -119,7 +119,7 @@ eggnog = expand("results/collated/{assembler}/{source}/eggNOG/{db}.{fc}.tsv",
             source = config["read_source"])
 mapres = expand("results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R{i}.fastq.gz",
             assembler = config["assembler"], source = config["read_source"], sample_id = samples.keys(), i = [1,2])
-mapres += expand("results/report/map/{assembler}/{assembler}_{source}_map_report.html",
+mapres += expand("results/report/map/{assembler}_{source}_map_report.html",
             assembler = config["assembler"], source = config["read_source"])
 normalize = expand("results/annotation/{assembler}/{source}/{sample_id}/featureCounts/fc.{fc}.tab",
             assembler = config["assembler"], source = config["read_source"], sample_id = samples.keys(), fc=["tpm","raw"])
@@ -169,7 +169,7 @@ taxonomy_co = expand("results/collated/co-assembly/{assembler}/{assembly}/taxono
             assembly = assemblies.keys(), assembler = config["assembler"],
             fc = ["raw","tpm"])
 # Map and normalize
-map_co = expand("results/report/map/{assembler}/{assembly}_map_report.html", assembly = assemblies.keys(), assembler=config["assembler"])
+map_co = expand("results/report/map/{assembler}.{assembly}_map_report.html", assembly = assemblies.keys(), assembler=config["assembler"])
 normalize_co = expand("results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
                 assembly = assemblies.keys(), assembler = config["assembler"], fc = ["tpm","raw"])
 ### Optional blobtools output
