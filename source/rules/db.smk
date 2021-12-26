@@ -257,6 +257,30 @@ rule build_diamond_JGI:
         mv $TMPDIR/diamond.dmnd {output.db}
         """
 
+rule build_diamond_JGI_legacy:
+    input:
+        taxonmap = "resources/diamond/taxonmap.gz",
+        fasta = "resources/diamond/fasta.gz",
+        nodes = "resources/diamond/nodes.dmp"
+    output:
+        db = "resources/diamond_legacy/diamond.dmnd"
+    conda: "../../envs/contigtax.yaml"
+    params:
+        tmpdir = "$TMPDIR/diamond"
+    threads: 4
+    resources:
+        runtime = lambda wildcards, attempt: attempt**2*60*5
+    shell:
+        """
+        # Create temporary directory
+        mkdir -p $TMPDIR
+        # Create the database
+        zcat {input.fasta} | diamond makedb -d $TMPDIR/diamond -p {threads} \
+         --taxonmap {input.taxonmap} --taxonnodes {input.nodes}
+        # Move to output
+        mv $TMPDIR/diamond.dmnd {output.db}
+        """
+
 ## KEGG info ##
 rule get_kegg_files:
     output:
