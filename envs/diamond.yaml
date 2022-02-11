@@ -4,4 +4,4 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - diamond
+  - diamond >= 2.0.13

@@ -181,10 +181,10 @@ elif config["paired_strategy"] == "one_mapped":
             # Get none of the reads mapped
             samtools fastq -f 12 -1 {params.R1h} -2 {params.R2h} -s /dev/null -0 /dev/null {input}
             # Merge bam file
-            samtools merge {params.merged} {params.only_this_end} {params.only_that_end} {params.bothends}
+            samtools merge -f {params.merged} {params.only_this_end} {params.only_that_end} {params.bothends}
             # Extract fastq from merged file 
             samtools fastq -1 {params.R1f} -2 {params.R2f} -0 /dev/null {params.merged}
-            gzip {params.R1f} {params.R2f} {params.R1h} {params.R2h}
+            gzip -f {params.R1f} {params.R2f} {params.R1h} {params.R2h}
             mv {params.R1f}.gz {output.R1f}
             mv {params.R2f}.gz {output.R2f}
             mv {params.R1h}.gz {output.R1h}
@@ -231,11 +231,11 @@ elif config["paired_strategy"] == "one_mapped":
             # Get both reads mapped
             samtools view -b -F 12 {input} > {params.bothends}
             # Merge
-            samtools merge {params.merged} {params.only_this_end} {params.only_that_end} {params.bothends}
+            samtools merge -f {params.merged} {params.only_this_end} {params.only_that_end} {params.bothends}
             # Extract fastq from merged file 
             samtools fastq -1 {params.R1h} -2 {params.R2h} -0 /dev/null {params.merged}
             
-            gzip {params.tmpdir}/*.fastq
+            gzip -f {params.tmpdir}/*.fastq
             mv {params.tmpdir}/*.fastq.gz {params.outdir}
             rm {params.merged} {params.bothends} {params.only_that_end} {params.only_this_end}
             """

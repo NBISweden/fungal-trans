@@ -127,3 +127,16 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# snakemake
+.snakemake
+
+# project
+data
+resources
+results
+slurm/err
+slurm/logs
+tmp
+.Rproj.user
+*.Rproj
