@@ -6,7 +6,8 @@ localrules:
     get_kegg_files,
     download_refseq_db,
     download_host,
-    download_fungi_transcripts,
+    init_jgi,
+    download_jgi_transcripts,
     prepare_diamond_JGI
 
 ## NCBI Taxonomy ##
@@ -112,18 +113,62 @@ rule press_dbCAN:
         """
 
 ## Fungal transcripts ##
-rule download_fungi_transcripts:
+rule init_jgi:
     """
-    Downloads snapshot of fungal transcripts obtained from JGI 
+    Creates a cookie file for JGI authentication using user-defined credentials
     """
     output:
-        temp("resources/fungi/fungi_transcripts.fasta")
+        cookies="resources/JGI/cookies"
+    log:
+        "resources/JGI/init_jgi.log"
+    shadow: "minimal"
     params:
-        url = config["fungi_url"]
+        user_name = config["jgi_user"],
+        password = config["jgi_password"]
+    retries: 3
     shell:
         """
-        curl -L -s -o {output[0]}.gz {params.url}
-        gunzip {output[0]}.gz
+        curl 'https://signon.jgi.doe.gov/signon/create' \
+            --data-urlencode 'login={params.user_name}' \
+            --data-urlencode 'password={params.password}' -c {output.cookies} > /dev/null 2>{log}
+        """
+
+rule download_jgi_transcripts:
+    """
+    For each 'portal', download the filtered transcripts 
+    """
+    output:
+        temp("resources/JGI/genomes/{portal}.transcripts.fna.gz"),
+    input:
+        cookies=rules.init_jgi.output.cookies,
+    log:
+        "resources/JGI/genomes/download_jgi_transcripts.{portal}.log"
+    params:
+        tmpdir = "$TMPDIR/{portal}",
+        xml = "$TMPDIR/{portal}/files.xml",
+        output = "$TMPDIR/{portal}/transcripts.fna.gz"
+    retries: 3
+    shell:
+        """
+        mkdir -p {params.tmpdir}
+        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {params.output} 2>{log}
+        mv {params.output} {output}
+        rm -rf {params.tmpdir}
+        """
+
+rule concat_transcripts:
+    """
+    Concatenates all transcripts downloaded
+    """
+    output:
+        "resources/fungi/fungi_transcripts.fasta.gz"
+    input:
+        expand(rules.download_jgi_transcripts.output, portal=genomes.index.tolist())
+    log:
+        "resources/fungi/concat_transcripts.log"
+    shell:
+        """
+        cat {input} > {output} 
         """
 
 ## Host data ##
