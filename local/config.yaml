@@ -1,0 +1,4 @@
+use-conda: True
+keep-going: True
+rerun-triggers: mtime
+cores: 1

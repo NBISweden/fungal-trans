@@ -140,6 +140,32 @@ Here's an example of running up to and including the filtering part of the workf
 snakemake --use-conda -j 10 -p filter
 ```
 
+##### Configuring login to JGI server
+
+The workflow automatically downloads transcript data from the [JGI Mycocosm](https://mycocosm.jgi.doe.gov/fungi/fungi.info.html) database. For this to work you must have [registered an account](https://contacts.jgi.doe.gov/registration/new). After registering, create a file in YAML format containing your login credentials:
+
+```yaml
+jgi_password: <your_password>
+jgi_user: <your_username/email>
+```
+
+Save this file as `jgi_login.yml` and pass it to the workflow with the `--configfile` flag:
+
+```bash
+snakemake --configfile jgi_login.yml <other flags>
+```
+
+Information about genomes found in the JGI Mycocosm database will be stored in `resources/JGI/genomes.tsv`. This file will be available after a dry-run of the workflow so you may inspect it before running the workflow. The file should look like this:
+
+| portal | Name | bp | genes |
+|--------|------|----|------|
+| Aaoar1 | Aaosphaeria arxii CBS 175.79 v1.0 | 38901049 | 14203 |
+| Abobi1 | Abortiporus biennis CCBS 521 v1.0 | 45165060 | 11987 |
+| Abobie1 | Abortiporus biennis ​CIRM-BRFM 1778 v1.0 | 33118568 | 11767 |
+
+The `portal` column contains the JGI portal name, `Name` is the name of the genome, `bp` is the size of the genome in base pairs and `genes` is the number of genes in the genome. You may filter this file to your liking to only download transcripts for the genomes you are interested in. Remember to save it as `resources/JGI/genomes.tsv` before running the workflow.
+
+
 #### Assembly
 
 Assemblies can be generated for single samples or by combining multiple samples

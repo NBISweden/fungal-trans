@@ -371,7 +371,7 @@ rule create_blob_co:
     conda: "../../envs/blobtools.yaml"
     shell:
         """
-        blobtools create --nodes {input.nodes} --names {input.names} -i {input.fa} -b {input.bam} -t {input.hit} \ 
+        blobtools create --nodes {input.nodes} --names {input.names} -i {input.fa} -b {input.bam} -t {input.hit} \
             --title {wildcards.sample_id} -o {params.prefix}
         """
 

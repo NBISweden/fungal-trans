@@ -5,7 +5,7 @@ sample_file_list: "sample_list.tsv"
 datadir: "data/raw"
 mem_per_cpu: 6
 ## data for filtering
-fungi_url: "https://zenodo.org/record/3550762/files/fungi_transcripts.fasta.gz?download=1"
+fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
 host_fna_url: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
 host_gtf_url: ""
 ## mapping
