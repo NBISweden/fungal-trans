@@ -25,27 +25,29 @@ include: "paired_strategy.smk"
 
 rule bowtie_build_fungi:
     input:
-        "resources/fungi/fungi_transcripts.fasta"
+        rules.concat_transcripts.output
     output:
         expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l",
                index=range(1,5))
     log:
         "resources/fungi/bowtie2.log"
     params:
-        tmp = "$TMPDIR/fungi_transcripts/fungi_transcripts.fasta",
+        fasta = "$TMPDIR/fungi_transcripts/fungi_transcripts.fasta",
         tmpdir = "$TMPDIR/fungi_transcripts",
         outdir = "resources/fungi/"
     threads: 20
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60*120
+    conda: "../../envs/bowtie2.yaml"
     shell:
         """
         mkdir -p {params.tmpdir}
+        gunzip -c {input} > {params.fasta}
         bowtie2-build \
             --threads {threads} \
             --large-index {input} \
-            {params.tmp} >{log} 2>&1
-        mv {params.tmp}*.bt2l {params.outdir}/
+            {params.fasta} >{log} 2>&1
+        mv {params.fasta}*.bt2l {params.outdir}/
         rm -r {params.tmpdir}
         """
 
@@ -83,6 +85,7 @@ rule bowtie_build_host:
         "resources/host/bowtie2.log"
     resources:
         runtime = lambda wildcards, attempt: attempt**2*60
+    conda: "../../envs/bowtie2.yaml"
     shell:
         """
         bowtie2-build \
