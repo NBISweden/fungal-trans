@@ -6,7 +6,7 @@ import platform
 from source.utils.parse import parse_sample_list
 from snakemake.utils import min_version, validate
 from snakemake.exceptions import WorkflowError
-
+from source.utils.list_jgi_genomes import parse_genomes
 
 def parse_validation_error(e):
     """
@@ -33,11 +33,6 @@ if not os.getenv("TMPDIR"):
     os.environ["TMPDIR"] = "tmp"
     os.makedirs(os.environ["TMPDIR"],exist_ok=True)
 
-wildcard_constraints:
-    sample_id = "[A-Za-z0-9_\-\.]+",
-    assembler = "megahit|trinity|transabyss",
-    filter_source = "unfiltered|filtered|taxmapper|bowtie2"
-
 # Set default config and validate against schema
 if os.path.exists("config.yml"):
     configfile: "config.yml"
@@ -49,14 +44,23 @@ except WorkflowError as e:
 
 workdir: config["workdir"]
 
+# Parse samples and assemblies
+samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], config)
+# Parse JGI genomes from fungi info url, also save to file for quick re-use in future runs
+genomes = parse_genomes(config["fungi_info"], f="resources/JGI/genomes.tsv")
+
+wildcard_constraints:
+    sample_id = f"({'|'.join(list(samples.keys()))})",
+    assembler = "megahit|trinity|transabyss",
+    filter_source = "unfiltered|filtered|taxmapper|bowtie2",
+    portals = f"({'|'.join(list(genomes.index.tolist()))})",
+
 # Get environment info
 pythonpath = sys.executable
 envdir = '/'.join(pythonpath.split("/")[0:-2])
 system = platform.system()
 config["system"] = system
 
-# Parse samples and assemblies
-samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], config)
 
 # Include rules
 include: "source/rules/db.smk"
