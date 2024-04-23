@@ -84,10 +84,10 @@ properties:
       'both_mapped' = requires that both ends are mapped or 'one_mapped' = keep paired reads even if only one end maps"
     default: "both_mapped"
     enum: ["concordant","both_mapped","one_mapped"]
-  fungi_transcript_url:
+  fungi_info:
     type: string
-    description: Dataset url for fungal transcripts to use in filtering
-    default: "https://zenodo.org/record/3550762/files/fungi_transcripts.fasta.gz?download=1"
+    description: URL to fungi info page
+    default: https://mycocosm.jgi.doe.gov/fungi/fungi.info.html
   spruce_transcript_url:
     type: string
     description: Dataset url for spruce transcripts to use in filtering
