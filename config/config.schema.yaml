@@ -27,9 +27,17 @@ properties:
     type: string
     description: URL to host fasta file
     default: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
-  host_gtf_url:
+  host_gff_url:
     type: string
     description: URL to host GTF file
+    default: ""
+  host_fna:
+    type: string
+    description: Path to host fasta file
+    default: ""
+  host_gff:
+    type: string
+    description: Path to host GFF file
     default: ""
   ## MAPPING ##
   host_aligner:

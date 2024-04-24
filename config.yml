@@ -7,7 +7,9 @@ mem_per_cpu: 6
 ## data for filtering
 fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
 host_fna_url: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
-host_gtf_url: ""
+host_gff_url: ""
+host_fna: ""
+host_gff: ""
 ## mapping
 host_aligner: "star"
 bowtie2_params: "--very-sensitive"
