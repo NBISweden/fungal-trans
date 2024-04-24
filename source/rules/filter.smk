@@ -51,9 +51,27 @@ rule bowtie_build_fungi:
         rm -r {params.tmpdir}
         """
 
+if not config["host_fna_url"] and not config["host_fna"] and config["host_aligner"]=="star":
+    sys.exit("ERROR: No host genome fasta file given for STAR mapping")
+
+def star_build_input(wildcards):
+    input = []
+    # if host_fna_url is give, put this download under resources/host/host.fna
+    if config["host_fna"]:
+        input.append(config["host_fna"])
+    elif config["host_fna_url"]:
+        input.append("resources/host/host.fna")
+        config["host_fna"] = "resources/host/host.fna"
+    if config["host_gff"]:
+        input.append(config["host_gff"])
+    elif config["host_gff_url"]:
+        input.append("resources/host/host.gtf")
+        config["host_gff"] = "resources/host/host.gff"
+    return input
+
 rule star_build_host:
     input:
-        expand("resources/host/host.{suff}", suff = ["fna","gtf"] if config["host_gtf_url"] != "" else ["fna"])
+        star_build_input,
     output:
         expand("resources/host/{f}",
             f = ["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
@@ -61,9 +79,9 @@ rule star_build_host:
     log:
         "resources/host/Log.out"
     params:
-        overhang = "--sjdbOverhang "+str(config["star_overhang"]) if config["host_gtf_url"] != "" else "",
+        overhang = "--sjdbOverhang "+str(config["star_overhang"]) if config["host_gff"] != "" else "",
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        gtfstring = "--sjdbGTFfile resources/host/host.gtf" if config["host_gtf_url"] != "" else ""
+        gtfstring = lambda wildcards, input: f"--sjdbGTFfile {config['host_gff']}" if config['host_gff']!="" else ""
     threads: 20
     resources:
         runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
