@@ -1,7 +1,8 @@
 if config["paired_strategy"] == "concordant":
     localrules:
         fungi_concordant,
-        bt_host_concordant
+        bt_host_concordant,
+        star_host_concordant
 
     rule fungi_concordant:
         """
@@ -49,6 +50,7 @@ if config["paired_strategy"] == "concordant":
             R2f = "$TMPDIR/{sample_id}_R2.fungi.nohost.fastq",
             R1h = "$TMPDIR/{sample_id}_R1.fungi.putative-host.fastq",
             R2h = "$TMPDIR/{sample_id}_R2.fungi.putative-host.fastq",
+        conda: "../../envs/star.yaml"
         shell:
             """
             exec &> {log}
@@ -83,7 +85,8 @@ elif config["paired_strategy"] == "both_mapped":
             outdir = lambda wildcards, output: os.path.dirname(output.R1f),
             tmpdir = "$TMPDIR/{sample_id}"
         resources:
-            runtime = lambda wildcards, attempt: attempt**2*30
+            runtime = 30
+        conda: "../../envs/bowtie2.yaml"            
         shell:
             """
             exec &>{log}
@@ -119,7 +122,8 @@ elif config["paired_strategy"] == "both_mapped":
             both_unmapped="$TMPDIR/{sample_id}.fungi.nohost.both_unmapped.bam",
             merged="$TMPDIR/{sample_id}.fungi.nohost.merged.bam"
         resources:
-            runtime = lambda wildcards, attempt: attempt**2*30
+            runtime = 30
+        conda: "../../envs/bowtie2.yaml"
         shell:
             """
             exec &>{log}
@@ -167,8 +171,10 @@ elif config["paired_strategy"] == "one_mapped":
             only_that_end = "$TMPDIR/{sample_id}_onlythatend.bam",
             bothends = "$TMPDIR/{sample_id}_bothends.bam",
             merged = "$TMPDIR/{sample_id}_merged.bam"
+        threads: 2
         resources:
-            runtime = lambda wildcards, attempt: attempt**2*60
+            runtime = 60
+        conda: "../../envs/bowtie2.yaml"
         shell:
             """
             exec &>{log}
@@ -205,7 +211,8 @@ elif config["paired_strategy"] == "one_mapped":
         log:
             "results/{aligner}/{sample_id}/{sample_id}.host_one_mapped.log"
         resources:
-            runtime = lambda wildcards, attempt: attempt**2*30
+            runtime = 30
+        conda: "../../envs/bowtie2.yaml"
         params:
             tmpdir="$TMPDIR/{sample_id}",
             outdir=lambda wildcards, output: os.path.dirname(output.R1f),
