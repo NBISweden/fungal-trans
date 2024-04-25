@@ -24,29 +24,39 @@ rule link_unfiltered:
 include: "paired_strategy.smk"
 
 rule bowtie_build_fungi:
+    """
+    Builds bowtie2 index for fungal transcripts. Because gunzip may report 
+    'decompression OK, trailing garbage ignored' when decompressing the transcript file
+    and exiting with an error code of 2 we handle this by checking the exit code and only 
+    exiting with a 1 if the exit code is exactly 1. Otherwise this rule may fail because
+    Snakemake runs in strict mode.
+    """
     input:
         rules.concat_transcripts.output
     output:
         expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l",
                index=range(1,5))
     log:
-        "resources/fungi/bowtie2.log"
+        bt2="resources/fungi/bowtie2.log",
+        shell="resources/fungi/shell.log"
     params:
         fasta = "$TMPDIR/fungi_transcripts/fungi_transcripts.fasta",
         tmpdir = "$TMPDIR/fungi_transcripts",
         outdir = "resources/fungi/"
-    threads: 20
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*120
+    threads: 64
     conda: "../../envs/bowtie2.yaml"
     shell:
         """
+        set +e
+        exec &>{log.shell}
         mkdir -p {params.tmpdir}
         gunzip -c {input} > {params.fasta}
-        bowtie2-build \
-            --threads {threads} \
-            --large-index {input} \
-            {params.fasta} >{log} 2>&1
+        exitcode=$?
+        if [ $exitcode -eq 1 ]
+        then
+            exit 1
+        fi
+        bowtie2-build --threads {threads} --large-index {params.fasta} {params.fasta} >{log.bt2} 2>&1
         mv {params.fasta}*.bt2l {params.outdir}/
         rm -r {params.tmpdir}
         """
@@ -77,20 +87,28 @@ rule star_build_host:
             f = ["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
                  "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"])
     log:
-        "resources/host/Log.out"
+        "resources/host/star_build_host.log"
     params:
-        overhang = "--sjdbOverhang "+str(config["star_overhang"]) if config["host_gff"] != "" else "",
+        tmpdir="$TMPDIR/host",
+        limitGenomeGenerateRAM = config["star_limitGenomeGenerateRAM"]*1000000000,
+        extra_params = config["star_extra_build_params"],
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        gtfstring = lambda wildcards, input: f"--sjdbGTFfile {config['host_gff']}" if config['host_gff']!="" else ""
-    threads: 20
+    threads: config["star_runThreadN"]
     resources:
-        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
+        runtime = 60 * 24,
+        mem_mb = config["star_limitGenomeGenerateRAM"]*1000, # converts ram in GB to MB
     conda: "../../envs/star.yaml"
     shell:
         """
         exec &>{log}
-         STAR --runThreadN {threads} --runMode genomeGenerate --genomeDir {params.outdir} \
-            --genomeFastaFiles {input[0]} {params.overhang} {params.gtfstring}
+        mkdir -p {params.tmpdir}
+        gunzip -c {input[0]} > {params.tmpdir}/host.fna
+        gunzip -c {input[1]} > {params.tmpdir}/host.gff
+        STAR --runMode genomeGenerate --genomeDir {params.tmpdir} --genomeFastaFiles {params.tmpdir}/host.fna \
+            --sjdbGTFfile {params.tmpdir}/host.gff --runThreadN {threads} --limitGenomeGenerateRAM {params.limitGenomeGenerateRAM} \
+            {params.extra_params}
+        mv {params.tmpdir}/* {params.outdir}/
+        rm -rf {params.tmpdir}
         """
 
 
@@ -102,7 +120,7 @@ rule bowtie_build_host:
     log:
         "resources/host/bowtie2.log"
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60
+        runtime = 60
     conda: "../../envs/bowtie2.yaml"
     shell:
         """
@@ -146,7 +164,7 @@ rule bowtie_map_fungi:
         st_sort = "results/bowtie2/{sample_id}/{sample_id}.samtools_sort.fungi.log",
     threads: 10
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*240
+        runtime = 240
     shell:
         """
         mkdir -p {params.tmpdir}
@@ -166,7 +184,7 @@ rule get_mapped_fungal_refs:
     output:
         "results/bowtie2/{sample_id}/{sample_id}.fungi.refs"
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*30
+        runtime = 30
     shell:
         """
         samtools view -F 4 -f 64 {input[0]} | cut -f3 | sort -u > {output[0]}
@@ -205,11 +223,11 @@ rule star_map_host:
         temp_bam = "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam",
         temp_log = "$TMPDIR/{sample_id}/{sample_id}.Log.out",
         temp_stat = "$TMPDIR/{sample_id}/{sample_id}.Log.final.out",
-        setting = config["star_params"]
+        setting = config["star_extra_params"]
     conda: "../../envs/star.yaml"
     threads: 20
     resources:
-        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
+        runtime = 60 * 10
     shell:
         """
         exec &>{log.all}
@@ -252,7 +270,7 @@ rule bowtie_map_host:
         samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.host.log"
     threads: 10
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60
+        runtime = 60
     shell:
         """
         exec &> {log.samtools}
@@ -351,7 +369,7 @@ rule taxmapper_search:
     output:
         temp(expand("results/taxmapper/{{sample_id}}/hits_{i}.aln", i = [1,2]))
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*6
+        runtime = 60*6
     params:
         tmp_dir = "$TMPDIR/{sample_id}",
         out_dir = "results/taxmapper/{sample_id}"
@@ -378,7 +396,7 @@ rule taxmapper_map:
         "results/taxmapper/{sample_id}/taxa.tsv.gz",
         "results/taxmapper/{sample_id}/taxa_identities.tsv"
     resources:
-        runtime = lambda wildcards, attempt: attempt*60*3
+        runtime = 60*3
     conda: "../../envs/taxmapper.yaml"
     threads: 4
     params:
@@ -398,7 +416,7 @@ rule taxmapper_filter_reads:
     output:
         "results/taxmapper/{sample_id}/taxa_filtered.tsv.gz"
     resources:
-        runtime = lambda wildcards, attempt: attempt*10
+        runtime = 10
     conda: "../../envs/taxmapper.yaml"
     threads: 1
     params:
@@ -422,7 +440,7 @@ rule taxmapper_count:
         tmp_in = "$TMPDIR/taxa_filtered.tsv"
     conda: "../../envs/taxmapper.yaml"
     resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*10
+        runtime = 10
     shell:
         """
         gunzip -c {input[0]} > {params.tmp_in}
@@ -550,7 +568,7 @@ rule union_filtered_reads:
         bt_tmp_fastq = "$TMPDIR/{sample_id}/bt.fastq",
         tmpdir = "$TMPDIR/{sample_id}"
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60
+        runtime = 60
     run:
         shell("mkdir -p {params.tmpdir}")
         print("Storing read ids")
