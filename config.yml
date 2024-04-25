@@ -13,13 +13,20 @@ host_gff: ""
 ## mapping
 host_aligner: "star"
 bowtie2_params: "--very-sensitive"
+# star_limitGenomeGenerateRAM sets the maximum allowed RAM usage (in GB)
+star_limitGenomeGenerateRAM: 128
+# star_runThreadN sets the threads to use for STAR
+star_runThreadN: 20
+# star_extra_build_params sets the extra parameters for star index build
+star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent --sjdbOverhang 100"
+# star_extra_params sets the extra parameters for star alignment
 # if STAR aligner fails to map reads to host, consider lowering the values below
 # in order to increase sensitivity of the aligner. WARNING: Note that this may
 # increase the number of false positive host reads meaning that fungal reads
 # may end up in the 'host' bin
-star_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
+star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
+# feature counts
 fc_params: "-B -p -t CDS -g gene_id -Q 10"
-star_overhang: 99
 ## assembly
 # Choose between 'megahit', 'trinity', 'transabyss'
 assembler: trinity
