@@ -1,4 +1,6 @@
 localrules:
+    ncbi_taxonomy,
+    download_taxdump,
     download_taxmapper,
     download_eggnog,
     download_dbCAN,
@@ -290,7 +292,7 @@ rule build_diamond_JGI:
         tmpdir = "$TMPDIR/diamond"
     threads: 4
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*5
+        runtime = 60*5
     shell:
         """
         # Create temporary directory
@@ -314,7 +316,7 @@ rule build_diamond_JGI_legacy:
         tmpdir = "$TMPDIR/diamond"
     threads: 4
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*5
+        runtime = 60*5
     shell:
         """
         # Create temporary directory

@@ -12,7 +12,7 @@ rule bowtie_build_co:
         prefix = "results/map/co-assembly/{assembler}/{assembly}/final.fa"
     threads: 1
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*4
+        runtime = 60*4
     shell:
         """
         bowtie2-build --large-index --threads {threads} {input[0]} {params.prefix}
@@ -28,7 +28,7 @@ rule bowtie_co:
     log: "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.log"
     threads: 10
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*4
+        runtime = 60*4
     params:
         prefix = "results/map/co-assembly/{assembler}/{assembly}/final.fa",
         tmp_out = "$TMPDIR/{assembly}/{sample_id}.bam",
@@ -74,7 +74,7 @@ rule bowtie_build:
         prefix = "results/map/{assembler}/{source}/{sample_id}/final.fa"
     threads: 1
     resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*60
+        runtime = 60*24
     shell:
         """
         bowtie2-build --large-index --threads {threads} {input[0]} {params.prefix}
@@ -94,7 +94,7 @@ rule bowtie:
         setting = config["bowtie2_params"]
     threads: 10
     resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*60
+        runtime = 60
     shell:
         """
         bowtie2 {params.setting} -p {threads} -x {params.prefix} \
