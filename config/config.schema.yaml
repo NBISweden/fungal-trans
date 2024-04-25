@@ -49,14 +49,18 @@ properties:
     type: string
     description: Parameters for bowtie2 aligner
     default: "--very-sensitive"
-  star_overhang:
+  star_limitGenomeGenerateRAM:
     type: integer
-    description: this length should be equal to the ReadLength-1, where ReadLength is the length of the reads
-    default: 99
-  star_params:
+    description: Maximum RAM to use for genome generation (in GB)
+    default: 128
+  star_extra_build_params:
     type: string
-    description: Extra parameters for star aligner
-    default: ""
+    description: Extra parameters for star index build
+    default: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent --sjdbOverhang 100"
+  star_extra_params:
+    type: string
+    description: Extra parameters for star alignment
+    default: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
   fc_params:
     type: string
     description: Parameters for featureCounts
