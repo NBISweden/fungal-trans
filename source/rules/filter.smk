@@ -163,8 +163,7 @@ rule bowtie_map_fungi:
         bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
         st_sort = "results/bowtie2/{sample_id}/{sample_id}.samtools_sort.fungi.log",
     threads: 10
-    resources:
-        runtime = 240
+    conda: "../../envs/bowtie2.yaml"
     shell:
         """
         mkdir -p {params.tmpdir}
