@@ -93,7 +93,7 @@ rule star_build_host:
         limitGenomeGenerateRAM = config["star_limitGenomeGenerateRAM"]*1000000000,
         extra_params = config["star_extra_build_params"],
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-    threads: config["star_runThreadN"]
+    threads: 20
     resources:
         runtime = 60 * 24,
         mem_mb = config["star_limitGenomeGenerateRAM"]*1000, # converts ram in GB to MB
