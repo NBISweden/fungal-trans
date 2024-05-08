@@ -15,8 +15,6 @@ host_aligner: "star"
 bowtie2_params: "--very-sensitive"
 # star_limitGenomeGenerateRAM sets the maximum allowed RAM usage (in GB)
 star_limitGenomeGenerateRAM: 128
-# star_runThreadN sets the threads to use for STAR
-star_runThreadN: 20
 # star_extra_build_params sets the extra parameters for star index build
 star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent --sjdbOverhang 100"
 # star_extra_params sets the extra parameters for star alignment
