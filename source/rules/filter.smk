@@ -1,7 +1,7 @@
 localrules:
     extract_fungi_reads,
     get_all_mapped_fungal_refs,
-    alignment_report,
+    filter_report,
     count_reads,
     link_unfiltered
 
@@ -225,8 +225,6 @@ rule star_map_host:
         setting = config["star_extra_params"]
     conda: "../../envs/star.yaml"
     threads: 20
-    resources:
-        runtime = 60 * 10
     shell:
         """
         exec &>{log.all}
@@ -310,13 +308,13 @@ rule host_reads:
         for f in {input.R1_1} {input.R1_2};
         do
             if [ -s $f ]; then
-                gunzip -c $f | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' >> {params.tmpids}
+                seqtk comp $f | cut -f1 >> {params.tmpids}
             fi
         done
         for f in {input.R2_1} {input.R2_2};
         do
             if [ -s $f ]; then
-                gunzip -c $f | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' >> {params.tmpids}
+                seqtk comp $f | cut -f1 >> {params.tmpids}
             fi
         done
         cat {params.tmpids} | sort -u > {params.ids}
@@ -334,13 +332,15 @@ def get_host_logs(config, samples):
     elif config["host_aligner"] == "bowtie2":
         return expand("results/bowtie2/{sample_id}/{sample_id}.host.log", sample_id = samples.keys())
 
-rule alignment_report:
+rule filter_report:
     input:
         hostlogs = get_host_logs(config, samples),
         fungallogs = expand("results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
             sample_id = samples.keys())
     output:
         "results/report/filtering/filter_report.html"
+    log:
+        "results/report/filtering/filter_report.log"
     params:
         tmpdir = "multiqc_filter",
         config = "config/multiqc_filter_config.yaml"
