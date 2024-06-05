@@ -66,7 +66,7 @@ if not config["host_fna_url"] and not config["host_fna"] and config["host_aligne
 
 def star_build_input(wildcards):
     input = []
-    # if host_fna_url is give, put this download under resources/host/host.fna
+    # if host_fna_url is given, put this download under resources/host/host.fna
     if config["host_fna"]:
         input.append(config["host_fna"])
     elif config["host_fna_url"]:
@@ -300,26 +300,14 @@ rule host_reads:
         R2 = "$TMPDIR/{sample_id}_R2.host.fastq.gz"
     log:
         "results/host/{sample_id}.log"
+    threads: 1
     shell:
         """
-        set +o pipefail;
         exec &>{log}
         touch {params.tmpids}
-        for f in {input.R1_1} {input.R1_2};
-        do
-            if [ -s $f ]; then
-                seqtk comp $f | cut -f1 >> {params.tmpids}
-            fi
-        done
-        for f in {input.R2_1} {input.R2_2};
-        do
-            if [ -s $f ]; then
-                seqtk comp $f | cut -f1 >> {params.tmpids}
-            fi
-        done
-        cat {params.tmpids} | sort -u > {params.ids}
-        seqtk subseq {input.R1} {params.ids} | gzip -c > {params.R1}
-        seqtk subseq {input.R2} {params.ids} | gzip -c > {params.R2}
+        seqkit seq -n -i --threads {threads} {input.R1_1} {input.R1_2} {input.R2_1} {input.R2_2} | sort -u > {params.ids}
+        seqkit grep -f {params.ids} --immediate-output --threads {threads} -o {params.R1} {input.R1}
+        seqkit grep -f {params.ids} --immediate-output --threads {threads} -o {params.R2} {input.R2}
         mv {params.R1} {output.R1}
         mv {params.R2} {output.R2}
         rm {params.ids}
