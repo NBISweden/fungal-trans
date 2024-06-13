@@ -11,12 +11,12 @@ dependencies:
   - lxml
   - pycurl
   - tqdm
-  - multiqc=1.11
-  - bowtie2=2.4.4
-  - samtools=1.14
-  - ete3=3.1.2
-  - fastuniq=1.1
-  - seqtk=1.3
+  - multiqc
+  - bowtie2
+  - samtools
+  - ete3
+  - fastuniq
+  - seqtk
 
   # utilities
   - wget

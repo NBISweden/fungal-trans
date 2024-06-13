@@ -1,7 +1,7 @@
 localrules:
     extract_fungi_reads,
     get_all_mapped_fungal_refs,
-    alignment_report,
+    filter_report,
     count_reads,
     link_unfiltered
 
@@ -24,55 +24,91 @@ rule link_unfiltered:
 include: "paired_strategy.smk"
 
 rule bowtie_build_fungi:
+    """
+    Builds bowtie2 index for fungal transcripts. Because gunzip may report 
+    'decompression OK, trailing garbage ignored' when decompressing the transcript file
+    and exiting with an error code of 2 we handle this by checking the exit code and only 
+    exiting with a 1 if the exit code is exactly 1. Otherwise this rule may fail because
+    Snakemake runs in strict mode.
+    """
     input:
         rules.concat_transcripts.output
     output:
         expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l",
                index=range(1,5))
     log:
-        "resources/fungi/bowtie2.log"
+        bt2="resources/fungi/bowtie2.log",
+        shell="resources/fungi/shell.log"
     params:
         fasta = "$TMPDIR/fungi_transcripts/fungi_transcripts.fasta",
         tmpdir = "$TMPDIR/fungi_transcripts",
         outdir = "resources/fungi/"
-    threads: 20
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*120
+    threads: 64
     conda: "../../envs/bowtie2.yaml"
     shell:
         """
+        set +e
+        exec &>{log.shell}
         mkdir -p {params.tmpdir}
         gunzip -c {input} > {params.fasta}
-        bowtie2-build \
-            --threads {threads} \
-            --large-index {input} \
-            {params.fasta} >{log} 2>&1
+        exitcode=$?
+        if [ $exitcode -eq 1 ]
+        then
+            exit 1
+        fi
+        bowtie2-build --threads {threads} --large-index {params.fasta} {params.fasta} >{log.bt2} 2>&1
         mv {params.fasta}*.bt2l {params.outdir}/
         rm -r {params.tmpdir}
         """
 
+if not config["host_fna_url"] and not config["host_fna"] and config["host_aligner"]=="star":
+    sys.exit("ERROR: No host genome fasta file given for STAR mapping")
+
+def star_build_input(wildcards):
+    input = []
+    # if host_fna_url is given, put this download under resources/host/host.fna
+    if config["host_fna"]:
+        input.append(config["host_fna"])
+    elif config["host_fna_url"]:
+        input.append("resources/host/host.fna")
+        config["host_fna"] = "resources/host/host.fna"
+    if config["host_gff"]:
+        input.append(config["host_gff"])
+    elif config["host_gff_url"]:
+        input.append("resources/host/host.gtf")
+        config["host_gff"] = "resources/host/host.gff"
+    return input
+
 rule star_build_host:
     input:
-        expand("resources/host/host.{suff}", suff = ["fna","gtf"] if config["host_gtf_url"] != "" else ["fna"])
+        star_build_input,
     output:
         expand("resources/host/{f}",
             f = ["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
                  "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"])
     log:
-        "resources/host/Log.out"
+        "resources/host/star_build_host.log"
     params:
-        overhang = "--sjdbOverhang "+str(config["star_overhang"]) if config["host_gtf_url"] != "" else "",
+        tmpdir="$TMPDIR/host",
+        limitGenomeGenerateRAM = config["star_limitGenomeGenerateRAM"]*1000000000,
+        extra_params = config["star_extra_build_params"],
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        gtfstring = "--sjdbGTFfile resources/host/host.gtf" if config["host_gtf_url"] != "" else ""
     threads: 20
     resources:
-        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
+        runtime = 60 * 24,
+        mem_mb = config["star_limitGenomeGenerateRAM"]*1000, # converts ram in GB to MB
     conda: "../../envs/star.yaml"
     shell:
         """
         exec &>{log}
-         STAR --runThreadN {threads} --runMode genomeGenerate --genomeDir {params.outdir} \
-            --genomeFastaFiles {input[0]} {params.overhang} {params.gtfstring}
+        mkdir -p {params.tmpdir}
+        gunzip -c {input[0]} > {params.tmpdir}/host.fna
+        gunzip -c {input[1]} > {params.tmpdir}/host.gff
+        STAR --runMode genomeGenerate --genomeDir {params.tmpdir} --genomeFastaFiles {params.tmpdir}/host.fna \
+            --sjdbGTFfile {params.tmpdir}/host.gff --runThreadN {threads} --limitGenomeGenerateRAM {params.limitGenomeGenerateRAM} \
+            {params.extra_params}
+        mv {params.tmpdir}/* {params.outdir}/
+        rm -rf {params.tmpdir}
         """
 
 
@@ -84,7 +120,7 @@ rule bowtie_build_host:
     log:
         "resources/host/bowtie2.log"
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60
+        runtime = 60
     conda: "../../envs/bowtie2.yaml"
     shell:
         """
@@ -127,8 +163,7 @@ rule bowtie_map_fungi:
         bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
         st_sort = "results/bowtie2/{sample_id}/{sample_id}.samtools_sort.fungi.log",
     threads: 10
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*240
+    conda: "../../envs/bowtie2.yaml"
     shell:
         """
         mkdir -p {params.tmpdir}
@@ -148,7 +183,7 @@ rule get_mapped_fungal_refs:
     output:
         "results/bowtie2/{sample_id}/{sample_id}.fungi.refs"
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*30
+        runtime = 30
     shell:
         """
         samtools view -F 4 -f 64 {input[0]} | cut -f3 | sort -u > {output[0]}
@@ -187,11 +222,9 @@ rule star_map_host:
         temp_bam = "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam",
         temp_log = "$TMPDIR/{sample_id}/{sample_id}.Log.out",
         temp_stat = "$TMPDIR/{sample_id}/{sample_id}.Log.final.out",
-        setting = config["star_params"]
+        setting = config["star_extra_params"]
     conda: "../../envs/star.yaml"
     threads: 20
-    resources:
-        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
     shell:
         """
         exec &>{log.all}
@@ -234,7 +267,7 @@ rule bowtie_map_host:
         samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.host.log"
     threads: 10
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60
+        runtime = 60
     shell:
         """
         exec &> {log.samtools}
@@ -267,26 +300,14 @@ rule host_reads:
         R2 = "$TMPDIR/{sample_id}_R2.host.fastq.gz"
     log:
         "results/host/{sample_id}.log"
+    threads: 1
     shell:
         """
-        set +o pipefail;
         exec &>{log}
         touch {params.tmpids}
-        for f in {input.R1_1} {input.R1_2};
-        do
-            if [ -s $f ]; then
-                gunzip -c $f | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' >> {params.tmpids}
-            fi
-        done
-        for f in {input.R2_1} {input.R2_2};
-        do
-            if [ -s $f ]; then
-                gunzip -c $f | egrep "^@" | cut -f1 -d ' ' | sed 's/@//g' >> {params.tmpids}
-            fi
-        done
-        cat {params.tmpids} | sort -u > {params.ids}
-        seqtk subseq {input.R1} {params.ids} | gzip -c > {params.R1}
-        seqtk subseq {input.R2} {params.ids} | gzip -c > {params.R2}
+        seqkit seq -n -i --threads {threads} {input.R1_1} {input.R1_2} {input.R2_1} {input.R2_2} | sort -u > {params.ids}
+        seqkit grep -f {params.ids} --immediate-output --threads {threads} -o {params.R1} {input.R1}
+        seqkit grep -f {params.ids} --immediate-output --threads {threads} -o {params.R2} {input.R2}
         mv {params.R1} {output.R1}
         mv {params.R2} {output.R2}
         rm {params.ids}
@@ -299,13 +320,15 @@ def get_host_logs(config, samples):
     elif config["host_aligner"] == "bowtie2":
         return expand("results/bowtie2/{sample_id}/{sample_id}.host.log", sample_id = samples.keys())
 
-rule alignment_report:
+rule filter_report:
     input:
         hostlogs = get_host_logs(config, samples),
         fungallogs = expand("results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
             sample_id = samples.keys())
     output:
         "results/report/filtering/filter_report.html"
+    log:
+        "results/report/filtering/filter_report.log"
     params:
         tmpdir = "multiqc_filter",
         config = "config/multiqc_filter_config.yaml"
@@ -333,7 +356,7 @@ rule taxmapper_search:
     output:
         temp(expand("results/taxmapper/{{sample_id}}/hits_{i}.aln", i = [1,2]))
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*6
+        runtime = 60*6
     params:
         tmp_dir = "$TMPDIR/{sample_id}",
         out_dir = "results/taxmapper/{sample_id}"
@@ -360,7 +383,7 @@ rule taxmapper_map:
         "results/taxmapper/{sample_id}/taxa.tsv.gz",
         "results/taxmapper/{sample_id}/taxa_identities.tsv"
     resources:
-        runtime = lambda wildcards, attempt: attempt*60*3
+        runtime = 60*3
     conda: "../../envs/taxmapper.yaml"
     threads: 4
     params:
@@ -380,7 +403,7 @@ rule taxmapper_filter_reads:
     output:
         "results/taxmapper/{sample_id}/taxa_filtered.tsv.gz"
     resources:
-        runtime = lambda wildcards, attempt: attempt*10
+        runtime = 10
     conda: "../../envs/taxmapper.yaml"
     threads: 1
     params:
@@ -404,7 +427,7 @@ rule taxmapper_count:
         tmp_in = "$TMPDIR/taxa_filtered.tsv"
     conda: "../../envs/taxmapper.yaml"
     resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*10
+        runtime = 10
     shell:
         """
         gunzip -c {input[0]} > {params.tmp_in}
@@ -532,7 +555,7 @@ rule union_filtered_reads:
         bt_tmp_fastq = "$TMPDIR/{sample_id}/bt.fastq",
         tmpdir = "$TMPDIR/{sample_id}"
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60
+        runtime = 60
     run:
         shell("mkdir -p {params.tmpdir}")
         print("Storing read ids")

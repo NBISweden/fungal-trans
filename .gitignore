@@ -143,3 +143,5 @@ tmp
 .quarto
 */libs
 *.html
+.pixi
+pixi.lock
