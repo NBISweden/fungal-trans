@@ -36,6 +36,12 @@ if config["paired_strategy"] == "concordant":
             mv {input.h} {output.h}
             """
     rule star_host_concordant:
+        """
+        Takes as input the bam file with reads mapped against fungi references
+        and outputs paired fastq files with reads mapped concordantly and non-concordantly.
+        Here, concordantly mapped reads are interpreted as fungal, no-host reads. Non-concordantly
+        mapped reads are interpreted as putative-host reads.
+        """
         input:
             "results/bowtie2/{sample_id}/{sample_id}.fungi.bam"
         output:
