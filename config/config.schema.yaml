@@ -90,6 +90,22 @@ properties:
     description: Minimum contig length for megahit assembler
     default: 200
   ## FILTERING ##
+  taxmap:
+    type: object
+    description: Taxonomic mapping for partitioning
+    properties:
+      Bacteria:
+        type: integer
+        description: NCBI taxon ID for Bacteria
+        default: 2
+      Archaea:
+        type: integer
+        description: NCBI taxon ID for Archaea
+        default: 2157
+      Eukaryota:
+        type: integer
+        description: NCBI taxon ID for Eukaryota
+        default: 2759
   paired_strategy:
     type: string
     description: "How to treat paired alignments: 'concordant' = only keep concordantly mapping reads,
