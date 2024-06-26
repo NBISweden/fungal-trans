@@ -23,14 +23,7 @@ properties:
     type: string
     description: Parameters to supply to sra-tools for development purposes
     default: ""
-  host_fna_url:
-    type: string
-    description: URL to host fasta file
-    default: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
-  host_gff_url:
-    type: string
-    description: URL to host GTF file
-    default: ""
+  ## HOST FILES ##
   host_fna:
     type: string
     description: Path to host fasta file

@@ -61,7 +61,7 @@ rule bowtie_build_fungi:
         rm -r {params.tmpdir}
         """
 
-if not config["host_fna_url"] and not config["host_fna"] and config["host_aligner"]=="star":
+if not config["host_fna"] and config["host_aligner"]=="star":
     sys.exit("ERROR: No host genome fasta file given for STAR mapping")
 
 def star_build_input(wildcards):
@@ -69,14 +69,8 @@ def star_build_input(wildcards):
     # if host_fna_url is given, put this download under resources/host/host.fna
     if config["host_fna"]:
         input.append(config["host_fna"])
-    elif config["host_fna_url"]:
-        input.append("resources/host/host.fna")
-        config["host_fna"] = "resources/host/host.fna"
     if config["host_gff"]:
         input.append(config["host_gff"])
-    elif config["host_gff_url"]:
-        input.append("resources/host/host.gtf")
-        config["host_gff"] = "resources/host/host.gff"
     return input
 
 rule star_build_host:
@@ -283,6 +277,10 @@ rule bowtie_map_host:
         """
 
 rule host_reads:
+    """
+    This rule extracts reads from the preprocessed fastq files that are either not mapped to fungi,
+    or are marked as putative host reads 
+    """
     input:
         R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
         R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
