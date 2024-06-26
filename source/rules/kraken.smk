@@ -23,18 +23,21 @@ rule run_kraken:
         db = expand("resources/kraken/{f}.k2d", f = ["hash","opts","taxo"])
     output:
         "results/kraken/{sample_id}.out.gz",
-        "results/kraken/{sample_id}.kreport"
+        "results/kraken/{sample_id}.kreport",
+        "results/kraken/{sample_id}.unclassified_1.fastq.gz",
+        "results/kraken/{sample_id}.unclassified_2.fastq.gz",
     log:
         "results/kraken/{sample_id}.log"
     threads: 20
     params:
         db = "resources/kraken",
-        tmp = "$TMPDIR/{sample_id}.out"
+        tmp = "$TMPDIR/{sample_id}.out",
+        unc_out = "results/kraken/{sample_id}.unclassified#.fastq.gz",
     conda: "../../envs/kraken.yaml"
     shell:
         """
         kraken2 --db {params.db} --output {params.tmp} --report {output[1]} --gzip-compressed \
-        --threads {threads} --paired {input.R1} {input.R2} > {log} 2>&1
+        --threads {threads} --unclassified-out {params.unc_out} --paired {input.R1} {input.R2} > {log} 2>&1
         gzip {params.tmp}
         mv {params.tmp}.gz {output[0]}
         """
