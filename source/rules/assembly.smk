@@ -299,7 +299,7 @@ rule megahit_co:
             --min-contig-len {params.min_contig_len} -o {params.tmp_dir} \
             -t {threads} > {log} 2>&1
         mv {params.tmp_dir}/final.contigs.fa {output.fa}
-        mv {params.tmp_dir}/opts.txt {params.out_dir}
+        mv {params.tmp_dir}/* {params.out_dir}
         rm -r {params.tmp_dir}
         """
 
