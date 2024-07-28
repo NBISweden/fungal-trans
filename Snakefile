@@ -3,10 +3,11 @@ import glob
 import os
 import sys
 import platform
-from source.utils.parse import parse_sample_list
 from snakemake.utils import min_version, validate
 from snakemake.exceptions import WorkflowError
 from source.utils.list_jgi_genomes import parse_genomes
+
+include: "source/utils/common.py"
 
 def parse_validation_error(e):
     """
