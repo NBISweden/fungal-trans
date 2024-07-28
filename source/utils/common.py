@@ -54,3 +54,17 @@ def parse_sample_list(f, config):
                          'R2': '{dir}/{f}'.format(f=R2, dir=config['datadir']),
                          'accession': accession}
     return samples, map_dict, assemblies
+
+
+def fungi_input(wc):
+    suffices = {'unfiltered': 'cut.trim.fastq.gz',
+                'filtered': 'filtered.union.fastq.gz',
+                'taxmapper': 'cut.trim.filtered.fastq.gz',
+                'bowtie2': 'fungi.nohost.fastq.gz'}
+    if wc.filter_source == "bowtie2":
+        aligndir = config["host_aligner"]
+    else:
+        aligndir = wc.filter_source
+    R1 = f'results/{aligndir}/{wc.sample_id}/{wc.sample_id}_R1.{suffices[wc.filter_source]}'
+    R2 = f'results/{aligndir}/{wc.sample_id}/{wc.sample_id}_R2.{suffices[wc.filter_source]}'
+    return [R1, R2]

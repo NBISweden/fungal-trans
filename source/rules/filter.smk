@@ -284,8 +284,8 @@ rule host_reads:
     input:
         R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
         R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
-        R1_1 = "results/bowtie2/{sample_id}/{sample_id}_R1.nonfungi.fastq.gz",
-        R2_1 = "results/bowtie2/{sample_id}/{sample_id}_R2.nonfungi.fastq.gz",
+        R1_1 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R1.nonfungi.fastq.gz",
+        R2_1 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R2.nonfungi.fastq.gz",
         R1_2 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R1.fungi.putative-host.fastq.gz",
         R2_2 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R2.fungi.putative-host.fastq.gz"
     output:
