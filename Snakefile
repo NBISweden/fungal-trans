@@ -54,6 +54,7 @@ wildcard_constraints:
     assembler = "megahit|trinity|transabyss",
     filter_source = "unfiltered|filtered|taxmapper|bowtie2",
     portals = f"({'|'.join(list(genomes.index.tolist()))})",
+    taxname = f"({'|'.join(list(config['taxmap'].keys()))})"
 
 # Get environment info
 pythonpath = sys.executable
