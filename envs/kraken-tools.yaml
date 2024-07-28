@@ -1,0 +1,7 @@
+name: kraken-tools
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - krakentools
