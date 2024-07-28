@@ -64,6 +64,56 @@ rule extract_kraken_reads:
         """
         mkdir -p {params.tmpdir}
         gunzip -c {input.kraken} > {params.tmpdir}/kraken.out
-        extract_kraken_reads.py -k {params.tmpdir}/kraken.out -s1 {input.R1} -s2 {input.R2} --fastq-output -r {input.report} --include-children -t {wildcards.taxid} -o {output.R1} -o2 {output.R2} >{log} 2>&1
+        extract_kraken_reads.py -k {params.tmpdir}/kraken.out -s1 {input.R1} -s2 {input.R2} --fastq-output -r {input.report} --include-children -t {params.taxid} -o {output.R1} -o2 {output.R2} >{log} 2>&1
+        rm -rf {params.tmpdir}
+        """
+
+rule gather_prokaryotes:
+    input:
+        R1=expand("results/taxbins/{taxname}/{{sample_id}}_R1.fastq.gz", taxname=["Bacteria","Archaea"]),
+        R2=expand("results/taxbins/{taxname}/{{sample_id}}_R2.fastq.gz", taxname=["Bacteria","Archaea"]),
+        host=expand("results/host/{{sample_id}}_R{i}.host.fastq.gz", i=[1,2]),
+        fungi=fungi_input,
+    output:
+        R1="results/taxbins/Prokaryota/{filter_source}/{sample_id}_R1.fastq.gz",
+        R2="results/taxbins/Prokaryota/{filter_source}/{sample_id}_R2.fastq.gz",
+    log:
+        "results/taxbins/Prokaryota/gather_prokaryotes/{filter_source}/{sample_id}.log"
+    params:
+        tmpdir="$TMPDIR/gather_prokaryotes.{sample_id}"
+    shell:
+        """
+        exec 2>{log}
+        mkdir -p {params.tmpdir}
+        seqkit seq -n -i {input.host} {input.fungi} | sort -u > {params.tmpdir}/host_fungi_ids
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} > {params.tmpdir}/R1
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} > {params.tmpdir}/R2
+        mv {params.tmpdir}/R1 {output.R1}
+        mv {params.tmpdir}/R2 {output.R2}
+        rm -rf {params.tmpdir}
+        """
+
+rule gather_eukaryotes:
+    input:
+        R1=expand("results/taxbins/{taxname}/{{sample_id}}_R1.fastq.gz", taxname=["Eukaryota"]),
+        R2=expand("results/taxbins/{taxname}/{{sample_id}}_R2.fastq.gz", taxname=["Eukaryota"]),
+        host=expand("results/host/{{sample_id}}_R{i}.host.fastq.gz", i=[1,2]),
+        fungi=fungi_input,
+    output:
+        R1="results/taxbins/Eukaryota/{filter_source}/{sample_id}_R1.fastq.gz",
+        R2="results/taxbins/Eukaryota/{filter_source}/{sample_id}_R2.fastq.gz",
+    log:
+        "results/taxbins/Eukaryota/gather_eukaryotes/{filter_source}/{sample_id}.log"
+    params:
+        tmpdir="$TMPDIR/gather_eukaryotes.{sample_id}"
+    shell:
+        """
+        exec 2>{log}
+        mkdir -p {params.tmpdir}
+        seqkit seq -n -i {input.host} {input.fungi} | sort -u > {params.tmpdir}/host_fungi_ids
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} > {params.tmpdir}/R1
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} > {params.tmpdir}/R2
+        mv {params.tmpdir}/R1 {output.R1}
+        mv {params.tmpdir}/R2 {output.R2}
         rm -rf {params.tmpdir}
         """
