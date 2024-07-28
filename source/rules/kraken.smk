@@ -68,7 +68,7 @@ rule extract_kraken_reads:
         rm -rf {params.tmpdir}
         """
 
-rule gather_prokaryotes:
+rule gather_prokaryota:
     input:
         R1=expand("results/taxbins/{taxname}/{{sample_id}}_R1.fastq.gz", taxname=["Bacteria","Archaea"]),
         R2=expand("results/taxbins/{taxname}/{{sample_id}}_R2.fastq.gz", taxname=["Bacteria","Archaea"]),
@@ -78,7 +78,7 @@ rule gather_prokaryotes:
         R1="results/taxbins/Prokaryota/{filter_source}/{sample_id}_R1.fastq.gz",
         R2="results/taxbins/Prokaryota/{filter_source}/{sample_id}_R2.fastq.gz",
     log:
-        "results/taxbins/Prokaryota/gather_prokaryotes/{filter_source}/{sample_id}.log"
+        "results/taxbins/Prokaryota/{filter_source}/{sample_id}.gather_prokaryota.log"
     params:
         tmpdir="$TMPDIR/gather_prokaryotes.{sample_id}"
     shell:
@@ -86,14 +86,14 @@ rule gather_prokaryotes:
         exec 2>{log}
         mkdir -p {params.tmpdir}
         seqkit seq -n -i {input.host} {input.fungi} | sort -u > {params.tmpdir}/host_fungi_ids
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} > {params.tmpdir}/R1
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} > {params.tmpdir}/R2
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} | gzip -c > {params.tmpdir}/R1
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} | gzip -c > {params.tmpdir}/R2
         mv {params.tmpdir}/R1 {output.R1}
         mv {params.tmpdir}/R2 {output.R2}
         rm -rf {params.tmpdir}
         """
 
-rule gather_eukaryotes:
+rule gather_eukaryota:
     input:
         R1=expand("results/taxbins/{taxname}/{{sample_id}}_R1.fastq.gz", taxname=["Eukaryota"]),
         R2=expand("results/taxbins/{taxname}/{{sample_id}}_R2.fastq.gz", taxname=["Eukaryota"]),
@@ -103,7 +103,7 @@ rule gather_eukaryotes:
         R1="results/taxbins/Eukaryota/{filter_source}/{sample_id}_R1.fastq.gz",
         R2="results/taxbins/Eukaryota/{filter_source}/{sample_id}_R2.fastq.gz",
     log:
-        "results/taxbins/Eukaryota/gather_eukaryotes/{filter_source}/{sample_id}.log"
+        "results/taxbins/Eukaryota/{filter_source}/{sample_id}.gather_eukaryota.log"
     params:
         tmpdir="$TMPDIR/gather_eukaryotes.{sample_id}"
     shell:
@@ -111,8 +111,8 @@ rule gather_eukaryotes:
         exec 2>{log}
         mkdir -p {params.tmpdir}
         seqkit seq -n -i {input.host} {input.fungi} | sort -u > {params.tmpdir}/host_fungi_ids
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} > {params.tmpdir}/R1
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} > {params.tmpdir}/R2
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} | gzip -c > {params.tmpdir}/R1
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} | gzip -c > {params.tmpdir}/R2
         mv {params.tmpdir}/R1 {output.R1}
         mv {params.tmpdir}/R2 {output.R2}
         rm -rf {params.tmpdir}
