@@ -5,18 +5,19 @@ channels:
   - defaults
 dependencies:
   - python
-  - snakemake-minimal
+  - snakemake-minimal>=8.0.0
   - biopython
-  - pandas
+  - pandas==1.5.1
   - lxml
   - pycurl
   - tqdm
   - multiqc
   - bowtie2
-  - samtools
+  - samtools=1.15
   - ete3
   - fastuniq
   - seqtk
+  - seqkit
 
   # utilities
   - wget
