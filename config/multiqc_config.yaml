@@ -1,7 +1,7 @@
 title: "Fungal metatranscriptomics preprocessing report"
 subtitle: "Sample report for the preprocessing steps"
 intro_text: ""
-report_comment: "Preprocessing was done with Cutadapt (v.1.18) to remove adapters and Trimmomatic (v 0.38) for quality trimming"
+report_comment: "Preprocessing was done with Cutadapt to remove adapters and Trimmomatic for quality trimming followed by rRNA removal with SortMeRNA"
 
 
 sp:
