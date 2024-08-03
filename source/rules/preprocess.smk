@@ -1,10 +1,10 @@
 localrules:
     multiqc,
-    link_files,
     download_fastq,
     avg_seq_length_bowtie,
     avg_seq_length_filtered,
-    avg_seq_length_taxmapper
+    avg_seq_length_taxmapper,
+    download_rRNA_database
 
 #############
 ## SAMPLES ##
@@ -94,23 +94,13 @@ rule avg_seq_length_unfiltered:
     run:
         calc_read_lengths(input, output, "_R1.cut.trim.fastq.gz")
 
-rule link_files:
-    input:
-        lambda wildcards: samples[wildcards.sample_id][wildcards.pair]
-    output:
-        "results/intermediate/{sample_id}_{pair}.fastq.gz"
-    shell:
-        """
-        ln -s $(pwd)/{input} $(pwd)/{output}
-        """
-
 rule cutadapt:
     input:
-        R1 = "results/intermediate/{sample_id}_R1.fastq.gz",
-        R2 = "results/intermediate/{sample_id}_R2.fastq.gz"
+        R1 = lambda wildcards: samples[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: samples[wildcards.sample_id]["R2"]
     output:
-        R1 = "results/preprocess/{sample_id}_R1.cut.fastq.gz",
-        R2 = "results/preprocess/{sample_id}_R2.cut.fastq.gz",
+        R1 = "results/preprocess/cutadapt/{sample_id}_R1.cut.fastq.gz",
+        R2 = "results/preprocess/cutadapt/{sample_id}_R2.cut.fastq.gz",
     log:
         "results/preprocess/{sample_id}.cutadapt.log"
     resources:
@@ -134,13 +124,13 @@ rule cutadapt:
 
 rule trimmomatic:
     input:
-        R1 = "results/preprocess/{sample_id}_R1.cut.fastq.gz",
-        R2 = "results/preprocess/{sample_id}_R2.cut.fastq.gz"
+        R1 = "results/preprocess/cutadapt/{sample_id}_R1.cut.fastq.gz",
+        R2 = "results/preprocess/cutadapt/{sample_id}_R2.cut.fastq.gz"
     output:
-        R1 = "results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
-        R2 = "results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
+        R1 = "results/preprocess/trimmomatic/{sample_id}_R1.cut.trim.fastq.gz",
+        R2 = "results/preprocess/trimmomatic/{sample_id}_R2.cut.trim.fastq.gz",
     log:
-        "results/preprocess/{sample_id}.cut.trim.log"
+        "results/preprocess/trimmomatic/{sample_id}.cut.trim.log"
     params:
         jarpath=config["trimmomatic_home"]+"/trimmomatic.jar",
         qc_trim_settings=config["qc_trim_settings"],
@@ -162,16 +152,88 @@ rule trimmomatic:
         rm -r {params.tmpdir}
         """
 
+rule download_rRNA_database:
+    output:
+        default="resources/sortmerna/rRNA_databases_v4/smr_v4.3_default_db.fasta", 
+        fast="resources/sortmerna/rRNA_databases_v4/smr_v4.3_fast_db.fasta",
+        sensitive="resources/sortmerna/rRNA_databases_v4/smr_v4.3_sensitive_db.fasta",
+        sensitive_rfam="resources/sortmerna/rRNA_databases_v4/smr_v4.3_sensitive_db_rfam_seeds.fasta"
+    params:
+        outdir=lambda wildcards, output: os.path.dirname(output[0])
+    shell:
+        """
+        wget -O {params.outdir}/database.tar.gz https://github.com/biocore/sortmerna/releases/download/v4.3.4/database.tar.gz
+        tar -xvf {params.outdir}/database.tar.gz -C {params.outdir}
+        rm {params.outdir}/database.tar.gz
+        """
+
+rule sortmerna_index:
+    output:
+        touch("resources/sortmerna/rRNA_databases_v4/indexed")
+    input:
+        rules.download_rRNA_database.output.default
+    log:
+        "resources/sortmerna/rRNA_databases_v4/index.log"
+    params:
+        tmpdir="$TMPDIR/sortmerna_index",
+        outdir=lambda wildcards, output: os.path.dirname(output[0]),
+    resources:
+        runtime = 60
+    threads: 2
+    conda: "../../envs/sortmerna.yaml"
+    shell:
+        """
+        mkdir -p {params.tmpdir}
+        head -2 {input} > {params.tmpdir}/tmp.fasta
+        sortmerna --workdir {params.tmpdir}/ --threads {threads} \
+            --idx {params.outdir} --reads {params.tmpdir}/tmp.fasta \
+            --ref {input[0]} --task 1 --blast 1 --num_alignments 1 > {log} 2>&1
+        rm -r {params.tmpdir}
+        """
+
+rule sortmerna:
+    input:
+        R1=rules.trimmomatic.output.R1,
+        R2=rules.trimmomatic.output.R2,
+        ref=rules.download_rRNA_database.output.default
+    output:
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+        R1_rRNA="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.rRNA.fastq.gz",
+        R2_rRNA="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.rRNA.fastq.gz"
+    log:
+        run="results/preprocess/sortmerna/{sample_id}/run.log",
+        stats="results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log"
+    params:
+        workdir="$TMPDIR/{sample_id}.sortmerna",
+        idx_dir=lambda wildcards, input: os.path.dirname(input.ref)
+    threads: 4
+    conda:
+        "../../envs/sortmerna.yaml"
+    shell:
+        """
+        rm -rf {params.workdir}
+        sortmerna --workdir {params.workdir}/ --threads {threads} --idx {params.idx_dir} \
+            --ref {input.ref} --reads {input.R1} --reads {input.R2} \
+            --paired_in --out2 --fastx --blast 1 --num_alignments 1 --aligned --other -v >{log.run} 2>&1
+        pigz -9 -p {threads} {params.workdir}/out/*.fastq
+        mv {params.workdir}/out/aligned_fwd.fastq.gz {output.R1_rRNA}
+        mv {params.workdir}/out/aligned_rev.fastq.gz {output.R2_rRNA}
+        mv {params.workdir}/out/other_fwd.fastq.gz {output.R1}
+        mv {params.workdir}/out/other_rev.fastq.gz {output.R2}
+        mv {params.workdir}/out/aligned.log {log.stats}
+        """
+
 rule fastqc:
     input:
-        R1 = "results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
-        R2 = "results/preprocess/{sample_id}_R2.cut.trim.fastq.gz"
+        R1 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz"
     output:
-        R1 = "results/preprocess/{sample_id}_R1.cut.trim_fastqc.zip",
-        R2 = "results/preprocess/{sample_id}_R2.cut.trim_fastqc.zip"
-    log: "results/preprocess/{sample_id}.fastqc.log"
+        R1 = "results/preprocess/fastqc/{sample_id}_R1.cut.trim.mRNA_fastqc.zip",
+        R2 = "results/preprocess/fastqc/{sample_id}_R2.cut.trim.mRNA_fastqc.zip"
+    log: "results/preprocess/fastqc/{sample_id}.fastqc.log"
     params:
-        outdir = "results/preprocess"
+        outdir = "results/preprocess/fastqc"
     resources:
         runtime = lambda wildcards, attempt: attempt*20
     conda: "../../envs/fastqc.yaml"
@@ -203,9 +265,10 @@ def reformat_trimmomatic_log(f, out1, out2):
 
 rule multiqc:
     input:
-        qclogs = expand("results/preprocess/{sample_id}_R{i}.cut.trim_fastqc.zip", sample_id = samples.keys(), i = [1,2]),
-        cutlogs = expand("results/preprocess/{sample_id}.cutadapt.log", sample_id = samples.keys()),
-        trimlogs = expand("results/preprocess/{sample_id}.cut.trim.log", sample_id = samples.keys())
+        qclogs = expand("results/preprocess/fastqc/{sample_id}_R{i}.cut.trim.mRNA_fastqc.zip", sample_id = samples.keys(), i = [1,2]),
+        cutlogs = expand("results/preprocess/cutadapt/{sample_id}.cutadapt.log", sample_id = samples.keys()),
+        trimlogs = expand("results/preprocess/trimmomatic/{sample_id}.cut.trim.log", sample_id = samples.keys()),
+        sortmernalogs = expand("results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log", sample_id = samples.keys())
     output:
         "results/report/preprocess/preprocess_report.html",
         "results/report/preprocess/preprocess_report_data/multiqc.log"
