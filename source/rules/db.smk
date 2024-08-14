@@ -10,6 +10,7 @@ localrules:
     download_host,
     init_jgi,
     download_jgi_transcripts,
+    concat_transcripts,
     prepare_diamond_JGI
 
 ## NCBI Taxonomy ##
@@ -140,7 +141,7 @@ rule download_jgi_transcripts:
     For each 'portal', download the filtered transcripts 
     """
     output:
-        temp("resources/JGI/genomes/{portal}.transcripts.fna.gz"),
+        temp(touch("resources/JGI/genomes/{portal}.transcripts.fna.gz")),
     input:
         cookies=rules.init_jgi.output.cookies,
     log:
@@ -168,9 +169,12 @@ rule concat_transcripts:
         expand(rules.download_jgi_transcripts.output, portal=genomes.index.tolist())
     log:
         "resources/fungi/concat_transcripts.log"
+    params:
+        tmpfile = "$TMPDIR/fungi_transcripts.fasta.gz"
     shell:
         """
-        cat {input} > {output} 
+        cat {input} > {params.tmpfile}
+        mv {params.tmpfile} {output} 
         """
 
 ## Host data ##
