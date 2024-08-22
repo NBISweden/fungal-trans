@@ -133,8 +133,8 @@ rule bowtie_map_fungi:
     these files will be used to separate host and fungal reads.
     """
     input:
-        R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
-        R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
         db=expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l", index=range(1,5))
     output:
         bam="results/bowtie2/{sample_id}/{sample_id}.fungi.bam",
@@ -279,13 +279,13 @@ rule bowtie_map_host:
 rule host_reads:
     """
     This rule extracts reads from the preprocessed fastq files that are either not mapped to fungi,
-    or are marked as putative host reads 
+    or are marked as putative host reads.
     """
     input:
-        R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
-        R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
-        R1_1 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R1.nonfungi.fastq.gz",
-        R2_1 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R2.nonfungi.fastq.gz",
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+        R1_1 = "results/bowtie2/{sample_id}/{sample_id}_R1.nonfungi.fastq.gz",
+        R2_1 = "results/bowtie2/{sample_id}/{sample_id}_R2.nonfungi.fastq.gz",
         R1_2 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R1.fungi.putative-host.fastq.gz",
         R2_2 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R2.fungi.putative-host.fastq.gz"
     output:
@@ -348,8 +348,8 @@ rule filter_report:
 
 rule taxmapper_search:
     input:
-        R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
-        R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
         db="resources/taxmapper/databases/taxonomy/meta_database.db"
     output:
         temp(expand("results/taxmapper/{{sample_id}}/hits_{i}.aln", i = [1,2]))
@@ -436,11 +436,11 @@ rule taxmapper_count:
 rule extract_fungi_reads:
     input:
         tsv = "results/taxmapper/{sample_id}/taxa_filtered.tsv.gz",
-        R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
-        R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz"
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz"
     output:
-        R1 = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz",
-        R2 = "results/taxmapper/{sample_id}/{sample_id}_R2.cut.trim.filtered.fastq.gz"
+        R1 = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.mRNA.filtered.fastq.gz",
+        R2 = "results/taxmapper/{sample_id}/{sample_id}_R2.cut.trim.mRNA.filtered.fastq.gz"
     params:
         R1_ids = "results/taxmapper/{sample_id}/fungi.ids1",
         R2_ids = "results/taxmapper/{sample_id}/fungi.ids2"
@@ -482,7 +482,7 @@ rule count_reads:
                 "taxmapper_bowtie": 0, "taxmapper_bowtie_nonhost": 0, "taxmapper_bowtie_host": 0,
                 "union": 0}
             # Taxmapper read ids
-            tmfile = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz".format(sample_id=sample)
+            tmfile = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.mRNA.filtered.fastq.gz".format(sample_id=sample)
             tmids = get_ids(tmfile)
             # Bowtie read ids
             btfile = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz".format(sample_id=sample)
@@ -537,8 +537,8 @@ def extract_union_reads(in1, in2, out, idfile):
 
 rule union_filtered_reads:
     input:
-        R1_taxmapper = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz",
-        R2_taxmapper = "results/taxmapper/{sample_id}/{sample_id}_R2.cut.trim.filtered.fastq.gz",
+        R1_taxmapper = "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.mRNA.filtered.fastq.gz",
+        R2_taxmapper = "results/taxmapper/{sample_id}/{sample_id}_R2.cut.trim.mRNA.filtered.fastq.gz",
         R1_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz",
         R2_bowtie = "results/bowtie2/{sample_id}/{sample_id}_R2.fungi.nohost.fastq.gz"
     output:

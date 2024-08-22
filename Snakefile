@@ -77,14 +77,14 @@ include: "source/rules/kraken.smk"
 
 # Define targets
 ## Preprocessing
-preprocess = expand("results/preprocess/{sample_id}_R{i}.cut.trim.fastq.gz", sample_id = samples.keys(), i = [1,2])
+preprocess = expand("results/preprocess/{sample_id}_R{i}.cut.trim.mRNA.fastq.gz", sample_id = samples.keys(), i = [1,2])
 preprocess += ["results/report/preprocess/preprocess_report.html"]
 
 ## Host reads
 host_reads = expand("results/host/{sample_id}_R{i}.host.fastq.gz",
             sample_id = samples.keys(), i = [1,2])
 ## Taxmapper filter
-taxmapper_filter = expand("results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz", sample_id = samples.keys())
+taxmapper_filter = expand("results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.mRNA.filtered.fastq.gz", sample_id = samples.keys())
 taxmapper_filter += expand("results/report/taxmapper/taxa_freq_norm_lvl{i}.svg", i = [1,2])
 ## Bowtie filter
 bowtie_filter = expand("results/{aligner}/{sample_id}/{sample_id}_R{i}.fungi.nohost.fastq.gz",

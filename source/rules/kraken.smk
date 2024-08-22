@@ -18,8 +18,8 @@ rule download_kraken_db:
 
 rule run_kraken:
     input:
-        R1 = "results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
-        R2 = "results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
+        R1 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
         db = expand("resources/kraken/{f}.k2d", f = ["hash","opts","taxo"])
     output:
         "results/kraken/{sample_id}.out.gz",
@@ -38,7 +38,7 @@ rule run_kraken:
         """
         kraken2 --db {params.db} --output {params.tmp} --report {output[1]} --gzip-compressed \
         --threads {threads} --unclassified-out {params.unc_out} --paired {input.R1} {input.R2} > {log} 2>&1
-        gzip {params.tmp}
+        pigz -9 -p {threads} {params.tmp}
         mv {params.tmp}.gz {output[0]}
         """
 
@@ -52,8 +52,8 @@ rule extract_kraken_reads:
     input:
         kraken=rules.run_kraken.output[0],
         report=rules.run_kraken.output[1],
-        R1="results/preprocess/{sample_id}_R1.cut.trim.fastq.gz",
-        R2="results/preprocess/{sample_id}_R2.cut.trim.fastq.gz",
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
     log:
         "results/taxbins/{taxname}/extract_kraken_reads.{sample_id}.log"
     params:
@@ -86,8 +86,8 @@ rule gather_prokaryota:
         exec 2>{log}
         mkdir -p {params.tmpdir}
         seqkit seq -n -i {input.host} {input.fungi} | sort -u > {params.tmpdir}/host_fungi_ids
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} | gzip -c > {params.tmpdir}/R1
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} | gzip -c > {params.tmpdir}/R2
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} | pigz -c > {params.tmpdir}/R1
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} | pigz -c > {params.tmpdir}/R2
         mv {params.tmpdir}/R1 {output.R1}
         mv {params.tmpdir}/R2 {output.R2}
         rm -rf {params.tmpdir}
@@ -111,8 +111,8 @@ rule gather_eukaryota:
         exec 2>{log}
         mkdir -p {params.tmpdir}
         seqkit seq -n -i {input.host} {input.fungi} | sort -u > {params.tmpdir}/host_fungi_ids
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} | gzip -c > {params.tmpdir}/R1
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} | gzip -c > {params.tmpdir}/R2
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} | pigz -c > {params.tmpdir}/R1
+        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} | pigz -c > {params.tmpdir}/R2
         mv {params.tmpdir}/R1 {output.R1}
         mv {params.tmpdir}/R2 {output.R2}
         rm -rf {params.tmpdir}
