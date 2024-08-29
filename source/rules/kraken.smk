@@ -16,11 +16,24 @@ rule download_kraken_db:
         curl -L -o resources/kraken/taxo.k2d {params.taxo}
         """
 
+rule preload_kraken_db:
+    output:
+        temp(touch("resources/kraken/.preload"))
+    input:
+        db = expand("{d}/{f}.k2d", f = ["hash","opts","taxo"], d=config["kraken_db"])
+    params:
+        db = lambda wildcards, input: os.path.dirname(input.db[0])
+    group: "kraken"
+    shell:
+        """
+        cp -r {params.db} /dev/shm
+        """
+
 rule run_kraken:
     input:
         R1 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
         R2 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
-        db = expand("resources/kraken/{f}.k2d", f = ["hash","opts","taxo"])
+        db=rules.preload_kraken_db.output
     output:
         "results/kraken/{sample_id}.out.gz",
         "results/kraken/{sample_id}.kreport",
@@ -30,16 +43,30 @@ rule run_kraken:
         "results/kraken/{sample_id}.log"
     threads: 20
     params:
-        db = "resources/kraken",
+        db = os.path.basename(config["kraken_db"]),
         tmp = "$TMPDIR/{sample_id}.out",
         unc_out = "results/kraken/{sample_id}.unclassified#.fastq.gz",
     conda: "../../envs/kraken.yaml"
+    group: "kraken"
     shell:
         """
-        kraken2 --db {params.db} --output {params.tmp} --report {output[1]} --gzip-compressed \
-        --threads {threads} --unclassified-out {params.unc_out} --paired {input.R1} {input.R2} > {log} 2>&1
+        kraken2 --db /dev/shm/{params.db} --memory-mapping --output {params.tmp} --report {output[1]} --gzip-compressed \
+            --threads {threads} --unclassified-out {params.unc_out} --paired {input.R1} {input.R2} > {log} 2>&1
         pigz -9 -p {threads} {params.tmp}
         mv {params.tmp}.gz {output[0]}
+        """
+    
+rule unload_kraken_db:
+    input:
+        expand(rules.run_kraken.output[0], sample_id=samples.keys())
+    output:
+        temp(touch("results/kraken/.done"))
+    params:
+        db = os.path.basename(config["kraken_db"])
+    group: "kraken"
+    shell:
+        """
+        rm -rf /dev/shm/{params.db}
         """
 
 rule extract_kraken_reads:
