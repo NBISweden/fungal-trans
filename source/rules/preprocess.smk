@@ -35,8 +35,10 @@ rule download_fastq:
         mkdir -p {params.tmpdir}
         fastq-dump {params.dlparams} \
             --split-files {params.acc} -O {params.tmpdir} > {log} 2>{log}
-        gzip -c {params.tmpdir}/*_1.fastq > {output.R1}
-        gzip -c {params.tmpdir}/*_2.fastq > {output.R2}        
+        pigz {params.tmpdir}/*_1.fastq > {output.R1}
+        pigz {params.tmpdir}/*_2.fastq > {output.R2}
+        mv {params.tmpdir}/*_1.fastq.gz {output.R1}
+        mv {params.tmpdir}/*_2.fastq.gz {output.R2}
         rm -rf {params.tmpdir}
         """
 
