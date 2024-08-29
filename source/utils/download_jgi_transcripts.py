@@ -221,6 +221,7 @@ def main(args):
     if not url:
         sys.stderr.write("No files found\n")
         url=""
+        sys.exit(0)
     url = f"{args.base}{url}"
     if not args.outfile:
         outfile = os.path.basename(url)
@@ -231,9 +232,9 @@ def main(args):
     
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description='Download all genomes from JGI Mycocosm')
+    parser = ArgumentParser(description='Download transcript files from JGI Mycocosm')
     parser.add_argument('-p', '--portal', help='Portal shorthand name (e.g. Aaoar1)', required=True)
-    parser.add_argument('-c', '--cookie', help="Cookie file for JGI", )
+    parser.add_argument('-c', '--cookie', help="Cookie file for JGI", required=True)
     parser.add_argument('-o', '--outfile', help='Output file name. If not given, the file will be saved in the current directory with the remote filename')
     parser.add_argument('-b', '--base', help='Base URL for JGI downloads (default: https://genome-downloads.jgi.doe.gov)', default="https://genome-downloads.jgi.doe.gov")
     args = parser.parse_args()
