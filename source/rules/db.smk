@@ -161,7 +161,7 @@ rule download_jgi_transcripts:
 
 rule concat_transcripts:
     """
-    Concatenates all transcripts downloaded
+    Concatenates all non-zero transcripts downloaded
     """
     output:
         "resources/fungi/fungi_transcripts.fasta.gz"
@@ -173,8 +173,41 @@ rule concat_transcripts:
         tmpfile = "$TMPDIR/fungi_transcripts.fasta.gz"
     shell:
         """
-        cat {input} > {params.tmpfile}
+        for f in {input};
+        do
+            if [-s $f];
+            then
+                cat $f >> {params.tmpfile}
+            fi
+        done
         mv {params.tmpfile} {output} 
+        """
+
+rule cluster_transcripts:
+    """
+    Clusters transcripts using vsearch
+    """
+    output:
+        "resources/fungi/fungi_transcripts.clustered.fasta"
+    input:
+        rules.concat_transcripts.output
+    log:
+        "resources/fungi/cluster_transcripts.log"
+    params:
+        tmpdir = "$TMPDIR/fungi",
+        id = 1.0
+    conda:
+        "../../envs/vsearch.yaml"
+    threads: 10
+    shell:
+        """
+        mkdir -p {params.tmpdir}
+        pigz -p {threads} -c -d {input} > {params.tmpdir}/fungi_transcripts.fasta
+        vsearch --cluster_fast {params.tmpdir}/fungi_transcripts.fasta \
+            --centroids {params.tmpdir}/fungi_transcripts.clustered.fasta --id {params.id} \
+            --log {log} --threads {threads}
+        mv {params.tmpdir}/fungi_transcripts.clustered.fasta {output}
+        rm -r {params.tmpdir}
         """
 
 ## Host data ##
