@@ -14,7 +14,8 @@ def parse_sample_list(f, config):
     suffices = {'unfiltered': 'cut.trim.fastq.gz',
                 'filtered': 'filtered.union.fastq.gz',
                 'taxmapper': 'cut.trim.filtered.fastq.gz',
-                'bowtie2': 'fungi.nohost.fastq.gz'}
+                'bowtie2': 'fungi.nohost.fastq.gz',
+                'star': 'fungi.nohost.fastq.gz'}
     # Read sample list
     df = pd.read_csv(f, comment='#', header=0, sep='\t', index_col=0, dtype=str)
     df.fillna('', inplace=True)
@@ -38,10 +39,12 @@ def parse_sample_list(f, config):
             accession = df.loc[sample, 'accession']
         else:
             accession = ''
+        if source == 'bowtie2' and config["host_aligner"] == "star":
+            source = "star"
         if len(assemblies.keys()) > 0:
             if df.loc[sample,'assembly'] != '':
                 assembly = df.loc[sample, 'assembly']
-                # Define reads for fastuniq
+                # Define reads for assembly
                 R1_f = 'results/{source}/{sample}/{sample}_R1.{suff}'.format(source=source,
                                                                              sample=sample, suff=suffices[source])
                 R2_f = 'results/{source}/{sample}/{sample}_R2.{suff}'.format(source=source,
