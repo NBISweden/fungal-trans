@@ -94,6 +94,9 @@ set-resources:
   trinity_normalize:
     runtime: 1440
     mem_mb: 128000
+  trinity_co:
+    runtime: 1440
+    mem_mb: 128000
   megahit_co:
     mem_mb: 128000
 # map.smk
@@ -109,6 +112,7 @@ set-resources:
 
 set-threads:
   trinity_normalize: 10
+  trinity_co: 20
   strobealign_build_fungi: 56
   strobealign_map_fungi: 56
   bowtie_build_fungi: 100
