@@ -1,0 +1,133 @@
+# This is the configuration profile for the Dardel HPC system
+# Read more about the available partitions at https://www.pdc.kth.se/support/documents/run_jobs/job_scheduling.html#dardel-partitions
+# and about the compute nodes at https://www.pdc.kth.se/support/documents/run_jobs/job_scheduling.html#dardel-compute-nodes
+
+# There are 128 physical cores per node on Dardel, and each node has 256 GB of
+# memory of which a certain amount is reserved for the system, depending on the
+# type of node.
+
+# Thin nodes: 227.328 GB available for jobs. This means that there is 227328 /
+# 128 = 1776 MB of memory available per physical core. 
+
+# Large nodes: 456.704 GB available for jobs. This means that there is 456704 / 128
+# = 3568 MB of memory available per physical core.
+
+# Huge nodes: 915.456 GB available for jobs. This means that there is 915456 / 128
+# = 7158 MB of memory available per physical core.
+
+# Giant nodes: 1.832.960 GB available for jobs. This means that there is 1832960 / 128
+# = 14330 MB of memory available per physical core.
+
+# Because each physical core has two threads, the minimum number of threads that
+# will be counted for an account is 2.
+
+# the resource definitions below specify the default used by all rules unless overridden by the set-resources section
+default-resources: 
+  slurm_account: naiss2024-22-605
+  #slurm_account: naiss2023-22-1027
+  slurm_partition: shared
+  runtime: 120
+  #mem_mb_per_cpu: 1776
+
+# The set-resources section specifies the resources to use for specific rules, this overrides
+# the default resources
+set-resources:
+  # db.smk
+  ncbi_taxonomy:
+    mem_mb: 16000
+    runtime: 120
+  cluster_transcripts:
+    runtime: 1440
+    mem_mb: 128000
+  # preprocess.smk
+  trimmomatic:
+    runtime: 60
+  sortmerna:
+    runtime: 240
+    mem_mb: 128000
+  # filter.smk
+  strobealign_build_fungi:
+    runtime: 240
+    mem_mb: 64000
+  strobealign_map_fungi:
+    runtime: 720
+    mem_mb: 64000
+  bowtie_build_fungi:
+    runtime: 720
+    mem_mb: 915456
+    slurm_partition: memory
+  bowtie_map_fungi:
+    runtime: 720
+    mem_mb: 227328
+  star_build_host:
+    runtime: 1440
+  star_map_host:
+    slurm_partition: shared
+    mem_mb: 96000
+  host_reads:
+    mem_mb: 40000
+    runtime: 360
+  # kraken.smk
+  preload_kraken_db:
+    slurm_partition: main
+    runtime: 10
+    mem_mb: 440000
+  run_kraken:
+    slurm_partition: main
+    runtime: 30
+  unload_kraken_db:
+    slurm_partition: main
+    runtime: 10
+  # annotate_co.smk
+  frame_selection_co:
+    mem_mb: 32000
+  emapper_search_co:
+    runtime: 1440
+  contigtax_search_co:
+    runtime: 2880
+    mem_mb: 128000
+  assign_taxonomy_co:
+    mem_mb: 64000
+  emapper_annotate_hits_co:
+    mem_mb: 64000
+# assembly.smk
+  trinity_normalize:
+    runtime: 1440
+    mem_mb: 128000
+  megahit_co:
+    mem_mb: 128000
+# map.smk
+  bowtie_co:
+    runtime: 240
+    mem_mb: 32000
+# paired_strategy.smk
+  fungi_one_mapped:
+    runtime: 180
+  fungi_both_mapped:
+    runtime: 180
+    mem_mb: 6000
+
+set-threads:
+  trinity_normalize: 10
+  strobealign_build_fungi: 56
+  strobealign_map_fungi: 56
+  bowtie_build_fungi: 100
+  bowtie_map_fungi: 80
+  cluster_transcripts: 120
+  sortmerna: 128
+  host_reads: 10
+  star_map_host: 96
+  run_kraken: 20
+
+# Snakemake command line options
+keep-going: True
+printshellcmds: True
+rerun-triggers: mtime
+rerun-incomplete: True
+local-cores: 1
+jobs: 200
+latency-wait: 5
+executor: slurm
+software-deployment-method: "conda"
+software-deployment-method: "apptainer"
+apptainer-args: "--bind $TMPDIR"
