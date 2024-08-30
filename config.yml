@@ -35,6 +35,8 @@ transabyss_kmers: [21, 25, 29, 31, 65, 75, 85, 95]
 co_assembly: True
 single_assembly: False
 min_contig_len: 200
+insilico_norm_max_cov: 30
+insilico_norm_mem: "100G"
 ## filtering
 # Choose between 'concordant', 'both_mapped' or 'one_mapped'
 paired_strategy: "one_mapped"
