@@ -1,4 +1,5 @@
-localrules: assembly_stats
+localrules: 
+    assembly_stats,
 ##############
 ## Assembly ##
 ##############
@@ -184,6 +185,39 @@ rule fastuniq_for_assembly:
         shell("mv {params.R2}.gz {output[1]}")
         shell("rm -r {params.tmpdir}")
 
+rule trinity_normalize:
+    input:
+        R1 = lambda wildcards: assemblies[wildcards.assembly]["R1"],
+        R2 = lambda wildcards: assemblies[wildcards.assembly]["R2"]
+    output:
+        R1="results/in-silico-normalization/{assembly}/left.norm.fq.gz",
+        R2="results/in-silico-normalization/{assembly}/right.norm.fq.gz",
+    params:
+        max_cov = config["insilico_norm_max_cov"],
+        R1 = lambda wildcards: ",".join(sorted(assemblies[wildcards.assembly]["R1"])),
+        R2 = lambda wildcards: ",".join(sorted(assemblies[wildcards.assembly]["R2"])),
+        tmpdir="$TMPDIR/{assembly}.norm",
+        mem=config["insilico_norm_mem"]
+    #conda:
+        #"../../envs/trinity.yaml"
+    container:
+        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
+    threads: 10
+    shell:
+        """
+        mkdir -p {params.tmpdir}
+        echo -e {params.R1} | tr "," "\n" > {params.tmpdir}/R1.list
+        echo -e {params.R2} | tr "," "\n" > {params.tmpdir}/R2.list
+        $TRINITY_HOME/util/insilico_read_normalization.pl --seqType fq --JM {params.mem} --max_cov {params.max_cov} \
+            --left_list {params.tmpdir}/R1.list --right_list {params.tmpdir}/R2.list \
+            --pairs_together --PARALLEL_STATS --CPU {threads} --output {params.tmpdir} --tmp_dir_name out
+        gzip -c {params.tmpdir}/left.norm.fq > {params.tmpdir}/left.norm.fq.gz
+        gzip -c {params.tmpdir}/right.norm.fq > {params.tmpdir}/right.norm.fq.gz
+        mv {params.tmpdir}/left.norm.fq.gz {output.R1}
+        mv {params.tmpdir}/right.norm.fq.gz {output.R2}
+        rm -r {params.tmpdir}
+        """
+
 rule transabyss_co:
     input:
         R1="results/fastuniq/{assembly}/R1.fastuniq.gz",
@@ -243,8 +277,8 @@ rule transabyss_merge_co:
 
 rule trinity_co:
     input:
-        R1="results/fastuniq/{assembly}/R1.fastuniq.gz",
-        R2="results/fastuniq/{assembly}/R2.fastuniq.gz"
+        R1=rules.trinity_normalize.output.R1,
+        R2=rules.trinity_normalize.output.R2
     output:
         fa = "results/co-assembly/trinity/{assembly}/final.fa"
     log: "results/co-assembly/trinity/{assembly}/log"
@@ -257,8 +291,10 @@ rule trinity_co:
     threads: 10
     resources:
         runtime = lambda wildcards,attempt: attempt ** 2 * 60 * 240
-    conda:
-        "../../envs/trinity.yaml"
+    #conda:
+    #    "../../envs/trinity.yaml"
+    container:
+        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
     shell:
         """
         rm -rf {params.outdir}/*
