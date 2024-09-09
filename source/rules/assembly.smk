@@ -287,10 +287,10 @@ rule trinity_co:
         tmpdir="$TMPDIR/{assembly}.co.trinity",
         outdir="results/co-assembly/trinity/{assembly}",
         out_base = lambda wildcards, output: os.path.basename(output.fa),
-        cpumem = config["mem_per_cpu"]
+        max_mem = lambda wildcards, resources: resources.mem_mb /1000
     threads: 10
     resources:
-        runtime = lambda wildcards,attempt: attempt ** 2 * 60 * 240
+        runtime = 24 * 60
     #conda:
     #    "../../envs/trinity.yaml"
     container:
@@ -300,14 +300,11 @@ rule trinity_co:
         rm -rf {params.outdir}/*
         rm -rf {params.tmpdir}
         mkdir -p {params.tmpdir}
-        wd=$(pwd)
-        max_mem=$(({params.cpumem} * {threads}))
-        Trinity --CPU {threads} --min_contig_length {params.min_contig_len} \
+        Trinity --no_normalize_reads --CPU {threads} --min_contig_length {params.min_contig_len} \
             --output {params.tmpdir} --left {input.R1} --right {input.R2} \
-            --seqType fq --max_memory ${{max_mem}}G > {log} 2>&1
+            --seqType fq --max_memory {params.max_mem}G > {log} 2>&1
         mv {params.tmpdir}/* {params.outdir}/
-        cd {params.outdir}
-        ln -s Trinity.fasta {params.out_base}
+        mv {params.tmpdir}.Trinity.fasta {params.outdir}/{params.out_base}
         rm -rf {params.tmpdir}
         """
 
