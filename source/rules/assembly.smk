@@ -287,7 +287,7 @@ rule trinity_co:
         tmpdir="$TMPDIR/{assembly}.co.trinity",
         outdir="results/co-assembly/trinity/{assembly}",
         out_base = lambda wildcards, output: os.path.basename(output.fa),
-        max_mem = lambda wildcards, resources: resources.mem_mb /1000
+        max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
     threads: 10
     resources:
         runtime = 24 * 60
