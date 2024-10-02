@@ -86,7 +86,6 @@ rule featurecount_co:
 
 rule normalize_featurecount_co:
     input:
-    #TODO: Set fastq stats as input
         fc="results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab",
         stats=expand("results/{source}/{{sample_id}}/{{sample_id}}.stats.tsv", source="filtered" if config["filter_reads"] else "unfiltered")
     output:
