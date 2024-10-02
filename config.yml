@@ -37,11 +37,11 @@ single_assembly: False
 min_contig_len: 200
 insilico_norm_max_cov: 30
 insilico_norm_mem: "100G"
-## filtering
+## Filtering is performed by first mapping reads to fungi transcriptomes, then taking mappead reads and mapping them to a host genome.
+## Reads that come out as unmapped in the second step are considered as fungal reads.
+filter_reads: True
 # Choose between 'concordant', 'both_mapped' or 'one_mapped'
 paired_strategy: "one_mapped"
-# Choose between 'unfiltered', 'bowtie2', 'taxmapper' or 'filtered' (using a combination)
-read_source: "bowtie2"
 # trimmomatic
 trimmomatic_home: ""
 qc_trim_settings: "LEADING:25 TRAILING:25 SLIDINGWINDOW:4:15 HEADCROP:2 MINLEN:50"

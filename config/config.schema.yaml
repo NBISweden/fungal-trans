@@ -113,11 +113,10 @@ properties:
     type: string
     description: Dataset url for spruce transcripts to use in filtering
     default: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
-  read_source:
-    type: string
-    description: Method to use for fungal read filtering
-    enum: ["taxmapper","bowtie2","filtered","unfiltered"]
-    default: "filtered"
+  filter_reads:
+    type: boolean
+    description: Whether to filter reads
+    default: true
   ## DIAMOND DATABASE ##
   diamond_fasta_url:
     type: string
