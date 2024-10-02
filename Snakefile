@@ -53,9 +53,10 @@ genomes = parse_genomes(config["fungi_info"], f="resources/JGI/genomes.tsv")
 wildcard_constraints:
     sample_id = f"({'|'.join(list(samples.keys()))})",
     assembler = "megahit|trinity|transabyss",
-    filter_source = "unfiltered|filtered|taxmapper|bowtie2",
+    filter_source = "unfiltered|filtered",
     portals = f"({'|'.join(list(genomes.index.tolist()))})",
-    taxname = f"({'|'.join(list(config['taxmap'].keys()))})"
+    taxname = f"({'|'.join(list(config['taxmap'].keys()))})",
+    aligner = "bowtie2|star",
 
 # Get environment info
 pythonpath = sys.executable
@@ -77,24 +78,17 @@ include: "source/rules/kraken.smk"
 
 # Define targets
 ## Preprocessing
-preprocess = expand("results/preprocess/{sample_id}_R{i}.cut.trim.mRNA.fastq.gz", sample_id = samples.keys(), i = [1,2])
+preprocess = expand("results/preprocess/sortmerna/{sample_id}/{sample_id}_R{i}.cut.trim.mRNA.fastq.gz", sample_id = samples.keys(), i = [1,2])
 preprocess += ["results/report/preprocess/preprocess_report.html"]
-
 ## Host reads
 host_reads = expand("results/host/{sample_id}_R{i}.host.fastq.gz",
             sample_id = samples.keys(), i = [1,2])
-## Taxmapper filter
-taxmapper_filter = expand("results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.mRNA.filtered.fastq.gz", sample_id = samples.keys())
-taxmapper_filter += expand("results/report/taxmapper/taxa_freq_norm_lvl{i}.svg", i = [1,2])
-## Bowtie filter
-bowtie_filter = expand("results/{aligner}/{sample_id}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
+
+## filter
+filtered_reads = expand("results/{aligner}/{sample_id}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
             sample_id = samples.keys(), i = [1,2], aligner = config["host_aligner"])
-bowtie_filter += ["results/report/filtering/filter_report.html"]
-bowtie_filter += host_reads
-## Union filter
-union_filter = expand("results/filtered/{sample_id}/{sample_id}_R{i}.filtered.union.fastq.gz",
-            sample_id = samples.keys(), i = [1,2])
-union_filter += host_reads
+filtered_reads += ["results/report/filtering/filter_report.html"]
+filtered_reads += host_reads
 
 ## Sourmash
 sourmash = expand("results/sourmash/{sample_id}/{sample_id}.{source}.sig",
@@ -104,6 +98,7 @@ sourmash_assembly = expand("results/assembly/{assembler}/{source}/{sample_id}/fi
             assembler = config["assembler"], source = config["read_source"], sample_id=samples.keys())
 sourmash_assembly += expand("results/report/sourmash/{source}_assembly_{assembler}.dist.labels.txt",
             source = config["read_source"], assembler = config["assembler"])
+
 ## Single-assemblies
 assembly = expand("results/report/assembly/{source}_{assembler}_stats.tsv",
             source = config["read_source"], assembler = config["assembler"])
@@ -129,6 +124,7 @@ mapres += expand("results/report/map/{assembler}_{source}_map_report.html",
             assembler = config["assembler"], source = config["read_source"])
 normalize = expand("results/annotation/{assembler}/{source}/{sample_id}/featureCounts/fc.{fc}.tab",
             assembler = config["assembler"], source = config["read_source"], sample_id = samples.keys(), fc=["tpm","raw"])
+
 ### Optional blobtools output
 blobtools = expand("results/annotation/{assembler}/{source}/{sample_id}/taxonomy/{sample_id}.bestsum.phylum.p5.span.100.exclude_other.blobplot.bam0.png",
             assembler = config["assembler"], sample_id = samples.keys(), source = config["read_source"])
@@ -142,8 +138,7 @@ kraken_output = expand("results/kraken/{sample_id}.{suffix}", sample_id = sample
 co_assembly = expand("results/co-assembly/{assembler}/{assembly}/final.fa", assembly = assemblies.keys(), assembler = config["assembler"])
 co_assembly_stats = expand("results/report/co-assembly/{assembler}.{assembly}_assembly_stats.tsv", assembly = assemblies.keys(), assembler = config["assembler"])
 co_assembly.append(co_assembly_stats)
-## Fastuniq
-fastuniq = expand("results/fastuniq/{assembly}/R{i}.fastuniq.gz", assembly = assemblies.keys(), i=[1,2])
+
 ## Annotations
 eggnog_co = expand("results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{fc}.tsv",
             db = ["enzymes","pathways","pathways.norm","modules","kos","tc","cazy"],
@@ -192,15 +187,6 @@ if config["co_assembly"]:
 if config["single_assembly"]:
     inputs += [eggnog, dbCAN, taxonomy]
 
-if config["read_source"] == "bowtie2":
-    filter_input = bowtie_filter
-elif config["read_source"] == "taxmapper":
-    filter_input = taxmapper_filter
-elif config["read_source"] == "filtered":
-    filter_input = union_filter
-else:
-    filter_input = preprocess
-
 rule all:
     input: inputs
 
@@ -208,25 +194,13 @@ rule all:
 rule preprocess:
     input: preprocess
 
-## Filter master rules ##
-rule taxmapper_filter:
-    input: taxmapper_filter
-
-rule bowtie_filter:
-    input: bowtie_filter
-
-rule union_filter:
-    input: union_filter
-
+## Filter master rule ##
 rule filter:
-    input: filter_input
+    input: filtered_reads
 
 ## Assembly master rules ##
 rule assemble:
     input: assembly
-
-rule fastuniq:
-    input: fastuniq
 
 rule co_assemble:
     input: co_assembly
