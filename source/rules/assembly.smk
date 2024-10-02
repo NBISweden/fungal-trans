@@ -5,12 +5,11 @@ localrules:
 ##############
 
 def assembly_input(wildcards):
-    suffices = {'unfiltered': 'cut.trim.mRNA.fastq.gz',
-                'filtered': 'filtered.union.fastq.gz',
-                'taxmapper': 'cut.trim.filtered.fastq.gz',
-                'mapped': 'fungi.nohost.fastq.gz'}
-    R1 = f"results/{wildcards.filter_source}/{wildcards.sample_id}/{wildcards.sample_id}_R1.{suffices[wildcards.filter_source]}"
-    R2 = f"results/{wildcards.filter_source}/{wildcards.sample_id}/{wildcards.sample_id}_R2.{suffices[wildcards.filter_source]}"
+    d = "unfiltered"
+    if config["filter_reads"]:
+        d="filtered"
+    R1 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R1.fungi.nohost.fastq.gz"
+    R2 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R2.fungi.nohost.fastq.gz"
     return [R1, R2]
 
 rule transabyss:
