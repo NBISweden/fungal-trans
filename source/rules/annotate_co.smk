@@ -86,9 +86,9 @@ rule featurecount_co:
 
 rule normalize_featurecount_co:
     input:
-        "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab",
-        expand("results/sample_info/{{sample_id}}.{source}_read_lengths.tab",
-            source = config["read_source"])
+    #TODO: Set fastq stats as input
+        fc="results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab",
+        stats=expand("results/{source}/{{sample_id}}/{{sample_id}}.stats.tsv", source="filtered" if config["filter_reads"] else "unfiltered")
     output:
         "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.tpm.tab",
         "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.raw.tab"
@@ -96,9 +96,9 @@ rule normalize_featurecount_co:
         s = "{sample_id}",
         script = "source/utils/featureCountsTPM.py"
     run:
-        df = pd.read_table(input[1], index_col=0)
-        rl = df.loc[wildcards.sample_id,"avg_len"]
-        shell("python {params.script} --rl {rl} -i {input[0]} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
+        df = pd.csv(input.stats[0], sep="\t")
+        rl = df.avg_len.mean()
+        shell("python {params.script} --rl {rl} -i {input.fc} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
 
 rule collate_featurecount_co:
     input:

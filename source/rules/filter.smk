@@ -1,22 +1,46 @@
 localrules:
-    extract_fungi_reads,
     get_all_mapped_fungal_refs,
     filter_report,
-    count_reads,
-    link_unfiltered
+    link_unfiltered,
+    link_filtered
 
 ################
-## Unfiltered ##
+## Link fastq ##
 ################
 rule link_unfiltered:
     input:
         "results/preprocess/{sample_id}_R{i}.cut.trim.mRNA.fastq.gz"
     output:
-        "results/unfiltered/{sample_id}/{sample_id}_R{i}.cut.trim.mRNA.fastq.gz"
+        "results/unfiltered/{sample_id}/{sample_id}_R{i}.fastq.gz"
     shell:
         """
         ln -s $(pwd)/{input} $(pwd)/{output}
         """
+
+rule link_filtered:
+    input:
+        expand("results/{aligner}/{{sample_id}}/{{sample_id}}_R{{i}}.fungi.nohost.fastq.gz",
+               aligner=config["host_aligner"])
+    output:
+        "results/filtered/{sample_id}/{sample_id}_R{i}.fastq.gz"
+    shell:
+        """
+        ln -s $(pwd)/{input} $(pwd)/{output}
+        """
+
+rule fastq_stats:
+    input:
+        R1="results/{source}/{sample_id}/{sample_id}_R1.fastq.gz",
+        R2="results/{source}/{sample_id}/{sample_id}_R2.fastq.gz"
+    output:
+        "results/{source}/{sample_id}/{sample_id}.stats.tsv"
+    wildcard_constraints:
+        source="unfiltered|filtered"
+    shell:
+        """
+        seqkit stats -T {input.R1} {input.R2} > {output}
+        """
+
 
 ##########################
 ## Bowtie2/STAR mapping ##

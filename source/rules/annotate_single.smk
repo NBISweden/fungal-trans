@@ -85,8 +85,8 @@ rule featurecount:
 
 rule normalize_featurecount:
     input:
-        "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab",
-        "results/sample_info/{sample_id}.{filter_source}_read_lengths.tab"
+        fc="results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab",
+        stats="results/{filter_source}/{sample_id}/{sample_id}.stats.tsv"
     output:
         "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tpm.tab",
         "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.raw.tab"
@@ -94,8 +94,8 @@ rule normalize_featurecount:
         s = "{sample_id}",
         script = "source/utils/featureCountsTPM.py"
     run:
-        df = pd.read_table(input[1], index_col=0)
-        rl = df.loc[wildcards.sample_id,"avg_len"]
+        df = pd.csv(input.stats[0], sep="\t")
+        rl = df.avg_len.mean()
         shell("python {params.script} --rl {rl} -i {input[0]} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
         
 ############################
