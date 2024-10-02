@@ -10,7 +10,12 @@ def parse_sample_list(f, config):
     """
     samples = {}
     map_dict = {}
-    source = config['read_source']
+    if config['filter_reads']:
+        input_dir = 'filtered'
+    else:
+        input_dir = 'unfiltered'
+    host_aligner = config["host_aligner"]
+    dir = config['datadir']
     suffices = {'unfiltered': 'cut.trim.fastq.gz',
                 'filtered': 'filtered.union.fastq.gz',
                 'taxmapper': 'cut.trim.filtered.fastq.gz',
@@ -39,22 +44,18 @@ def parse_sample_list(f, config):
             accession = df.loc[sample, 'accession']
         else:
             accession = ''
-        if source == 'bowtie2' and config["host_aligner"] == "star":
-            source = "star"
         if len(assemblies.keys()) > 0:
             if df.loc[sample,'assembly'] != '':
                 assembly = df.loc[sample, 'assembly']
                 # Define reads for assembly
-                R1_f = 'results/{source}/{sample}/{sample}_R1.{suff}'.format(source=source,
-                                                                             sample=sample, suff=suffices[source])
-                R2_f = 'results/{source}/{sample}/{sample}_R2.{suff}'.format(source=source,
-                                                                             sample=sample, suff=suffices[source])
+                R1_f = f"results/{input_dir}/{sample}/{sample}_R1.fastq.gz"
+                R2_f = f"results/{input_dir}/{sample}/{sample}_R2.fastq.gz"
                 assemblies[assembly]['R1'].append(R1_f)
                 assemblies[assembly]['R2'].append(R2_f)
                 map_dict[sample] = {'R1': R1_f, 'R2': R2_f}
 
-        samples[sample]={'R1': '{dir}/{f}'.format(f=R1, dir=config['datadir']),
-                         'R2': '{dir}/{f}'.format(f=R2, dir=config['datadir']),
+        samples[sample]={'R1': f'{dir}/{R1}',
+                         'R2': f'{dir}/{R2}',
                          'accession': accession}
     return samples, map_dict, assemblies
 
