@@ -5,38 +5,37 @@ localrules:
 ##############
 
 def assembly_input(wildcards):
-    suffices = {'unfiltered': 'cut.trim.fastq.gz',
+    suffices = {'unfiltered': 'cut.trim.mRNA.fastq.gz',
                 'filtered': 'filtered.union.fastq.gz',
                 'taxmapper': 'cut.trim.filtered.fastq.gz',
-                'bowtie2': 'fungi.nohost.fastq.gz'}
-    R1 = 'results/{source}/{sample}/{sample}_R1.{suff}'.format(source=wildcards.filter_source,
-        sample=wildcards.sample_id,suff=suffices[wildcards.filter_source])
-    R2 = 'results/{source}/{sample}/{sample}_R2.{suff}'.format(source=wildcards.filter_source,
-        sample=wildcards.sample_id,suff=suffices[wildcards.filter_source])
+                'mapped': 'fungi.nohost.fastq.gz'}
+    R1 = f"results/{wildcards.filter_source}/{wildcards.sample_id}/{wildcards.sample_id}_R1.{suffices[wildcards.filter_source]}"
+    R2 = f"results/{wildcards.filter_source}/{wildcards.sample_id}/{wildcards.sample_id}_R2.{suffices[wildcards.filter_source]}"
     return [R1, R2]
 
 rule transabyss:
     input:
         assembly_input
     output:
-        fa = "results/assembly/transabyss/{filter_source}/{sample_id}/{sample_id}.{k}-final.fa",
-    log: "results/assembly/transabyss/{filter_source}/{sample_id}/{k}.log"
+        fa = "results/assembly/transabyss/{filter_source}/{sample_id}/{k}/{sample_id}.{k}-final.fa",
+    log: "results/assembly/transabyss/{filter_source}/{sample_id}/{k}/log"
     conda:
         "../../envs/transabyss.yaml"
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        tmpdir = "$TMPDIR/{sample_id}.{k}.transabyss",
+        tmpdir = "$TMPDIR/{filter_source}.{sample_id}.{k}.transabyss",
         R1 = "$TMPDIR/{sample_id}.{k}.transabyss/R1.fastq",
-        R2 = "$TMPDIR/{sample_id}.{k}.transabyss/R2.fastq"
+        R2 = "$TMPDIR/{sample_id}.{k}.transabyss/R2.fastq",
+        min_contig_len = config["min_contig_len"]
     threads: 16
     resources:
-        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 150
+        runtime = 60 * 24
     shell:
         """
         mkdir -p {params.tmpdir}
         gunzip -c {input[0]} > {params.R1}
         gunzip -c {input[1]} > {params.R2}
-        transabyss --pe {params.R1} {params.R2} -k {wildcards.k} \
+        transabyss --pe {params.R1} {params.R2} -k {wildcards.k} --length {params.min_contig_len} \
             --outdir {params.tmpdir} --name {wildcards.sample_id}.{wildcards.k} \
             --threads {threads} >{log} 2>&1
         mv {params.tmpdir}/* {params.outdir}
@@ -46,7 +45,7 @@ rule transabyss:
 rule transabyss_merge:
     input:
         assembly_input,
-        expand("results/assembly/transabyss/{{filter_source}}/{{sample_id}}/{{sample_id}}.{k}-final.fa",
+        expand("results/assembly/transabyss/{{filter_source}}/{{sample_id}}/{k}/{{sample_id}}.{k}-final.fa",
             k = config["transabyss_kmers"])
     output:
         fa = "results/assembly/transabyss/{filter_source}/{sample_id}/final.fa",
@@ -64,7 +63,7 @@ rule transabyss_merge:
         tmpout = "$TMPDIR/{sample_id}.ta.merged.fa"
     threads: 16
     resources:
-        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 150
+        runtime = 60 * 24
     shell:
         """
         rm -rf {params.tmpout}
@@ -88,31 +87,27 @@ rule trinity:
     log: "results/assembly/trinity/{filter_source}/{sample_id}/log"
     params:
         min_contig_len = config["min_contig_len"],
-        tmpdir = "$TMPDIR/{sample_id}.trinity",
-        outdir = "results/assembly/trinity/{filter_source}/{sample_id}",
-        cpumem = config["mem_per_cpu"],
-        out_base= lambda wildcards,output: os.path.basename(output.fa)
+        tmpdir="$TMPDIR/{filter_source}.{sample_id}.trinity",
+        outdir=lambda wildcards, output: os.path.dirname(output.fa),
+        out_base = lambda wildcards, output: os.path.basename(output.fa),
+        max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
     threads: 10
     resources:
-        runtime = lambda wildcards, attempt: attempt ** 2 * 60 * 10
-    conda:
-        "../../envs/trinity.yaml"
+        runtime = 24 * 60
+    #conda:
+    #    "../../envs/trinity.yaml"
+    container:
+        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
     shell:
         """
-        rm -rf {params.tmpdir}
         rm -rf {params.outdir}/*
+        rm -rf {params.tmpdir}
         mkdir -p {params.tmpdir}
-        wd=$(pwd)
-        max_mem=$(({params.cpumem} * {threads}))
-        # Link input into output directory
-        ln -s $wd/{input[0]} $wd/{output.R1}
-        ln -s $wd/{input[1]} $wd/{output.R2}
         Trinity --CPU {threads} --min_contig_length {params.min_contig_len} \
-            --output {params.tmpdir} --left {input[0]} --right {input[1]} \
-            --seqType fq --max_memory ${{max_mem}}G > {log} 2>&1
+            --output {params.tmpdir} --left {input.R1} --right {input.R2} \
+            --seqType fq --max_memory {params.max_mem}G > {log} 2>&1
         mv {params.tmpdir}/* {params.outdir}/
-        cd {params.outdir}
-        ln -s Trinity.fasta {params.out_base}
+        mv {params.tmpdir}.Trinity.fasta {output.fa}
         rm -rf {params.tmpdir}
         """
 
@@ -132,7 +127,7 @@ rule megahit:
     conda: "../../envs/megahit.yaml"
     threads: 10
     resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*30
+        runtime = 60 * 10
     shell:
         """
         wd=$(pwd)
@@ -147,43 +142,6 @@ rule megahit:
         mv {params.tmp_dir}/opt* {params.out_dir}
         rm -rf {params.tmp_dir}
         """
-
-rule fastuniq_for_assembly:
-    input:
-        R1 = lambda wildcards: assemblies[wildcards.assembly]["R1"],
-        R2 = lambda wildcards: assemblies[wildcards.assembly]["R2"]
-    output:
-        "results/fastuniq/{assembly}/R1.fastuniq.gz",
-        "results/fastuniq/{assembly}/R2.fastuniq.gz"
-    params:
-        filelist = os.path.expandvars("$TMPDIR/fastuniq/{assembly}/filelist"),
-        tmpdir = os.path.expandvars("$TMPDIR/fastuniq/{assembly}"),
-        R1 = os.path.expandvars("$TMPDIR/fastuniq/{assembly}/R1.fastuniq"),
-        R2 = os.path.expandvars("$TMPDIR/fastuniq/{assembly}/R2.fastuniq")
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*10,
-        mem_mb = lambda wildcards, attempt: attempt**2*128000
-    threads: 20
-    run:
-        shell("mkdir -p {params.tmpdir}")
-        files = []
-        # Unzip and create filelist for fastuniq
-        for i, r1 in enumerate(input.R1):
-            basename1 = os.path.basename(r1).rstrip(".gz")
-            shell("gunzip -c {r1} > {params.tmpdir}/{basename1}")
-            r2 = input.R2[i]
-            basename2 = os.path.basename(r2).rstrip(".gz")
-            shell("gunzip -c {r2} > {params.tmpdir}/{basename2}")
-            files+=[os.path.join(params.tmpdir,basename1),os.path.join(params.tmpdir, basename2)]
-        # Write the filelist
-        with open(params.filelist, 'w') as fhout:
-            fhout.write("{}".format("\n".join(files)))
-        shell("fastuniq -i {params.filelist} -o {params.R1} -p {params.R2} -c 1")
-        shell("gzip {params.R1}")
-        shell("gzip {params.R2}")
-        shell("mv {params.R1}.gz {output[0]}")
-        shell("mv {params.R2}.gz {output[1]}")
-        shell("rm -r {params.tmpdir}")
 
 rule trinity_normalize:
     input:
@@ -220,28 +178,29 @@ rule trinity_normalize:
 
 rule transabyss_co:
     input:
-        R1="results/fastuniq/{assembly}/R1.fastuniq.gz",
-        R2="results/fastuniq/{assembly}/R2.fastuniq.gz"
+        R1=rules.trinity_normalize.output.R1,
+        R2=rules.trinity_normalize.output.R2
     output:
-        "results/co-assembly/transabyss/{assembly}/{assembly}.{k}-final.fa",
-    log: "results/co-assembly/transabyss/{assembly}/{k}.log"
+        "results/co-assembly/transabyss/{assembly}/{k}/{assembly}-final.fa",
+    log: "results/co-assembly/transabyss/{assembly}/{k}/log"
     conda:
         "../../envs/transabyss.yaml"
     params:
         outdir=lambda wildcards, output: os.path.dirname(output[0]),
         tmpdir="$TMPDIR/{assembly}.{k}.transabyss",
+        min_contig_len=config["min_contig_len"],
         R1="$TMPDIR/{assembly}.{k}.transabyss/R1.fastq",
         R2="$TMPDIR/{assembly}.{k}.transabyss/R2.fastq"
     threads: 16
     resources:
-        runtime = lambda wildcards,attempt: attempt ** 2 * 60 * 150
+        runtime = 60 * 24
     shell:
         """
         mkdir -p {params.tmpdir}
         gunzip -c {input.R1} > {params.R1}
         gunzip -c {input.R2} > {params.R2}
-        transabyss --pe {params.R1} {params.R2} -k {wildcards.k} \
-            --outdir {params.tmpdir} --name {wildcards.assembly}.{wildcards.k} \
+        transabyss --pe {params.R1} {params.R2} -k {wildcards.k} --length {params.min_contig_len} \
+            --outdir {params.tmpdir} --name {wildcards.assembly} \
             --threads {threads} >{log} 2>&1
         mv {params.tmpdir}/* {params.outdir}
         rm -rf {params.tmpdir}
@@ -249,7 +208,7 @@ rule transabyss_co:
 
 rule transabyss_merge_co:
     input:
-        expand("results/co-assembly/transabyss/{{assembly}}/{{assembly}}.{k}-final.fa",
+        expand("results/co-assembly/transabyss/{{assembly}}/{k}/{{assembly}}-final.fa",
             k = config["transabyss_kmers"])
     output:
         fa = "results/co-assembly/transabyss/{assembly}/final.fa"
@@ -265,7 +224,7 @@ rule transabyss_merge_co:
         tmpout="$TMPDIR/{assembly}.ta.merged.fa"
     threads: 16
     resources:
-        runtime = lambda wildcards,attempt: attempt ** 2 * 60 * 10
+        runtime = 60 * 10
     shell:
         """
         rm -rf {params.tmpout}
@@ -285,7 +244,7 @@ rule trinity_co:
     params:
         min_contig_len = config["min_contig_len"],
         tmpdir="$TMPDIR/{assembly}.co.trinity",
-        outdir="results/co-assembly/trinity/{assembly}",
+        outdir = lambda wildcards, output: os.path.dirname(output.fa),
         out_base = lambda wildcards, output: os.path.basename(output.fa),
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
     threads: 10
@@ -310,8 +269,8 @@ rule trinity_co:
 
 rule megahit_co:
     input:
-        R1 = "results/fastuniq/{assembly}/R1.fastuniq.gz",
-        R2 = "results/fastuniq/{assembly}/R2.fastuniq.gz"
+        R1=rules.trinity_normalize.output.R1,
+        R2=rules.trinity_normalize.output.R2
     output:
         fa = "results/co-assembly/megahit/{assembly}/final.fa"
     log: "results/co-assembly/megahit/{assembly}/log"
@@ -323,7 +282,7 @@ rule megahit_co:
     conda: "../../envs/megahit.yaml"
     threads: 20
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*240
+        runtime = 24 * 60
     shell:
         """
         wd=$(pwd)
