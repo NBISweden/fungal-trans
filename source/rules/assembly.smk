@@ -149,6 +149,8 @@ rule trinity_normalize:
     output:
         R1="results/in-silico-normalization/{assembly}/left.norm.fq.gz",
         R2="results/in-silico-normalization/{assembly}/right.norm.fq.gz",
+    log:
+        "results/in-silico-normalization/{assembly}/log"
     params:
         max_cov = config["insilico_norm_max_cov"],
         R1 = lambda wildcards: ",".join(sorted(assemblies[wildcards.assembly]["R1"])),
@@ -167,7 +169,7 @@ rule trinity_normalize:
         echo -e {params.R2} | tr "," "\n" > {params.tmpdir}/R2.list
         $TRINITY_HOME/util/insilico_read_normalization.pl --seqType fq --JM {params.mem} --max_cov {params.max_cov} \
             --left_list {params.tmpdir}/R1.list --right_list {params.tmpdir}/R2.list \
-            --pairs_together --PARALLEL_STATS --CPU {threads} --output {params.tmpdir} --tmp_dir_name out
+            --pairs_together --PARALLEL_STATS --CPU {threads} --output {params.tmpdir} --tmp_dir_name out > {log} 2>&1
         gzip -c {params.tmpdir}/left.norm.fq > {params.tmpdir}/left.norm.fq.gz
         gzip -c {params.tmpdir}/right.norm.fq > {params.tmpdir}/right.norm.fq.gz
         mv {params.tmpdir}/left.norm.fq.gz {output.R1}
