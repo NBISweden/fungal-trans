@@ -141,22 +141,16 @@ rule download_jgi_transcripts:
     For each 'portal', download the filtered transcripts 
     """
     output:
-        temp(touch("resources/JGI/genomes/{portal}.transcripts.fna.gz")),
+        transcripts=temp(touch("resources/JGI/genomes/{portal}.transcripts.fna.gz")),
+        proteins=temp(touch("resources/JGI/genomes/{portal}.proteins.faa.gz"))
     input:
         cookies=rules.init_jgi.output.cookies,
     log:
         "resources/JGI/genomes/download_jgi_transcripts.{portal}.log"
-    params:
-        tmpdir = "$TMPDIR/{portal}",
-        xml = "$TMPDIR/{portal}/files.xml",
-        output = "$TMPDIR/{portal}/transcripts.fna.gz"
     retries: 3
     shell:
         """
-        mkdir -p {params.tmpdir}
-        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {params.output} 2>{log}
-        mv {params.output} {output}
-        rm -rf {params.tmpdir}
+        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {output.transcripts} --protein_out {output.proteins} 2>{log}
         """
 
 rule concat_transcripts:
@@ -166,11 +160,35 @@ rule concat_transcripts:
     output:
         "resources/fungi/fungi_transcripts.fasta.gz"
     input:
-        expand(rules.download_jgi_transcripts.output, portal=genomes.index.tolist())
+        expand(rules.download_jgi_transcripts.output.transcripts, portal=genomes.index.tolist())
     log:
         "resources/fungi/concat_transcripts.log"
     params:
         tmpfile = "$TMPDIR/fungi_transcripts.fasta.gz"
+    shell:
+        """
+        for f in {input};
+        do
+            if [-s $f];
+            then
+                cat $f >> {params.tmpfile}
+            fi
+        done
+        mv {params.tmpfile} {output} 
+        """
+    
+rule concat_proteins:
+    """
+    Concatenates all non-zero proteins downloaded
+    """
+    output:
+        "resources/fungi/fungi_proteins.fasta.gz"
+    input:
+        expand(rules.download_jgi_transcripts.output.proteins, portal=genomes.index.tolist())
+    log:
+        "resources/fungi/concat_proteins.log"
+    params:
+        tmpfile = "$TMPDIR/fungi_proteins.fasta.gz"
     shell:
         """
         for f in {input};
