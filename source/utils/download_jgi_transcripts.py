@@ -8,6 +8,8 @@ import tempfile
 import os
 from argparse import ArgumentParser
 import sys
+import gzip as gz
+from Bio.SeqIO import parse
 
 
 def tz_convert(timestamp):
@@ -57,6 +59,8 @@ def check_filtered(root, ft="transcripts"):
         for f in _files:
             _filename = f.attrib["filename"]
             if "filteredmodels" in _filename.lower() and ft in _filename and _filename.endswith(".gz"):
+                if ft == "proteins" and "fasta" not in _filename:
+                    continue
                 files.append(f)
     for _file in files:
         _filename = _file.attrib["filename"]
@@ -223,18 +227,16 @@ def main(args):
     Main function
     """
     root = get_xml(args.portal, args.cookie)
-    url = find_files(root, ft="transcripts")
-    if not url:
-        sys.stderr.write("No files found\n")
-        url=""
-        sys.exit(0)
-    url = f"{args.base}{url}"
-    if not args.outfile:
-        outfile = os.path.basename(url)
-    else:
+    if args.outfile:
         outfile = args.outfile
-    sys.stderr.write(f"Downloading {url} to {outfile}\n")
-    write_file(url, outfile, args.cookie)
+        url = find_files(root, ft="transcripts")
+        if not url:
+            sys.stderr.write("No files found\n")
+            url=""
+            sys.exit(0)
+        url = f"{args.base}{url}"
+        sys.stderr.write(f"Downloading {url} to {outfile}\n")
+        write_file(url, outfile, args.cookie)
     if args.protein_out:
         url = find_files(root, ft="proteins")
         if not url:
@@ -245,6 +247,11 @@ def main(args):
         outfile = args.protein_out
         sys.stderr.write(f"Downloading {url} to {outfile}\n")
         write_file(url, outfile, args.cookie)
+        if args.taxidmap:
+            with open(args.taxidmap, 'w') as fhout, gz.open(args.protein_out, 'rt') as fhin:
+                for record in parse(fhin, "fasta"):
+                    fhout.write(f"{record.id}\t{args.taxid}\n")
+
     
     
 
@@ -252,8 +259,16 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='Download transcript files from JGI Mycocosm')
     parser.add_argument('-p', '--portal', help='Portal shorthand name (e.g. Aaoar1)', required=True)
     parser.add_argument('-c', '--cookie', help="Cookie file for JGI", required=True)
-    parser.add_argument('-o', '--outfile', help='Output file name. If not given, the file will be saved in the current directory with the remote filename')
+    parser.add_argument('-o', '--outfile', help='Output file name for transcript file. Omit this to skip download of transcript file')
     parser.add_argument('-b', '--base', help='Base URL for JGI downloads (default: https://genome-downloads.jgi.doe.gov)', default="https://genome-downloads.jgi.doe.gov")
     parser.add_argument('--protein_out', help='Attempt to find protein file for portal and write to file')
+    parser.add_argument("--taxidmap", help="Output file with protein id to taxid mapping")
+    parser.add_argument('--taxid', help='Taxid of portal', type=int)
     args = parser.parse_args()
+    if not args.outfile and not args.protein_out:
+        sys.stderr.write("No output file specified\n")
+        sys.exit(0)
+    if args.taxidmap and not args.taxid:
+        sys.stderr.write("No taxid specified for mapping\n")
+        sys.exit(0)
     main(args)
