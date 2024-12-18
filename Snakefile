@@ -50,6 +50,14 @@ samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], co
 # Parse JGI genomes from fungi info url, also save to file for quick re-use in future runs
 genomes = parse_genomes(config["fungi_info"], f="resources/JGI/genomes.tsv")
 
+# Reads list of additional genomes to include when building custom mmseqs2 database
+extra_genomes = {}
+if config["extra_genomes"]:
+    extra_genomes = parse_extra_genomes(config["extra_genomes"])
+    config["mmseqs_db_path"] = f"resources/mmseqs2/combined-fungi-{config['mmseqs_db']}"
+else:
+    config["mmseqs_db_path"] = os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"])
+
 wildcard_constraints:
     sample_id = f"({'|'.join(list(samples.keys()))})",
     assembler = "megahit|trinity|transabyss",
