@@ -92,11 +92,11 @@ rule trinity:
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
     threads: 10
     resources:
-        runtime = 24 * 60
+        runtime = 24 * 60,
+        mem_mb = 16000
     #conda:
     #    "../../envs/trinity.yaml"
-    container:
-        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
         rm -rf {params.outdir}/*
@@ -159,8 +159,7 @@ rule trinity_normalize:
         mem=config["insilico_norm_mem"]
     #conda:
         #"../../envs/trinity.yaml"
-    container:
-        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     threads: 10
     shell:
         """
@@ -250,11 +249,11 @@ rule trinity_co:
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
     threads: 10
     resources:
-        runtime = 24 * 60
+        runtime = 24 * 60,
+        mem_mb = 16000
     #conda:
     #    "../../envs/trinity.yaml"
-    container:
-        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
         rm -rf {params.outdir}/*
