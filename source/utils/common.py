@@ -72,3 +72,19 @@ def fungi_input(wc):
     R1 = f'results/{aligndir}/{wc.sample_id}/{wc.sample_id}_R1.{suffices[wc.filter_source]}'
     R2 = f'results/{aligndir}/{wc.sample_id}/{wc.sample_id}_R2.{suffices[wc.filter_source]}'
     return [R1, R2]
+
+def parse_extra_genomes(f):
+    """
+    Parse the extra genomes file
+    """
+    extra_genomes = {}
+    with open(f, 'r') as f:
+        for line in f:
+            line = line.strip()
+            portal, taxid = line.rsplit()[0:2]
+            try:
+                taxid = int(taxid)
+            except ValueError:
+                continue
+            extra_genomes[portal] = taxid
+    return extra_genomes
