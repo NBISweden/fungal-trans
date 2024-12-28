@@ -1,11 +1,13 @@
 localrules:
+    mmseqs_convertali_co,
+    parse_mmseqs_first,
+    firstpass_fungal_proteins,
     collate_featurecount_co,
     create_blob_co,
     dbcan_parse_co,
     normalize_featurecount_co,
     parse_eggnog_co,
     plot_blob_co,
-    reformat_fasta_co,
     sum_dbcan_co,
     sum_taxonomy_co,
     taxonomy_featurecount_co,
@@ -21,47 +23,165 @@ localrules:
 ###################################
 ## FRAME SELECTION CO-ASSEMBLIES ##
 ###################################
-rule frame_selection_co:
+rule transdecoder_longorfs_co:
+    """
+    Generate longest ORFs from co-assembly with transdecoder
+    """
     input:
         fa = "results/co-assembly/{assembler}/{assembly}/final.fa",
     output:
-        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/frame_selection/final.{suffix}",
-            suffix = ["gff","faa","fnn"])
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/final.fa.transdecoder_dir/longest_orfs.{suff}",
+            suff = ["pep","gff3","cds"])
     log:
-        "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/gms.log"
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/longest_orfs.log"
+    container: "docker://trinityrnaseq/transdecoder:5.7.1"
     params:
-        tmpdir = "$TMPDIR/{assembly}/",
-        outdir = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection"
-    threads: 2
+        output_dir = lambda wildcards: f"results/annotation/co-assembly/{wildcards.assembler}/{wildcards.assembly}/transdecoder"
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*2
+        tasks= 1,
+        runtime = 240
     shell:
         """
-        wd=$(pwd)
-        mkdir -p {params.tmpdir}
-        mkdir -p {params.outdir}
-        cd {params.tmpdir}
-        ln -sf $wd/{input.fa} final.fa
-        gmst.pl --output final --format GFF --fnn --faa final.fa
-        rm final.fa
-        mv final $wd/{params.outdir}/final.gff
-        mv {params.tmpdir}/* $wd/{params.outdir}/
-        cd $wd
-        rmdir {params.tmpdir}
+        TransDecoder.LongOrfs -t {input.fa} -O {params.output_dir} > {log} 2>&1
         """
 
-rule reformat_fasta_co:
+rule mmseqs_createquerydb_longorfs_co:
     input:
-        faa = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.faa"
+        query = rules.transdecoder_longorfs_co.output[0],
     output:
-        faa = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.reformat.faa",
-        gff = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.reformat.gff"
-    params:
-        assembly = "{assembly}"
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/longorfs-queryDB"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/longorfs-queryDB.log"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
     shell:
         """
-        python source/utils/reformat_fasta.py {input.faa} {output.faa} {output.gff} {params.assembly}
+        mmseqs createdb {input} {output} > {log} 2>&1
         """
+
+rule mmseqs_firstpass_taxonomy_co:
+    input:
+        query = rules.mmseqs_createquerydb_longorfs_co.output,
+        target = os.path.join(config["mmseqs_db_dir"], "{td_db}")
+    output:
+        tax = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/{{td_db}}-taxaDB.{suff}", suff = ["index","dbtype"]),
+        aln = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/{{td_db}}-taxaDB_aln/first.{suff}", suff = ["index","dbtype"]),
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/mmseqs_firstpass_taxonomy_co.{td_db}.log"
+    threads: 10
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
+    params:
+        tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_firstpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}.{wildcards.td_db}", 
+        split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
+        output = lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
+        ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
+        aln_dir = lambda wildcards, output: os.path.dirname(output.aln[0])
+    resources:
+        mem_mb = 3600,
+        tasks = 1
+    shell:
+        """
+        mkdir -p {params.tmp}
+        mmseqs taxonomy {input.query} {input.target} {params.output} {params.tmp} -e 1e-5 -a 1 \
+            --lca-mode 3 --tax-output-mode 0 --lca-ranks {params.ranks} --tax-lineage 1 \
+            --split-memory-limit {params.split_memory_limit}M --threads {resources.tasks} > {log} 2>&1
+        mv {params.tmp}/latest/first.* {params.aln_dir}
+        rm -r {params.tmp}
+        """
+
+rule mmseqs_convertali_co:
+    input:
+        alignment = rules.mmseqs_firstpass_taxonomy_co.output.aln,
+        target = os.path.join(config["mmseqs_db_dir"], "{td_db}"),
+        query = rules.mmseqs_createquerydb_longorfs_co.output
+    output:
+        m8 = "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/{td_db}.m8"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/{td_db}.convertali.log"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
+    params:
+        alignment = lambda wildcards, input: os.path.splitext(input.alignment[0])[0]
+    shell:
+        """
+        mmseqs convertalis {input.query} {input.target} {params.alignment} {output.m8} --threads 1 --format-mode 0 > {log} 2>&1
+        """
+
+rule transdecoder_predict_co:
+    """
+    Run transdecoder predict using homology search results for ORF retention criteria
+    """
+    input:
+        fa = "results/co-assembly/{assembler}/{assembly}/final.fa",
+        m8 = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/{td_db}.m8",
+            td_db = config["transdecoder_homology_db"])
+    output:
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/final.fa.transdecoder.{suff}",
+            suff = ["pep","gff3","cds","bed"])
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/predict.log"
+    container: "docker://trinityrnaseq/transdecoder:5.7.1"
+    params:
+        output_dir = lambda wildcards, output: os.path.dirname(output[0])
+    shell:
+        """
+        TransDecoder.Predict -t {input.fa} --retain_blastp_hits {input.m8} -O {params.output_dir} > {log} 2>&1
+        """
+
+rule mmseqs_createtsv_first_co:
+    input:
+        query = rules.mmseqs_createquerydb_longorfs_co.output,
+        result = rules.mmseqs_firstpass_taxonomy_co.output.tax
+    output:
+        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/firstpass_{td_db}.tsv"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/mmseqs_createtsv_first_co.{td_db}.log"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
+    params:
+        result = lambda wildcards, input: f"{os.path.dirname(input.result[0])}/{wildcards.td_db}-taxaDB",
+    threads: 1
+    resources:
+        mem_mb = 1000,
+        tasks = 1
+    shell:
+        """
+        mmseqs createtsv {input.query} {params.result} {output.tsv} --threads {resources.tasks} > {log} 2>&1
+        """
+
+rule parse_mmseqs_first:
+    input:
+        tsv = rules.mmseqs_createtsv_first_co.output,
+    output:
+        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/firstpass_{td_db}.parsed.tsv"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/firstpass_{td_db}.parsed.log"
+    params:
+        script = workflow.source_path("../utils/parse_mmseqs.py"),
+        ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
+    shell:
+        """
+        python {params.script} -i {input.tsv} -o {output.tsv} -r {params.ranks} > {log} 2>&1
+        """
+
+rule firstpass_fungal_proteins:
+    input:
+        parsed = rules.parse_mmseqs_first.output.tsv,
+        fa = rules.transdecoder_predict_co.output[0]
+    output:
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/firstpass_{td_db}.fungal.faa"
+    params:
+        idlist = lambda wildcards, input: f"{os.path.dirname(input.parsed)}/fungal.ids"
+    run:
+        import pandas as pd
+        df = pd.read_csv(input.parsed, sep="\t", header=0, index_col=0)
+        fungi = df.loc[df["kingdom"]=="Fungi"].index
+        with open(params.idlist, "w") as f:
+            for i in fungi:
+                f.write(i + "\n")
+        shell("seqkit grep -f {params.idlist} {input.fa} > {output}")
+        os.remove(params.idlist)
 
 #################################
 ## READ COUNTING CO-ASSEMBLIES ##
