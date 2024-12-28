@@ -13,7 +13,6 @@ localrules:
     download_jgi_proteins,
     concat_transcripts,
     concat_proteins,
-    mmseqs_createseqdb,
     prepare_diamond_JGI,
     mmseqs_createtaxdb
 
@@ -227,6 +226,8 @@ rule mmseqs_extract_fungalDB:
         db="resources/mmseqs2/fungi-{db}"
     log:
         "resources/mmseqs2/extract_fungal_{db}_mmseqsDB.log"
+    conda: "../../envs/mmseqs.yaml"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     threads: 4
     shell:
         """
