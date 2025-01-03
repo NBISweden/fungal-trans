@@ -52,11 +52,15 @@ genomes = parse_genomes(config["fungi_info"], f="resources/JGI/genomes.tsv")
 
 # Reads list of additional genomes to include when building custom mmseqs2 database
 extra_genomes = {}
-if config["extra_genomes"]:
+config["mmseqs_db_path"] = os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"])
+if config["extra_genomes"] != "":
     extra_genomes = parse_extra_genomes(config["extra_genomes"])
-    config["mmseqs_db_path"] = f"resources/mmseqs2/combined-fungi-{config['mmseqs_db']}"
+    config["refine_taxonomy"] = True
+    config["mmseqs_refine_db"] = f"resources/mmseqs2/combined-fungi-{config['mmseqs_db']}_taxonomy"
 else:
-    config["mmseqs_db_path"] = os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"])
+    config["mmseqs_refine_db"] = ""
+    config["refine_taxonomy"] = False
+    
 
 wildcard_constraints:
     sample_id = f"({'|'.join(list(samples.keys()))})",
