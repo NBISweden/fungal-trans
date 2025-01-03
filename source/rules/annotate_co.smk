@@ -1,6 +1,7 @@
 localrules:
     mmseqs_convertali_co,
     parse_mmseqs_first,
+    parse_mmseqs_second,
     firstpass_fungal_proteins,
     collate_featurecount_co,
     create_blob_co,
@@ -46,6 +47,9 @@ rule transdecoder_longorfs_co:
         """
 
 rule mmseqs_createquerydb_longorfs_co:
+    """
+    Create mmseqs database from longest ORFs
+    """
     input:
         query = rules.transdecoder_longorfs_co.output[0],
     output:
@@ -60,6 +64,10 @@ rule mmseqs_createquerydb_longorfs_co:
         """
 
 rule mmseqs_firstpass_taxonomy_co:
+    """
+    Run mmseqs taxonomy on longest ORFs, also store the alignment results
+    for use with transdecoder
+    """
     input:
         query = rules.mmseqs_createquerydb_longorfs_co.output,
         target = os.path.join(config["mmseqs_db_dir"], "{td_db}")
@@ -91,6 +99,9 @@ rule mmseqs_firstpass_taxonomy_co:
         """
 
 rule mmseqs_convertali_co:
+    """
+    Convert mmseqs alignment to m8 format for transdecoder
+    """
     input:
         alignment = rules.mmseqs_firstpass_taxonomy_co.output.aln,
         target = os.path.join(config["mmseqs_db_dir"], "{td_db}"),
@@ -130,11 +141,14 @@ rule transdecoder_predict_co:
         """
 
 rule mmseqs_createtsv_first_co:
+    """
+    Create tsv file from mmseqs taxonomy output
+    """
     input:
         query = rules.mmseqs_createquerydb_longorfs_co.output,
         result = rules.mmseqs_firstpass_taxonomy_co.output.tax
     output:
-        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/firstpass_{td_db}.tsv"
+        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.tsv"
     log:
         "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/mmseqs_createtsv_first_co.{td_db}.log"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
@@ -151,12 +165,15 @@ rule mmseqs_createtsv_first_co:
         """
 
 rule parse_mmseqs_first:
+    """
+    Parse mmseqs taxonomy output, adds columns with ranks
+    """
     input:
         tsv = rules.mmseqs_createtsv_first_co.output,
     output:
-        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/firstpass_{td_db}.parsed.tsv"
+        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.parsed.tsv"
     log:
-        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/firstpass_{td_db}.parsed.log"
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.parsed.log"
     params:
         script = workflow.source_path("../utils/parse_mmseqs.py"),
         ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
@@ -166,11 +183,14 @@ rule parse_mmseqs_first:
         """
 
 rule firstpass_fungal_proteins:
+    """
+    Extract proteins from first taxonomy pass that are classified as fungi
+    """
     input:
         parsed = rules.parse_mmseqs_first.output.tsv,
         fa = rules.transdecoder_predict_co.output[0]
     output:
-        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/firstpass_{td_db}.fungal.faa"
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.fungal.faa"
     params:
         idlist = lambda wildcards, input: f"{os.path.dirname(input.parsed)}/fungal.ids"
     run:
@@ -183,6 +203,60 @@ rule firstpass_fungal_proteins:
         shell("seqkit grep -f {params.idlist} {input.fa} > {output}")
         os.remove(params.idlist)
 
+def get_mmseq_taxdb(wildcards):
+    if config["refine_taxonomy"]:
+        return config["mmseqs_refine_db"]
+    return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"])
+
+rule mmseqs_secondpass_taxonomy_co:
+    """
+    Run mmseqs taxonomy on fungal proteins
+    """
+    input:
+        query = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{td_db}/firstpass.fungal.faa", td_db = config["transdecoder_homology_db"]),
+        target = get_mmseq_taxdb
+    output:
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/secondpass-taxresult_{suff}", suff = ["lca.tsv", "report","tophit_aln","tophit_report"], mmseqs_db = config["mmseqs_db"])
+    log:
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/mmseqs_secondpass_taxonomy_co.log", mmseqs_db = config["mmseqs_db"])
+    params:
+        output = lambda wildcards, output: f"{os.path.dirname(output[0])}/secondpass-taxresult",
+        tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}", 
+        ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
+        split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
+    threads: 10
+    resources:
+        mem_mb = 3600,
+        tasks = 1
+    shell:
+        """
+        mkdir -p {params.tmp}
+        mmseqs easy-taxonomy {input.query} {input.target} {params.output} {params.tmp} \
+            --lca-ranks {params.ranks} --lca-mode 3 --tax-lineage 1 --split-memory-limit {params.split_memory_limit}M \
+            --threads {resources.tasks} > {log} 2>&1
+        """
+
+rule parse_mmseqs_second:
+    """
+    Parse mmseqs taxonomy output from second run
+    """
+    input:
+        taxresult = rules.mmseqs_secondpass_taxonomy_co.output,
+    output:
+        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{mmseqs_db}/secondpass.parsed.log"
+    params:
+        script = workflow.source_path("../utils/parse_mmseqs.py"),
+        tsv = lambda wildcards, input: os.path.join(os.path.dirname(input.taxresult[0]), "secondpass-taxresult_lca.tsv"),
+        ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
+    shell:
+        """
+        python {params.script} -i {input.tsv} -o {output.tsv} -r {params.ranks} > {log} 2>&1
+        """
+        
 #################################
 ## READ COUNTING CO-ASSEMBLIES ##
 #################################
