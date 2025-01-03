@@ -14,7 +14,7 @@ localrules:
     concat_transcripts,
     concat_proteins,
     prepare_diamond_JGI,
-    mmseqs_createtaxdb
+    mmseqs_filter_fungalDB
 
 wildcard_constraints:
     db = config["mmseqs_db"],
@@ -202,6 +202,8 @@ rule concat_proteins:
         mapping=expand(rules.download_jgi_proteins.output.mapping, portal=list(extra_genomes.keys()))
     log:
         "resources/extra_genomes/concat_proteins.log"
+    params:
+        min_len = 100
     run:
         from Bio.SeqIO import parse
         import gzip as gz
@@ -209,12 +211,16 @@ rule concat_proteins:
             for f in input.faa:
                 with gz.open(f, 'rt') as fhin:
                     for record in parse(fhin, "fasta"):
-                        fhout.write(f">{record.id}\n{record.seq}\n")
+                        if len(record.seq) >= params.min_len:
+                            newid = (record.id).replace("|", ".")
+                            fhout.write(f">{newid}\n{record.seq}\n")
         with open(output.mapping, "w") as fhout:
             for f in input.mapping:
                 with open(f) as fhin:
                     for line in fhin:
-                        fhout.write(line)
+                        seqid, taxid = line.strip().split("\t")
+                        newid = seqid.replace("|", ".")
+                        fhout.write(f"{newid}\t{taxid}\n")
 
 rule mmseqs_extract_fungalDB:
     """
@@ -229,9 +235,12 @@ rule mmseqs_extract_fungalDB:
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     threads: 4
+    resources:
+        mem_mb = 8000,
+        tasks = 4
     shell:
         """
-        mmseqs filtertaxseqdb {input.db} {output.db} --taxon-list 4751 --threads {threads} > {log} 2>&1
+        mmseqs filtertaxseqdb {input.db} {output.db} --taxon-list 4751 --threads {resources.tasks} > {log} 2>&1
         """
 
 rule mmseqs_convert2fasta_fungalDB:
@@ -249,6 +258,23 @@ rule mmseqs_convert2fasta_fungalDB:
         mmseqs convert2fasta {input.db} {output.fasta}
         """
 
+rule mmseqs_filter_fungalDB:
+    """
+    Filters the extracted fungal database to remove sequences shorter than a minimum length
+    """
+    input:
+        rules.mmseqs_convert2fasta_fungalDB.output.fasta
+    output:
+        fasta="resources/mmseqs2/filtered-fungi-{db}.fasta"
+    log:
+        "resources/mmseqs2/filter_fungi_{db}_mmseqsDB.log"
+    params:
+        min_len = 100
+    shell:
+        """
+        seqkit seq -m {params.min_len} {input} > {output.fasta}
+        """
+
 rule mmseqs_createseqdb:
     """
     Creates a sequence database for the concatenated proteins
@@ -259,7 +285,7 @@ rule mmseqs_createseqdb:
             ext=[".dbtype","_h","_h.dbtype","_h.index",".index",".lookup",".source"])
     input:
         jgi_fasta=rules.concat_proteins.output.faa,
-        mmseqs_fasta=rules.mmseqs_convert2fasta_fungalDB.output.fasta
+        mmseqs_fasta=rules.mmseqs_filter_fungalDB.output.fasta
     log:
         "resources/mmseqs2/create-fungi-{db}-seqdb.log"
     conda: "../../envs/mmseqs.yaml"
@@ -294,10 +320,13 @@ rule mmseqs_create_taxidmap:
                                 header=None, 
                                 usecols=[0,1], 
                                 names=["id", "taxid"])
-        pd.merge(protmap, taxmap, left_index=True, right_index=True).to_csv(output.tsv, sep="\t", index=False)
+        pd.merge(protmap, taxmap, left_index=True, right_index=True).to_csv(output.tsv, sep="\t", header = False, index=False)
 
 
 rule download_taxdump:
+    """
+    Downloads the NCBI taxonomy dump
+    """
     output:
         expand("resources/ncbi-taxdump/{pref}.dmp", pref=["nodes","delnodes","gencode","merged","names"]),
     log:
@@ -328,11 +357,14 @@ rule mmseqs_createtaxdb:
         tmpdir = os.environ.get("TMPDIR", "scratch"),
         mapfile = lambda wc: f"resources/mmseqs2/combined-fungi-{wc.db}.mapping.tsv"
     #shadow: "minimal"
-    threads: 100
+    threads: 1
+    resources:
+        tasks = 1,
+        mem_mb = 1000
     shell:
         """
         cat {input.mapfiles} > {params.mapfile}
-        mmseqs createtaxdb {input.db} {params.tmpdir} --ncbi-tax-dump {params.taxdump} --tax-mapping-file {params.mapfile} --threads {threads} > {log} 2>&1
+        mmseqs createtaxdb {input.db} {params.tmpdir} --ncbi-tax-dump {params.taxdump} --tax-mapping-file {params.mapfile} --threads {resources.tasks} > {log} 2>&1
         """
 
 rule cluster_transcripts:
