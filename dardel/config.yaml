@@ -53,8 +53,8 @@ set-resources:
     mem_mb: 3552
   mmseqs_secondpass_taxonomy_co:
     runtime: 600
-    tasks: 10
-    mem_mb: 100000
+    tasks: 2
+    mem_mb: 53280
   # preprocess.smk
   trimmomatic:
     runtime: 60
