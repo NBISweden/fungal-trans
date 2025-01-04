@@ -17,7 +17,7 @@ localrules:
     mmseqs_filter_fungalDB
 
 wildcard_constraints:
-    db = config["mmseqs_db"],
+    mmseqs_db = config["mmseqs_db"],
 
 ## NCBI Taxonomy ##
 rule ncbi_taxonomy:
@@ -227,11 +227,11 @@ rule mmseqs_extract_fungalDB:
     Uses the filtertaxseqdb command to extract fungal sequences from the official mmseqs2 database
     """
     input:
-        db=os.path.join(config["mmseqs_db_dir"],"{db}"),
+        db=os.path.join(config["mmseqs_db_dir"],"{mmseqs_db}"),
     output:
-        db="resources/mmseqs2/fungi-{db}"
+        db="resources/mmseqs2/fungi-{mmseqs_db}"
     log:
-        "resources/mmseqs2/extract_fungal_{db}_mmseqsDB.log"
+        "resources/mmseqs2/extract_fungal_{mmseqs_db}_mmseqsDB.log"
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     threads: 4
@@ -250,7 +250,7 @@ rule mmseqs_convert2fasta_fungalDB:
     input:
         db=rules.mmseqs_extract_fungalDB.output.db
     output:
-        fasta="resources/mmseqs2/fungi-{db}.fasta"
+        fasta="resources/mmseqs2/fungi-{mmseqs_db}.fasta"
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     shell:
@@ -265,9 +265,9 @@ rule mmseqs_filter_fungalDB:
     input:
         rules.mmseqs_convert2fasta_fungalDB.output.fasta
     output:
-        fasta="resources/mmseqs2/filtered-fungi-{db}.fasta"
+        fasta="resources/mmseqs2/filtered-fungi-{mmseqs_db}.fasta"
     log:
-        "resources/mmseqs2/filter_fungi_{db}_mmseqsDB.log"
+        "resources/mmseqs2/filter_fungi_{mmseqs_db}_mmseqsDB.log"
     params:
         min_len = 100
     shell:
@@ -280,14 +280,14 @@ rule mmseqs_createseqdb:
     Creates a sequence database for the concatenated proteins
     """
     output:
-        db="resources/mmseqs2/combined-fungi-{db}",
-        db_files=expand("resources/mmseqs2/combined-fungi-{{db}}{ext}", 
+        db="resources/mmseqs2/combined-fungi-{mmseqs_db}",
+        db_files=expand("resources/mmseqs2/combined-fungi-{{mmseqs_db}}{ext}", 
             ext=[".dbtype","_h","_h.dbtype","_h.index",".index",".lookup",".source"])
     input:
         jgi_fasta=rules.concat_proteins.output.faa,
         mmseqs_fasta=rules.mmseqs_filter_fungalDB.output.fasta
     log:
-        "resources/mmseqs2/create-fungi-{db}-seqdb.log"
+        "resources/mmseqs2/create-fungi-{mmseqs_db}-seqdb.log"
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     shell:
@@ -300,10 +300,10 @@ rule mmseqs_create_taxidmap:
     Create taxid mapping file for the official mmseqs2 database
     """
     input:
-        mapfile=os.path.join(config["mmseqs_db_dir"], "{db}_mapping"),
-        lookupfile=os.path.join(config["mmseqs_db_dir"], "{db}.lookup"),
+        mapfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}_mapping"),
+        lookupfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}.lookup"),
     output:
-        tsv="resources/mmseqs2/{db}.taxidmap.tsv"
+        tsv="resources/mmseqs2/{mmseqs_db}.taxidmap.tsv"
     resources:
         mem_mb = 90000
     run:
@@ -343,19 +343,19 @@ rule mmseqs_createtaxdb:
     Creates a taxonomy database for the concatenated protein database
     """
     output:
-        db_files=expand("resources/mmseqs2/combined-fungi-{{db}}{ext}",  ext=["_taxonomy","_mapping"])
+        db_files=expand("resources/mmseqs2/combined-fungi-{{mmseqs_db}}{ext}",  ext=["_taxonomy","_mapping"])
     input:
         db=rules.mmseqs_createseqdb.output.db,
         mapfiles=[rules.mmseqs_create_taxidmap.output.tsv, rules.concat_proteins.output.mapping],
         taxdump=rules.download_taxdump.output
     log:
-        "resources/mmseqs2/createtaxdb-combined-fungi-{db}.log"
+        "resources/mmseqs2/createtaxdb-combined-fungi-{mmseqs_db}.log"
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     params:
         taxdump = lambda wc, input: os.path.dirname(input.taxdump[0]),
         tmpdir = os.environ.get("TMPDIR", "scratch"),
-        mapfile = lambda wc: f"resources/mmseqs2/combined-fungi-{wc.db}.mapping.tsv"
+        mapfile = lambda wc: f"resources/mmseqs2/combined-fungi-{wc.mmseqs_db}.mapping.tsv"
     #shadow: "minimal"
     threads: 1
     resources:
