@@ -3,6 +3,7 @@ localrules:
     parse_mmseqs_first,
     parse_mmseqs_second,
     firstpass_fungal_proteins,
+    secondpass_fungal_proteins,
     collate_featurecount_co,
     create_blob_co,
     dbcan_parse_co,
@@ -150,7 +151,7 @@ rule mmseqs_createtsv_first_co:
     output:
         tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.tsv"
     log:
-        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/mmseqs_createtsv_first_co.{td_db}.log"
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/mmseqs_createtsv_first_co.log"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     conda: "../../envs/mmseqs.yaml"
     params:
@@ -206,7 +207,7 @@ rule firstpass_fungal_proteins:
 def get_mmseq_taxdb(wildcards):
     if config["refine_taxonomy"]:
         return config["mmseqs_refine_db"]
-    return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"])
+    return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
 
 rule mmseqs_secondpass_taxonomy_co:
     """
@@ -224,6 +225,7 @@ rule mmseqs_secondpass_taxonomy_co:
         tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}", 
         ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
         split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
+        target = lambda wildcards, input: (input.target).replace("_taxonomy", "")
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     conda: "../../envs/mmseqs.yaml"
     threads: 10
@@ -233,7 +235,7 @@ rule mmseqs_secondpass_taxonomy_co:
     shell:
         """
         mkdir -p {params.tmp}
-        mmseqs easy-taxonomy {input.query} {input.target} {params.output} {params.tmp} \
+        mmseqs easy-taxonomy {input.query} {params.target} {params.output} {params.tmp} \
             --lca-ranks {params.ranks} --lca-mode 3 --tax-lineage 1 --split-memory-limit {params.split_memory_limit}M \
             --threads {resources.tasks} > {log} 2>&1
         """
@@ -254,9 +256,48 @@ rule parse_mmseqs_second:
         ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
     shell:
         """
-        python {params.script} -i {input.tsv} -o {output.tsv} -r {params.ranks} > {log} 2>&1
+        python {params.script} -i {params.tsv} -o {output.tsv} -r {params.ranks} > {log} 2>&1
         """
-        
+
+rule secondpass_fungal_proteins:
+    input:
+        parsed = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv", mmseqs_db = config["mmseqs_db"]),
+        genecall = rules.transdecoder_predict_co.output,
+    output:
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/genecall/fungal.{suff}",
+            suff = ["faa","gff3","cds","bed","taxonomy.tsv"])
+    params:
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        indir = lambda wildcards, input: os.path.dirname(input.genecall[0]),
+    shadow: "minimal"
+    run:
+        import pandas as pd
+        import os
+        df = pd.read_csv(input.parsed[0], sep="\t", header=0, index_col=0)
+        fungi = df.loc[df["kingdom"]=="Fungi"].index.tolist()
+        gff = os.path.join(params.indir, "final.fa.transdecoder.gff3")
+        with open(f"{params.outdir}/fungal.gff3", "w") as fhout, open(gff, "r") as fhin:
+            for line in fhin:
+                if line.startswith("#"):
+                    fhout.write(line)
+                else:
+                    if line.split("\t")[-1].split(";")[0].replace("ID=", "") in fungi:
+                        fhout.write(line)
+        bed = os.path.join(params.indir, "final.fa.transdecoder.bed")
+        with open(f"{params.outdir}/fungal.bed", "w") as fhout, open(bed, "r") as fhin:
+            for i, line in enumerate(fhin):
+                if i == 0:
+                    fhout.write(line)
+                else:
+                    if line.split("\t")[3].split(";")[0].replace("ID=", "") in fungi:
+                        fhout.write(line)
+        with open("fungi.ids", "w") as fhout:
+            for i in fungi:
+                fhout.write(i + "\n")
+        shell("seqkit grep -f fungi.ids {params.indir}/final.fa.transdecoder.cds > {params.outdir}/fungal.cds")
+        shell("seqkit grep -f fungi.ids {params.indir}/final.fa.transdecoder.pep > {params.outdir}/fungal.faa")
+        df.loc[fungi].to_csv(f"{params.outdir}/fungal.taxonomy.tsv", sep="\t", index=True)
+
 #################################
 ## READ COUNTING CO-ASSEMBLIES ##
 #################################
