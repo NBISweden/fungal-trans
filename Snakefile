@@ -69,6 +69,7 @@ wildcard_constraints:
     portals = f"({'|'.join(list(genomes.index.tolist()))})",
     taxname = f"({'|'.join(list(config['taxmap'].keys()))})",
     aligner = "bowtie2|star",
+    i = "1|2",
 
 # Get environment info
 pythonpath = sys.executable
