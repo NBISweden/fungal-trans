@@ -1,9 +1,9 @@
 localrules:
     mmseqs_convertali_co,
-    parse_mmseqs_first,
-    parse_mmseqs_second,
-    firstpass_fungal_proteins,
-    secondpass_fungal_proteins,
+    parse_mmseqs_first_co,
+    parse_mmseqs_second_co,
+    firstpass_fungal_proteins_co,
+    secondpass_fungal_proteins_co,
     collate_featurecount_co,
     dbcan_parse_co,
     normalize_featurecount_co,
@@ -162,7 +162,7 @@ rule mmseqs_createtsv_first_co:
         mmseqs createtsv {input.query} {params.result} {output.tsv} --threads {resources.tasks} > {log} 2>&1
         """
 
-rule parse_mmseqs_first:
+rule parse_mmseqs_first_co:
     """
     Parse mmseqs taxonomy output, adds columns with ranks
     """
@@ -180,12 +180,12 @@ rule parse_mmseqs_first:
         python {params.script} -i {input.tsv} -o {output.tsv} -r {params.ranks} > {log} 2>&1
         """
 
-rule firstpass_fungal_proteins:
+rule firstpass_fungal_proteins_co:
     """
     Extract proteins from first taxonomy pass that are classified as fungi
     """
     input:
-        parsed = rules.parse_mmseqs_first.output.tsv,
+        parsed = rules.parse_mmseqs_first_co.output.tsv,
         fa = rules.transdecoder_predict_co.output[0]
     output:
         "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.fungal.faa"
@@ -200,11 +200,6 @@ rule firstpass_fungal_proteins:
                 f.write(i + "\n")
         shell("seqkit grep -f {params.idlist} {input.fa} > {output}")
         os.remove(params.idlist)
-
-def get_mmseq_taxdb(wildcards):
-    if config["refine_taxonomy"]:
-        return config["mmseqs_refine_db"]
-    return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
 
 rule mmseqs_secondpass_taxonomy_co:
     """
@@ -237,7 +232,7 @@ rule mmseqs_secondpass_taxonomy_co:
             --threads {resources.tasks} > {log} 2>&1
         """
 
-rule parse_mmseqs_second:
+rule parse_mmseqs_second_co:
     """
     Parse mmseqs taxonomy output from second run
     """
@@ -256,7 +251,7 @@ rule parse_mmseqs_second:
         python {params.script} -i {params.tsv} -o {output.tsv} -r {params.ranks} > {log} 2>&1
         """
 
-rule secondpass_fungal_proteins:
+rule secondpass_fungal_proteins_co:
     input:
         parsed = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv", mmseqs_db = config["mmseqs_db"]),
         genecall = rules.transdecoder_predict_co.output,
@@ -268,32 +263,7 @@ rule secondpass_fungal_proteins:
         indir = lambda wildcards, input: os.path.dirname(input.genecall[0]),
     shadow: "minimal"
     run:
-        import pandas as pd
-        import os
-        df = pd.read_csv(input.parsed[0], sep="\t", header=0, index_col=0)
-        fungi = df.loc[df["kingdom"]=="Fungi"].index.tolist()
-        gff = os.path.join(params.indir, "final.fa.transdecoder.gff3")
-        with open(f"{params.outdir}/fungal.gff3", "w") as fhout, open(gff, "r") as fhin:
-            for line in fhin:
-                if line.startswith("#"):
-                    fhout.write(line)
-                else:
-                    if line.split("\t")[-1].split(";")[0].replace("ID=", "") in fungi:
-                        fhout.write(line)
-        bed = os.path.join(params.indir, "final.fa.transdecoder.bed")
-        with open(f"{params.outdir}/fungal.bed", "w") as fhout, open(bed, "r") as fhin:
-            for i, line in enumerate(fhin):
-                if i == 0:
-                    fhout.write(line)
-                else:
-                    if line.split("\t")[3].split(";")[0].replace("ID=", "") in fungi:
-                        fhout.write(line)
-        with open("fungi.ids", "w") as fhout:
-            for i in fungi:
-                fhout.write(i + "\n")
-        shell("seqkit grep -f fungi.ids {params.indir}/final.fa.transdecoder.cds > {params.outdir}/fungal.cds")
-        shell("seqkit grep -f fungi.ids {params.indir}/final.fa.transdecoder.pep > {params.outdir}/fungal.faa")
-        df.loc[fungi].to_csv(f"{params.outdir}/fungal.taxonomy.tsv", sep="\t", index=True)
+        write_fungal_proteins(input.parsed, params.indir, params.outdir)
 
 #################################
 ## READ COUNTING CO-ASSEMBLIES ##
