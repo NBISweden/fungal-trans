@@ -8,8 +8,8 @@ def assembly_input(wildcards):
     d = "unfiltered"
     if config["filter_reads"]:
         d="filtered"
-    R1 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R1.fungi.nohost.fastq.gz"
-    R2 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R2.fungi.nohost.fastq.gz"
+    R1 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R1.fastq.gz"
+    R2 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R2.fastq.gz"
     return [R1, R2]
 
 rule transabyss:
@@ -81,8 +81,6 @@ rule trinity:
         assembly_input
     output:
         fa="results/assembly/trinity/{filter_source}/{sample_id}/final.fa",
-        R1="results/assembly/trinity/{filter_source}/{sample_id}/{sample_id}_R1.fastq.gz",
-        R2="results/assembly/trinity/{filter_source}/{sample_id}/{sample_id}_R2.fastq.gz"
     log: "results/assembly/trinity/{filter_source}/{sample_id}/log"
     params:
         min_contig_len = config["min_contig_len"],
@@ -90,10 +88,10 @@ rule trinity:
         outdir=lambda wildcards, output: os.path.dirname(output.fa),
         out_base = lambda wildcards, output: os.path.basename(output.fa),
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
-    threads: 10
+    threads: 6
     resources:
         runtime = 24 * 60,
-        mem_mb = 16000
+        mem_mb = 5000
     #conda:
     #    "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
@@ -103,7 +101,7 @@ rule trinity:
         rm -rf {params.tmpdir}
         mkdir -p {params.tmpdir}
         Trinity --CPU {threads} --min_contig_length {params.min_contig_len} \
-            --output {params.tmpdir} --left {input.R1} --right {input.R2} \
+            --output {params.tmpdir} --left {input[0]} --right {input[1]} \
             --seqType fq --max_memory {params.max_mem}G > {log} 2>&1
         mv {params.tmpdir}/* {params.outdir}/
         mv {params.tmpdir}.Trinity.fasta {output.fa}
@@ -247,10 +245,10 @@ rule trinity_co:
         outdir = lambda wildcards, output: os.path.dirname(output.fa),
         out_base = lambda wildcards, output: os.path.basename(output.fa),
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
-    threads: 10
+    threads: 6
     resources:
         runtime = 24 * 60,
-        mem_mb = 16000
+        mem_mb = 5000
     #conda:
     #    "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
