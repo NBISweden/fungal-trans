@@ -208,7 +208,7 @@ rule mmseqs_secondpass_taxonomy:
         expand("results/annotation/{{assembler}}/{{filter_source}}/{{sample_id}}/taxonomy/{mmseqs_db}/mmseqs_secondpass_taxonomy.log", mmseqs_db = config["mmseqs_db"])
     params:
         output = lambda wildcards, output: f"{os.path.dirname(output[0])}/secondpass-taxresult",
-        tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}", 
+        tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.sample_id}", 
         ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
         split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
         target = lambda wildcards, input: (input.target).replace("_taxonomy", "")
@@ -247,7 +247,7 @@ rule parse_mmseqs_second:
 
 rule secondpass_fungal_proteins:
     input:
-        parsed = expand("results/annotation/{assembler}/{filter_source}/{sample_id}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv", mmseqs_db = config["mmseqs_db"]),
+        parsed = expand("results/annotation/{{assembler}}/{{filter_source}}/{{sample_id}}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv", mmseqs_db = config["mmseqs_db"]),
         genecall = rules.transdecoder_predict.output,
     output:
         expand("results/annotation/{{assembler}}/{{filter_source}}/{{sample_id}}/genecall/fungal.{suff}", 
