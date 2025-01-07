@@ -91,7 +91,7 @@ rule mmseqs_firstpass_taxonomy_co:
         mkdir -p {params.tmp}
         mmseqs taxonomy {input.query} {input.target} {params.output} {params.tmp} -e 1e-5 -a 1 \
             --lca-mode 3 --tax-output-mode 0 --lca-ranks {params.ranks} --tax-lineage 1 \
-            --split-memory-limit {params.split_memory_limit}M --threads {resources.tasks} > {log} 2>&1
+            --split-memory-limit {params.split_memory_limit}M --threads {threads} > {log} 2>&1
         mv {params.tmp}/latest/first.* {params.aln_dir}
         rm -r {params.tmp}
         """
@@ -159,7 +159,7 @@ rule mmseqs_createtsv_first_co:
         tasks = 1
     shell:
         """
-        mmseqs createtsv {input.query} {params.result} {output.tsv} --threads {resources.tasks} > {log} 2>&1
+        mmseqs createtsv {input.query} {params.result} {output.tsv} --threads {threads} > {log} 2>&1
         """
 
 rule parse_mmseqs_first_co:
@@ -221,15 +221,12 @@ rule mmseqs_secondpass_taxonomy_co:
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     conda: "../../envs/mmseqs.yaml"
     threads: 10
-    resources:
-        mem_mb = 3600,
-        tasks = 1
     shell:
         """
         mkdir -p {params.tmp}
         mmseqs easy-taxonomy {input.query} {params.target} {params.output} {params.tmp} \
             --lca-ranks {params.ranks} --lca-mode 3 --tax-lineage 1 --split-memory-limit {params.split_memory_limit}M \
-            --threads {resources.tasks} > {log} 2>&1
+            --threads {threads} > {log} 2>&1
         """
 
 rule parse_mmseqs_second_co:
@@ -287,7 +284,7 @@ rule featurecount_co:
     threads: 4
     shell:
         """
-        featureCounts -T {resources.tasks} {params.setting} -a {input.gff} -o {output.cnt} {input.bam} > {log} 2>&1
+        featureCounts -T {threads} {params.setting} -a {input.gff} -o {output.cnt} {input.bam} > {log} 2>&1
         """
 
 rule normalize_featurecount_co:
