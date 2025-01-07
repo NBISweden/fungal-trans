@@ -1,4 +1,8 @@
 localrules:
+    mmseqs_convertali,
+    parse_mmseqs_first,
+    firstpass_fungal_proteins,
+    secondpass_fungal_proteins,
     collate_dbcan,
     collate_taxonomy,
     dbcan_parse,
@@ -31,9 +35,6 @@ rule transdecoder_longorfs:
     container: "docker://trinityrnaseq/transdecoder:5.7.1"
     params:
         output_dir = lambda wildcards: f"results/annotation/{wildcards.assembler}/{wildcards.filter_source}/{wildcards.sample_id}/transdecoder"
-    resources:
-        tasks= 1,
-        runtime = 240
     shell:
         """
         TransDecoder.LongOrfs -t {input.fa} -O {params.output_dir} > {log} 2>&1
@@ -69,7 +70,7 @@ rule mmseqs_firstpass_taxonomy:
         aln = expand("results/annotation/{{assembler}}/{{filter_source}}/{{sample_id}}/transdecoder/{{td_db}}-taxaDB_aln/first.{suff}", suff = ["index","dbtype"]),
     log:
         "results/annotation/{assembler}/{filter_source}/{sample_id}/transdecoder/mmseqs_firstpass_taxonomy.{td_db}.log"
-    threads: 10
+    threads: 4
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     conda: "../../envs/mmseqs.yaml"
     params:
@@ -78,15 +79,12 @@ rule mmseqs_firstpass_taxonomy:
         output = lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
         ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
         aln_dir = lambda wildcards, output: os.path.dirname(output.aln[0])
-    resources:
-        mem_mb = 3600,
-        tasks = 1
     shell:
         """
         mkdir -p {params.tmp}
         mmseqs taxonomy {input.query} {input.target} {params.output} {params.tmp} -e 1e-5 -a 1 \
             --lca-mode 3 --tax-output-mode 0 --lca-ranks {params.ranks} --tax-lineage 1 \
-            --split-memory-limit {params.split_memory_limit}M --threads {resources.tasks} > {log} 2>&1
+            --split-memory-limit {params.split_memory_limit}M --threads {threads} > {log} 2>&1
         mv {params.tmp}/latest/first.* {params.aln_dir}
         rm -r {params.tmp}
         """
@@ -148,12 +146,9 @@ rule mmseqs_createtsv_first:
     params:
         result = lambda wildcards, input: f"{os.path.dirname(input.result[0])}/{wildcards.td_db}-taxaDB",
     threads: 1
-    resources:
-        mem_mb = 1000,
-        tasks = 1
     shell:
         """
-        mmseqs createtsv {input.query} {params.result} {output.tsv} --threads {resources.tasks} > {log} 2>&1
+        mmseqs createtsv {input.query} {params.result} {output.tsv} --threads {threads} > {log} 2>&1
         """
 
 rule parse_mmseqs_first:
@@ -215,15 +210,12 @@ rule mmseqs_secondpass_taxonomy:
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     conda: "../../envs/mmseqs.yaml"
     threads: 10
-    resources:
-        mem_mb = 3600,
-        tasks = 1
     shell:
         """
         mkdir -p {params.tmp}
         mmseqs easy-taxonomy {input.query} {params.target} {params.output} {params.tmp} \
             --lca-ranks {params.ranks} --lca-mode 3 --tax-lineage 1 --split-memory-limit {params.split_memory_limit}M \
-            --threads {resources.tasks} > {log} 2>&1
+            --threads {threads} > {log} 2>&1
         """
 
 rule parse_mmseqs_second:
