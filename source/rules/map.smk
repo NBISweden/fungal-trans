@@ -3,6 +3,44 @@ localrules: multiqc_map_report, multiqc_map_report_co, gff2bed, infer_experiment
 ###############################
 ## Mapping for co-assemblies ##
 ###############################
+rule kallisto_index_co:
+    input:
+        "results/co-assembly/{assembler}/{assembly}/final.fa"
+    output:
+        "results/map/co-assembly/{assembler}/{assembly}/kallisto_index"
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/kallisto_index.log"
+    container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
+    conda: "../../envs/kallisto.yaml"
+    threads: 2
+    shell:
+        """
+        kallisto index -t {threads} -i {output} {input} > {log} 2>&1
+        """
+
+rule kallisto_quant_co:
+    input:
+        index = rules.kallisto_index_co.output,
+        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    output:
+        h5 = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/abundance.h5",
+        tsv = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/abundance.tsv",
+        json = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/run_info.json",
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto.log"
+    container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
+    conda: "../../envs/kallisto.yaml"
+    params:
+        bootstrap = 100,
+        outdir = lambda wildcards, output: os.path.dirname(output.h5)
+    threads: 2
+    shell:
+        """
+        kallisto quant -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.R1} {input.R2} > {log} 2>&1
+        """
+
+
 rule bowtie_build_co:
     input:
         "results/co-assembly/{assembler}/{assembly}/final.fa"
@@ -65,6 +103,42 @@ rule multiqc_map_report_co:
 #######################################
 ## Mapping for individual assemblies ##
 #######################################
+rule kallisto_index:
+    input:
+        "results/assembly/{assembler}/{filter_source}/{sample_id}/final.fa"
+    output:
+        "results/map/{assembler}/{filter_source}/{sample_id}/kallisto_index"
+    log:
+        "results/map/{assembler}/{filter_source}/{sample_id}/kallisto_index.log"
+    container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
+    conda: "../../envs/kallisto.yaml"
+    threads: 2
+    shell:
+        """
+        kallisto index -t {threads} -i {output} {input} > {log} 2>&1
+        """
+
+rule kallisto_quant:
+    input:
+        index = rules.kallisto_index.output,
+        fq = assembly_input
+    output:
+        h5 = "results/map/{assembler}/{filter_source}/{sample_id}/abundance.h5",
+        tsv = "results/map/{assembler}/{filter_source}/{sample_id}/abundance.tsv",
+        json = "results/map/{assembler}/{filter_source}/{sample_id}/run_info.json",
+    log:
+        "results/map/{assembler}/{filter_source}/{sample_id}/kallisto.log"
+    container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
+    conda: "../../envs/kallisto.yaml"
+    params:
+        bootstrap = 100,
+        outdir = lambda wildcards, output: os.path.dirname(output.h5)
+    threads: 2
+    shell:
+        """
+        kallisto quant -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.fq[0]} {input.fq[1]} > {log} 2>&1
+        """
+
 rule bowtie_build:
     input:
         "results/assembly/{assembler}/{filter_source}/{sample_id}/final.fa"
