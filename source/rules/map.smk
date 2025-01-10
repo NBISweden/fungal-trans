@@ -67,11 +67,11 @@ rule multiqc_map_report_co:
 #######################################
 rule bowtie_build:
     input:
-        "results/assembly/{assembler}/{source}/{sample_id}/final.fa"
+        "results/assembly/{assembler}/{filter_source}/{sample_id}/final.fa"
     output:
-        expand("results/map/{{assembler}}/{{source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
+        expand("results/map/{{assembler}}/{{filter_source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
     params:
-        prefix = "results/map/{assembler}/{source}/{sample_id}/final.fa"
+        prefix = "results/map/{assembler}/{filter_source}/{sample_id}/final.fa"
     container: "docker://quay.io/biocontainers/bowtie2:2.5.4--he96a11b_5"
     threads: 1
     resources:
@@ -83,8 +83,8 @@ rule bowtie_build:
 
 rule bowtie:
     input:
-        #R1 = "results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R1.fastq.gz",
-        #R2 = "results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R2.fastq.gz",
+        #R1 = "results/assembly/{assembler}/{filter_source}/{sample_id}/{sample_id}_R1.fastq.gz",
+        #R2 = "results/assembly/{assembler}/{filter_source}/{sample_id}/{sample_id}_R2.fastq.gz",
         fq = assembly_input,
         bt = expand("results/map/{{assembler}}/{{filter_source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
     output:
@@ -118,9 +118,9 @@ rule samtools_sort:
     
 rule gff2bed:
     input:
-        gff = "results/annotation/{assembler}/{source}/{sample_id}/frame_selection/final.reformat.gff"
+        gff = "results/annotation/{assembler}/{filter_source}/{sample_id}/frame_selection/final.reformat.gff"
     output:
-        bed = "results/annotation/{assembler}/{source}/{sample_id}/frame_selection/final.reformat.bed"
+        bed = "results/annotation/{assembler}/{filter_source}/{sample_id}/frame_selection/final.reformat.bed"
     conda:
         "../../envs/rseqc.yaml"
     shell:
@@ -130,10 +130,10 @@ rule gff2bed:
 
 rule infer_experiment:
     input:
-        bed = "results/annotation/{assembler}/{source}/{sample_id}/frame_selection/final.reformat.bed",
-        bam = "results/map/{assembler}/{source}/{sample_id}/{sample_id}.bam"
+        bed = "results/annotation/{assembler}/{filter_source}/{sample_id}/frame_selection/final.reformat.bed",
+        bam = "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
     output:
-        "results/annotation/{assembler}/{source}/{sample_id}/rseqc/rseqc.out"
+        "results/annotation/{assembler}/{filter_source}/{sample_id}/rseqc/rseqc.out"
     conda:
         "../../envs/rseqc.yaml"
     shell:
@@ -143,30 +143,30 @@ rule infer_experiment:
 
 rule multiqc_map_report:
     input:
-        bt_logs = expand("results/map/{{assembler}}/{{source}}/{sample_id}/bowtie.log",
+        bt_logs = expand("results/map/{{assembler}}/{{filter_source}}/{sample_id}/bowtie.log",
             sample_id = samples.keys()),
-        fc_logs = expand("results/annotation/{{assembler}}/{{source}}/{sample_id}/featureCounts/fc.tab.summary",
+        fc_logs = expand("results/annotation/{{assembler}}/{{filter_source}}/{sample_id}/featureCounts/fc.tab.summary",
             sample_id = samples.keys()),
-        rs_logs = expand("results/annotation/{{assembler}}/{{source}}/{sample_id}/rseqc/rseqc.out",
+        rs_logs = expand("results/annotation/{{assembler}}/{{filter_source}}/{sample_id}/rseqc/rseqc.out",
             sample_id = samples.keys())
     output:
-        "results/report/map/{assembler}_{source}_map_report.html",
-        "results/report/map/{assembler}_{source}_map_report_data/multiqc_bowtie2.txt"
+        "results/report/map/{assembler}_{filter_source}_map_report.html",
+        "results/report/map/{assembler}_{filter_source}_map_report_data/multiqc_bowtie2.txt"
     params:
         dir = "qc",
         outdir = "results/report/map",
         config = "config/multiqc_{assembler}_config.yaml"
     run:
         assembler = wildcards.assembler
-        source = wildcards.source
+        source = wildcards.filter_source
         for sample_id in samples.keys():
             tmp_dir = "{dir}/{sample_id}".format(dir=params.dir, sample_id=sample_id)
             shell("mkdir -p {tmp_dir}")
-            bt_log = "results/map/{assembler}/{source}/{sample_id}/bowtie.log".format(
+            bt_log = "results/map/{assembler}/{filter_source}/{sample_id}/bowtie.log".format(
                 assembler=assembler, source=source, sample_id=sample_id)
-            fc_log = "results/annotation/{assembler}/{source}/{sample_id}/featureCounts/fc.tab.summary".format(
+            fc_log = "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab.summary".format(
                 assembler=assembler, source=source, sample_id=sample_id)
-            rs_log = "results/annotation/{assembler}/{source}/{sample_id}/rseqc/rseqc.out".format(
+            rs_log = "results/annotation/{assembler}/{filter_source}/{sample_id}/rseqc/rseqc.out".format(
                 assembler=assembler, source=source, sample_id=sample_id)
             shell("cp {bt_log} {tmp_dir}/{sample_id}.bowtie.log")
             shell("cp {rs_log} {tmp_dir}/{sample_id}.rseqc.log")
@@ -176,5 +176,5 @@ rule multiqc_map_report:
                         fhout.write("Status\t{}\n".format(sample_id))
                     else:
                         fhout.write(line)
-        shell("cd {params.dir}; multiqc -f -c ../{params.config} -n {wildcards.assembler}_{wildcards.source}_map_report -o ../{params.outdir} .; cd -")
+        shell("cd {params.dir}; multiqc -f -c ../{params.config} -n {wildcards.assembler}_{wildcards.filter_source}_map_report -o ../{params.outdir} .; cd -")
         shell("rm -rf {params.dir}")
