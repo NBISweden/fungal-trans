@@ -27,7 +27,7 @@ star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAi
 # may end up in the 'host' bin
 star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
 # feature counts
-fc_params: "-B -p -t CDS -g gene_id -Q 10"
+fc_params: "-p -t mRNA -g ID -Q 10"
 ## assembly
 # Choose between 'megahit', 'trinity', 'transabyss'
 assembler: trinity
