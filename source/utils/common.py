@@ -59,6 +59,13 @@ def parse_sample_list(f, config):
                          'accession': accession}
     return samples, map_dict, assemblies
 
+def assembly_input(wildcards):
+    d = "unfiltered"
+    if config["filter_reads"]:
+        d="filtered"
+    R1 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R1.fastq.gz"
+    R2 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R2.fastq.gz"
+    return [R1, R2]
 
 def fungi_input(wc):
     suffices = {'unfiltered': 'cut.trim.fastq.gz',
