@@ -234,13 +234,10 @@ rule mmseqs_extract_fungalDB:
         "resources/mmseqs2/extract_fungal_{mmseqs_db}_mmseqsDB.log"
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
-    threads: 4
-    resources:
-        mem_mb = 8000,
-        tasks = 4
+    threads: 1
     shell:
         """
-        mmseqs filtertaxseqdb {input.db} {output.db} --taxon-list 4751 --threads {resources.tasks} > {log} 2>&1
+        mmseqs filtertaxseqdb {input.db} {output.db} --taxon-list 4751 --threads {threads} > {log} 2>&1
         """
 
 rule mmseqs_convert2fasta_fungalDB:
@@ -253,6 +250,7 @@ rule mmseqs_convert2fasta_fungalDB:
         fasta="resources/mmseqs2/fungi-{mmseqs_db}.fasta"
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    threads: 1
     shell:
         """
         mmseqs convert2fasta {input.db} {output.fasta}
@@ -290,6 +288,7 @@ rule mmseqs_createseqdb:
         "resources/mmseqs2/create-fungi-{mmseqs_db}-seqdb.log"
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    threads: 1
     shell:
         """
         mmseqs createdb {input.jgi_fasta} {input.mmseqs_fasta} {output.db} --dbtype 1 > {log} 2>&1
@@ -304,8 +303,7 @@ rule mmseqs_create_taxidmap:
         lookupfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}.lookup"),
     output:
         tsv="resources/mmseqs2/{mmseqs_db}.taxidmap.tsv"
-    resources:
-        mem_mb = 90000
+    threads: 1
     run:
         import pandas as pd
         protmap = pd.read_csv(input.lookupfile, 
@@ -356,15 +354,11 @@ rule mmseqs_createtaxdb:
         taxdump = lambda wc, input: os.path.dirname(input.taxdump[0]),
         tmpdir = os.environ.get("TMPDIR", "scratch"),
         mapfile = lambda wc: f"resources/mmseqs2/combined-fungi-{wc.mmseqs_db}.mapping.tsv"
-    #shadow: "minimal"
     threads: 1
-    resources:
-        tasks = 1,
-        mem_mb = 1000
     shell:
         """
         cat {input.mapfiles} > {params.mapfile}
-        mmseqs createtaxdb {input.db} {params.tmpdir} --ncbi-tax-dump {params.taxdump} --tax-mapping-file {params.mapfile} --threads {resources.tasks} > {log} 2>&1
+        mmseqs createtaxdb {input.db} {params.tmpdir} --ncbi-tax-dump {params.taxdump} --tax-mapping-file {params.mapfile} --threads {threads} > {log} 2>&1
         """
 
 rule cluster_transcripts:
