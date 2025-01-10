@@ -10,7 +10,12 @@ def parse_sample_list(f, config):
     """
     samples = {}
     map_dict = {}
-    source = config['read_source']
+    if config['filter_reads']:
+        input_dir = 'filtered'
+    else:
+        input_dir = 'unfiltered'
+    host_aligner = config["host_aligner"]
+    dir = config['datadir']
     suffices = {'unfiltered': 'cut.trim.fastq.gz',
                 'filtered': 'filtered.union.fastq.gz',
                 'taxmapper': 'cut.trim.filtered.fastq.gz',
@@ -39,25 +44,28 @@ def parse_sample_list(f, config):
             accession = df.loc[sample, 'accession']
         else:
             accession = ''
-        if source == 'bowtie2' and config["host_aligner"] == "star":
-            source = "star"
         if len(assemblies.keys()) > 0:
             if df.loc[sample,'assembly'] != '':
                 assembly = df.loc[sample, 'assembly']
                 # Define reads for assembly
-                R1_f = 'results/{source}/{sample}/{sample}_R1.{suff}'.format(source=source,
-                                                                             sample=sample, suff=suffices[source])
-                R2_f = 'results/{source}/{sample}/{sample}_R2.{suff}'.format(source=source,
-                                                                             sample=sample, suff=suffices[source])
+                R1_f = f"results/{input_dir}/{sample}/{sample}_R1.fastq.gz"
+                R2_f = f"results/{input_dir}/{sample}/{sample}_R2.fastq.gz"
                 assemblies[assembly]['R1'].append(R1_f)
                 assemblies[assembly]['R2'].append(R2_f)
                 map_dict[sample] = {'R1': R1_f, 'R2': R2_f}
 
-        samples[sample]={'R1': '{dir}/{f}'.format(f=R1, dir=config['datadir']),
-                         'R2': '{dir}/{f}'.format(f=R2, dir=config['datadir']),
+        samples[sample]={'R1': f'{dir}/{R1}',
+                         'R2': f'{dir}/{R2}',
                          'accession': accession}
     return samples, map_dict, assemblies
 
+def assembly_input(wildcards):
+    d = "unfiltered"
+    if config["filter_reads"]:
+        d="filtered"
+    R1 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R1.fastq.gz"
+    R2 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R2.fastq.gz"
+    return [R1, R2]
 
 def fungi_input(wc):
     suffices = {'unfiltered': 'cut.trim.fastq.gz',
@@ -71,3 +79,52 @@ def fungi_input(wc):
     R1 = f'results/{aligndir}/{wc.sample_id}/{wc.sample_id}_R1.{suffices[wc.filter_source]}'
     R2 = f'results/{aligndir}/{wc.sample_id}/{wc.sample_id}_R2.{suffices[wc.filter_source]}'
     return [R1, R2]
+
+def parse_extra_genomes(f):
+    """
+    Parse the extra genomes file
+    """
+    extra_genomes = {}
+    with open(f, 'r') as f:
+        for line in f:
+            line = line.strip()
+            portal, taxid = line.rsplit()[0:2]
+            try:
+                taxid = int(taxid)
+            except ValueError:
+                continue
+            extra_genomes[portal] = taxid
+    return extra_genomes
+
+def get_mmseq_taxdb(wildcards):
+    if config["refine_taxonomy"]:
+        return config["mmseqs_refine_db"]
+    return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
+
+def write_fungal_proteins(parsed, indir, outdir):
+    import pandas as pd
+    import os
+    df = pd.read_csv(parsed, sep="\t", header=0, index_col=0)
+    fungi = df.loc[df["kingdom"]=="Fungi"].index.tolist()
+    gff = os.path.join(indir, "final.fa.transdecoder.gff3")
+    with open(f"{outdir}/fungal.gff3", "w") as fhout, open(gff, "r") as fhin:
+        for line in fhin:
+            if line.startswith("#"):
+                fhout.write(line)
+            else:
+                if line.split("\t")[-1].split(";")[0].replace("ID=", "") in fungi:
+                    fhout.write(line)
+    bed = os.path.join(indir, "final.fa.transdecoder.bed")
+    with open(f"{outdir}/fungal.bed", "w") as fhout, open(bed, "r") as fhin:
+        for i, line in enumerate(fhin):
+            if i == 0:
+                fhout.write(line)
+            else:
+                if line.split("\t")[3].split(";")[0].replace("ID=", "") in fungi:
+                    fhout.write(line)
+    with open("fungi.ids", "w") as fhout:
+            for i in fungi:
+                fhout.write(i + "\n")
+    shell("seqkit grep -f fungi.ids {indir}/final.fa.transdecoder.cds > {outdir}/fungal.cds")
+    shell("seqkit grep -f fungi.ids {indir}/final.fa.transdecoder.pep > {outdir}/fungal.faa")
+    df.loc[fungi].to_csv(f"{outdir}/fungal.taxonomy.tsv", sep="\t", index=True)

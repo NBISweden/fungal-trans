@@ -10,8 +10,14 @@ localrules:
     download_host,
     init_jgi,
     download_jgi_transcripts,
+    download_jgi_proteins,
     concat_transcripts,
-    prepare_diamond_JGI
+    concat_proteins,
+    prepare_diamond_JGI,
+    mmseqs_filter_fungalDB
+
+wildcard_constraints:
+    mmseqs_db = config["mmseqs_db"],
 
 ## NCBI Taxonomy ##
 rule ncbi_taxonomy:
@@ -21,21 +27,6 @@ rule ncbi_taxonomy:
         from ete3 import NCBITaxa
         shell("touch {output[0]}")
         ncbi_taxa = NCBITaxa(output[0])
-
-rule download_taxdump:
-    output:
-        names = "resources/taxonomy/names.dmp",
-        nodes = "resources/taxonomy/nodes.dmp"
-    params:
-        taxdump = "resources/taxonomy/taxdump.tar.gz"
-    shadow: "minimal"
-    shell:
-        """
-        curl -o {params.taxdump} ftp://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz
-        tar -xvf {params.taxdump}
-        mv nodes.dmp {output.nodes}
-        mv names.dmp {output.names}
-        """
 
 rule build_blobdb:
     input:
@@ -141,22 +132,16 @@ rule download_jgi_transcripts:
     For each 'portal', download the filtered transcripts 
     """
     output:
-        temp(touch("resources/JGI/genomes/{portal}.transcripts.fna.gz")),
+        transcripts=temp(touch("resources/JGI/genomes/{portal}.transcripts.fna.gz")),
+        #proteins=temp(touch("resources/JGI/genomes/{portal}.proteins.faa.gz"))
     input:
         cookies=rules.init_jgi.output.cookies,
     log:
         "resources/JGI/genomes/download_jgi_transcripts.{portal}.log"
-    params:
-        tmpdir = "$TMPDIR/{portal}",
-        xml = "$TMPDIR/{portal}/files.xml",
-        output = "$TMPDIR/{portal}/transcripts.fna.gz"
     retries: 3
     shell:
         """
-        mkdir -p {params.tmpdir}
-        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {params.output} 2>{log}
-        mv {params.output} {output}
-        rm -rf {params.tmpdir}
+        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {output.transcripts} 2>{log}
         """
 
 rule concat_transcripts:
@@ -166,7 +151,7 @@ rule concat_transcripts:
     output:
         "resources/fungi/fungi_transcripts.fasta.gz"
     input:
-        expand(rules.download_jgi_transcripts.output, portal=genomes.index.tolist())
+        expand(rules.download_jgi_transcripts.output.transcripts, portal=genomes.index.tolist())
     log:
         "resources/fungi/concat_transcripts.log"
     params:
@@ -181,6 +166,199 @@ rule concat_transcripts:
             fi
         done
         mv {params.tmpfile} {output} 
+        """
+
+rule download_jgi_proteins:
+    """
+    For each 'portal', download the filtered proteins. Also output a mapping file
+    of protein accession to taxid.
+    """
+    output:
+        proteins=temp(touch("resources/JGI/genomes/{portal}.proteins.faa.gz")),
+        mapping=temp(touch("resources/JGI/genomes/{portal}.mapping.tsv"))
+    input:
+        cookies=rules.init_jgi.output.cookies,
+    log:
+        "resources/JGI/genomes/download_jgi_proteins.{portal}.log"
+    params:
+        taxid = lambda wildcards: extra_genomes[wildcards.portal]
+    retries: 3
+    shell:
+        """
+        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} \
+            --protein_out {output.proteins} --taxidmap {output.mapping} --taxid {params.taxid} 2>{log}
+        """
+        
+
+rule concat_proteins:
+    """
+    Concatenates all non-zero proteins downloaded for genomes listed in 'extra_genomes' file.
+    """
+    output:
+        faa="resources/extra_genomes/proteins.faa.gz",
+        mapping="resources/extra_genomes/mapping.tsv"
+    input:
+        faa=expand(rules.download_jgi_proteins.output.proteins, portal=list(extra_genomes.keys())),
+        mapping=expand(rules.download_jgi_proteins.output.mapping, portal=list(extra_genomes.keys()))
+    log:
+        "resources/extra_genomes/concat_proteins.log"
+    params:
+        min_len = 100
+    run:
+        from Bio.SeqIO import parse
+        import gzip as gz
+        with gz.open(output.faa, "wt") as fhout:
+            for f in input.faa:
+                with gz.open(f, 'rt') as fhin:
+                    for record in parse(fhin, "fasta"):
+                        if len(record.seq) >= params.min_len:
+                            newid = (record.id).replace("|", ".")
+                            fhout.write(f">{newid}\n{record.seq}\n")
+        with open(output.mapping, "w") as fhout:
+            for f in input.mapping:
+                with open(f) as fhin:
+                    for line in fhin:
+                        seqid, taxid = line.strip().split("\t")
+                        newid = seqid.replace("|", ".")
+                        fhout.write(f"{newid}\t{taxid}\n")
+
+rule mmseqs_extract_fungalDB:
+    """
+    Uses the filtertaxseqdb command to extract fungal sequences from the official mmseqs2 database
+    """
+    input:
+        db=os.path.join(config["mmseqs_db_dir"],"{mmseqs_db}"),
+    output:
+        db="resources/mmseqs2/fungi-{mmseqs_db}"
+    log:
+        "resources/mmseqs2/extract_fungal_{mmseqs_db}_mmseqsDB.log"
+    conda: "../../envs/mmseqs.yaml"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    threads: 1
+    shell:
+        """
+        mmseqs filtertaxseqdb {input.db} {output.db} --taxon-list 4751 --threads {threads} > {log} 2>&1
+        """
+
+rule mmseqs_convert2fasta_fungalDB:
+    """
+    Converts the extracted mmseqs2 database to fasta format
+    """
+    input:
+        db=rules.mmseqs_extract_fungalDB.output.db
+    output:
+        fasta="resources/mmseqs2/fungi-{mmseqs_db}.fasta"
+    conda: "../../envs/mmseqs.yaml"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    threads: 1
+    shell:
+        """
+        mmseqs convert2fasta {input.db} {output.fasta}
+        """
+
+rule mmseqs_filter_fungalDB:
+    """
+    Filters the extracted fungal database to remove sequences shorter than a minimum length
+    """
+    input:
+        rules.mmseqs_convert2fasta_fungalDB.output.fasta
+    output:
+        fasta="resources/mmseqs2/filtered-fungi-{mmseqs_db}.fasta"
+    log:
+        "resources/mmseqs2/filter_fungi_{mmseqs_db}_mmseqsDB.log"
+    params:
+        min_len = 100
+    shell:
+        """
+        seqkit seq -m {params.min_len} {input} > {output.fasta}
+        """
+
+rule mmseqs_createseqdb:
+    """
+    Creates a sequence database for the concatenated proteins
+    """
+    output:
+        db="resources/mmseqs2/combined-fungi-{mmseqs_db}",
+        db_files=expand("resources/mmseqs2/combined-fungi-{{mmseqs_db}}{ext}", 
+            ext=[".dbtype","_h","_h.dbtype","_h.index",".index",".lookup",".source"])
+    input:
+        jgi_fasta=rules.concat_proteins.output.faa,
+        mmseqs_fasta=rules.mmseqs_filter_fungalDB.output.fasta
+    log:
+        "resources/mmseqs2/create-fungi-{mmseqs_db}-seqdb.log"
+    conda: "../../envs/mmseqs.yaml"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    threads: 1
+    shell:
+        """
+        mmseqs createdb {input.jgi_fasta} {input.mmseqs_fasta} {output.db} --dbtype 1 > {log} 2>&1
+        """
+
+rule mmseqs_create_taxidmap:
+    """
+    Create taxid mapping file for the official mmseqs2 database
+    """
+    input:
+        mapfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}_mapping"),
+        lookupfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}.lookup"),
+    output:
+        tsv="resources/mmseqs2/{mmseqs_db}.taxidmap.tsv"
+    threads: 1
+    run:
+        import pandas as pd
+        protmap = pd.read_csv(input.lookupfile, 
+                                sep="\t", 
+                                index_col=0, 
+                                header=None, 
+                                usecols=[0,1], 
+                                names=["id","accession"])
+        taxmap = pd.read_csv(input.mapfile,
+                                sep="\t", 
+                                index_col=0, 
+                                header=None, 
+                                usecols=[0,1], 
+                                names=["id", "taxid"])
+        pd.merge(protmap, taxmap, left_index=True, right_index=True).to_csv(output.tsv, sep="\t", header = False, index=False)
+
+
+rule download_taxdump:
+    """
+    Downloads the NCBI taxonomy dump
+    """
+    output:
+        expand("resources/ncbi-taxdump/{pref}.dmp", pref=["nodes","delnodes","gencode","merged","names"]),
+    log:
+        "resources/ncbi-taxdump/download_taxdump.log"
+    params:
+        outdir = lambda wc, output: os.path.dirname(output[0])
+    shell:
+        """
+        wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz -O - 2>{log} | tar -xz -C {params.outdir} 
+        """
+
+rule mmseqs_createtaxdb:
+    """
+    Creates a taxonomy database for the concatenated protein database
+    """
+    output:
+        db_files=expand("resources/mmseqs2/combined-fungi-{{mmseqs_db}}{ext}",  ext=["_taxonomy","_mapping"])
+    input:
+        db=rules.mmseqs_createseqdb.output.db,
+        mapfiles=[rules.mmseqs_create_taxidmap.output.tsv, rules.concat_proteins.output.mapping],
+        taxdump=rules.download_taxdump.output
+    log:
+        "resources/mmseqs2/createtaxdb-combined-fungi-{mmseqs_db}.log"
+    conda: "../../envs/mmseqs.yaml"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    params:
+        taxdump = lambda wc, input: os.path.dirname(input.taxdump[0]),
+        tmpdir = os.environ.get("TMPDIR", "scratch"),
+        mapfile = lambda wc: f"resources/mmseqs2/combined-fungi-{wc.mmseqs_db}.mapping.tsv"
+    threads: 1
+    shell:
+        """
+        cat {input.mapfiles} > {params.mapfile}
+        mmseqs createtaxdb {input.db} {params.tmpdir} --ncbi-tax-dump {params.taxdump} --tax-mapping-file {params.mapfile} --threads {threads} > {log} 2>&1
         """
 
 rule cluster_transcripts:

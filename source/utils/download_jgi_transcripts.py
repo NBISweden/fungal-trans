@@ -8,6 +8,8 @@ import tempfile
 import os
 from argparse import ArgumentParser
 import sys
+import gzip as gz
+from Bio.SeqIO import parse
 
 
 def tz_convert(timestamp):
@@ -44,7 +46,7 @@ def get_xml(portal, cookie):
     return tree
 
 
-def check_filtered(root):
+def check_filtered(root, ft="transcripts"):
     url = False
     timestamp = False
     files = []
@@ -56,7 +58,9 @@ def check_filtered(root):
         _files=_folder.findall(".//file")
         for f in _files:
             _filename = f.attrib["filename"]
-            if "filteredmodels" in _filename.lower() and "transcripts" in _filename and _filename.endswith(".gz"):
+            if "filteredmodels" in _filename.lower() and ft in _filename and _filename.endswith(".gz"):
+                if ft == "proteins" and "fasta" not in _filename:
+                    continue
                 files.append(f)
     for _file in files:
         _filename = _file.attrib["filename"]
@@ -73,7 +77,7 @@ def check_filtered(root):
     return url
 
 
-def check_filtered_folder(root):
+def check_filtered_folder(root, ft="transcripts", ft_folder="Transcripts"):
     url = False
     timestamp = False
     files = []
@@ -87,7 +91,7 @@ def check_filtered_folder(root):
                 sys.stderr.write(f"Found folder {foldername}/{subfoldername}\n")
                 for _subfolder in subfolder.findall(".//folder"):
                     _subfoldername = _subfolder.attrib["name"]
-                    if _subfoldername == "Transcripts":
+                    if _subfoldername == ft_folder:
                         sys.stderr.write(f"Found folder {foldername}/{subfoldername}/{_subfoldername}\n")
                         files = _subfolder.findall(".//file")
                         break
@@ -95,23 +99,28 @@ def check_filtered_folder(root):
                     break
     for file_element in files:
         _filename = file_element.attrib["filename"]
-        if "transcripts" in _filename or "GeneModels" in _filename and _filename.endswith(".gz"):
+        if ft=="transcripts" and "transcripts" in _filename or "GeneModels" in _filename and _filename.endswith(".gz"):
             _url = file_element.attrib["url"]
             _timestamp = tz_convert(file_element.attrib["timestamp"])
-            # if timestamp is not set, set it to the first file found
-            if not timestamp:
-                sys.stderr.write(f"Found file {_filename} with timestamp {_timestamp}\n")
-                url = _url
-                timestamp = _timestamp
-            # if timestamp is set, check if the current file is newer
-            elif timestamp and _timestamp>timestamp:
-                sys.stderr.write(f"Found newer file {_filename} with timestamp {_timestamp}\n")
-                url = _url
-                timestamp = _timestamp
+        elif ft=="proteins" and "proteins" in _filename and _filename.endswith(".gz"):
+            _url = file_element.attrib["url"]
+            _timestamp = tz_convert(file_element.attrib["timestamp"])
+        else:
+            continue
+        # if timestamp is not set, set it to the first file found
+        if not timestamp:
+            sys.stderr.write(f"Found file {_filename} with timestamp {_timestamp}\n")
+            url = _url
+            timestamp = _timestamp
+        # if timestamp is set, check if the current file is newer
+        elif timestamp and _timestamp>timestamp:
+            sys.stderr.write(f"Found newer file {_filename} with timestamp {_timestamp}\n")
+            url = _url
+            timestamp = _timestamp
     return url
 
 
-def find_mycocosm_file(root):
+def find_mycocosm_file(root, ft="transcripts", ft_folder="Transcripts"):
     md5 = False
     url = False
     for folder in root.findall("folder"):
@@ -172,31 +181,32 @@ def find_smallest(root):
                     sys.stderr.write(f"Found smaller file {filename} with size {size}\n")
     return url
 
-def find_files(root):
+def find_files(root, ft="transcripts"):
     """
     Find files in the XML tree
     Searches for the latest transcript file in the folder "Filtered Models ("best")/Transcripts"
     """
+    ft_folder = ft[0].upper()+ft[1:]
     url = False
     # check for files matching 'FilteredModels3.transcripts.fasta.gz'
-    sys.stderr.write("Searching for FilteredModels transcript file\n")
-    url = check_filtered(root)
+    sys.stderr.write(f"Searching for FilteredModels {ft} file\n")
+    url = check_filtered(root, ft=ft)
     if url:
         return url
     sys.stderr.write("No FilteredModels file found\n")
-    # if no url found, check folders to locate the Filtered Models ("best")/Transcripts folder
-    sys.stderr.write('Searching for Filtered Models ("best")/Transcripts folder \n')
-    url = check_filtered_folder(root)
+    # if no url found, check folders to locate the Filtered Models ("best")/Transcripts or Proteins folder
+    sys.stderr.write(f'Searching for Filtered Models ("best")/{ft_folder} folder \n')
+    url = check_filtered_folder(root, ft=ft, ft_folder=ft_folder)
     if url:
         return url
     # if no such folder exists with file, try searching for a filtered transcripts file under Mycocosm subfolder
-    sys.stderr.write('Filtered Models ("best")/Transcripts folder found\n')
-    sys.stderr.write("Searching for Mycocosm transcript file\n")
-    url = find_mycocosm_file(root)
+    sys.stderr.write(f'No Filtered Models ("best")/{ft_folder} folder found\n')
+    sys.stderr.write(f"Searching for Mycocosm {ft} file\n")
+    url = find_mycocosm_file(root, ft=ft, ft_folder=ft_folder)
     if url:
         return url
     # as a last resort, download the smallest transcript file found
-    sys.stderr.write("No file found, falling back to finding smallest transcript file\n")
+    sys.stderr.write(f"No file found, falling back to finding smallest {ft} file\n")
     url = find_smallest(root)
     return url
 
@@ -217,25 +227,48 @@ def main(args):
     Main function
     """
     root = get_xml(args.portal, args.cookie)
-    url = find_files(root)
-    if not url:
-        sys.stderr.write("No files found\n")
-        url=""
-        sys.exit(0)
-    url = f"{args.base}{url}"
-    if not args.outfile:
-        outfile = os.path.basename(url)
-    else:
+    if args.outfile:
         outfile = args.outfile
-    sys.stderr.write(f"Downloading {url} to {outfile}\n")
-    write_file(url, outfile, args.cookie)
+        url = find_files(root, ft="transcripts")
+        if not url:
+            sys.stderr.write("No files found\n")
+            url=""
+            sys.exit(0)
+        url = f"{args.base}{url}"
+        sys.stderr.write(f"Downloading {url} to {outfile}\n")
+        write_file(url, outfile, args.cookie)
+    if args.protein_out:
+        url = find_files(root, ft="proteins")
+        if not url:
+            sys.stderr.write("No files found\n")
+            url=""
+            sys.exit(0)
+        url = f"{args.base}{url}"
+        outfile = args.protein_out
+        sys.stderr.write(f"Downloading {url} to {outfile}\n")
+        write_file(url, outfile, args.cookie)
+        if args.taxidmap:
+            with open(args.taxidmap, 'w') as fhout, gz.open(args.protein_out, 'rt') as fhin:
+                for record in parse(fhin, "fasta"):
+                    fhout.write(f"{record.id}\t{args.taxid}\n")
+
+    
     
 
 if __name__ == '__main__':
     parser = ArgumentParser(description='Download transcript files from JGI Mycocosm')
     parser.add_argument('-p', '--portal', help='Portal shorthand name (e.g. Aaoar1)', required=True)
     parser.add_argument('-c', '--cookie', help="Cookie file for JGI", required=True)
-    parser.add_argument('-o', '--outfile', help='Output file name. If not given, the file will be saved in the current directory with the remote filename')
+    parser.add_argument('-o', '--outfile', help='Output file name for transcript file. Omit this to skip download of transcript file')
     parser.add_argument('-b', '--base', help='Base URL for JGI downloads (default: https://genome-downloads.jgi.doe.gov)', default="https://genome-downloads.jgi.doe.gov")
+    parser.add_argument('--protein_out', help='Attempt to find protein file for portal and write to file')
+    parser.add_argument("--taxidmap", help="Output file with protein id to taxid mapping")
+    parser.add_argument('--taxid', help='Taxid of portal', type=int)
     args = parser.parse_args()
+    if not args.outfile and not args.protein_out:
+        sys.stderr.write("No output file specified\n")
+        sys.exit(0)
+    if args.taxidmap and not args.taxid:
+        sys.stderr.write("No taxid specified for mapping\n")
+        sys.exit(0)
     main(args)

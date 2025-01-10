@@ -1,17 +1,18 @@
 localrules:
+    mmseqs_convertali_co,
+    parse_mmseqs_first_co,
+    parse_mmseqs_second_co,
+    firstpass_fungal_proteins_co,
+    secondpass_fungal_proteins_co,
     collate_featurecount_co,
-    create_blob_co,
     dbcan_parse_co,
     normalize_featurecount_co,
     parse_eggnog_co,
-    plot_blob_co,
-    reformat_fasta_co,
     sum_dbcan_co,
     sum_taxonomy_co,
     taxonomy_featurecount_co,
     dbcan_tax_annotations,
     eggnog_tax_annotations,
-    transfer_taxonomy_co
 
 ##########################################
 ##              CO ASSEMBLIES           ##
@@ -21,74 +22,275 @@ localrules:
 ###################################
 ## FRAME SELECTION CO-ASSEMBLIES ##
 ###################################
-rule frame_selection_co:
+rule transdecoder_longorfs_co:
+    """
+    Generate longest ORFs from co-assembly with transdecoder
+    """
     input:
         fa = "results/co-assembly/{assembler}/{assembly}/final.fa",
     output:
-        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/frame_selection/final.{suffix}",
-            suffix = ["gff","faa","fnn"])
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/final.fa.transdecoder_dir/longest_orfs.{suff}",
+            suff = ["pep","gff3","cds"])
     log:
-        "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/gms.log"
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/longest_orfs.log"
+    container: "docker://trinityrnaseq/transdecoder:5.7.1"
     params:
-        tmpdir = "$TMPDIR/{assembly}/",
-        outdir = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection"
-    threads: 2
+        output_dir = lambda wildcards: f"results/annotation/co-assembly/{wildcards.assembler}/{wildcards.assembly}/transdecoder"
     resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*2
+        tasks= 1,
+        runtime = 240
     shell:
         """
-        wd=$(pwd)
-        mkdir -p {params.tmpdir}
-        mkdir -p {params.outdir}
-        cd {params.tmpdir}
-        ln -sf $wd/{input.fa} final.fa
-        gmst.pl --output final --format GFF --fnn --faa final.fa
-        rm final.fa
-        mv final $wd/{params.outdir}/final.gff
-        mv {params.tmpdir}/* $wd/{params.outdir}/
-        cd $wd
-        rmdir {params.tmpdir}
+        TransDecoder.LongOrfs -t {input.fa} -O {params.output_dir} > {log} 2>&1
         """
 
-rule reformat_fasta_co:
+rule mmseqs_createquerydb_longorfs_co:
+    """
+    Create mmseqs database from longest ORFs
+    """
     input:
-        faa = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.faa"
+        query = rules.transdecoder_longorfs_co.output[0],
     output:
-        faa = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.reformat.faa",
-        gff = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.reformat.gff"
-    params:
-        assembly = "{assembly}"
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/longorfs-queryDB"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/longorfs-queryDB.log"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
     shell:
         """
-        python source/utils/reformat_fasta.py {input.faa} {output.faa} {output.gff} {params.assembly}
+        mmseqs createdb {input} {output} > {log} 2>&1
         """
+
+rule mmseqs_firstpass_taxonomy_co:
+    """
+    Run mmseqs taxonomy on longest ORFs, also store the alignment results
+    for use with transdecoder
+    """
+    input:
+        query = rules.mmseqs_createquerydb_longorfs_co.output,
+        target = os.path.join(config["mmseqs_db_dir"], "{td_db}")
+    output:
+        tax = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/{{td_db}}-taxaDB.{suff}", suff = ["index","dbtype"]),
+        aln = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/{{td_db}}-taxaDB_aln/first.{suff}", suff = ["index","dbtype"]),
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/mmseqs_firstpass_taxonomy_co.{td_db}.log"
+    threads: 10
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
+    params:
+        tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_firstpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}.{wildcards.td_db}", 
+        split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
+        output = lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
+        ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
+        aln_dir = lambda wildcards, output: os.path.dirname(output.aln[0])
+    resources:
+        mem_mb = 3600,
+        tasks = 1
+    shell:
+        """
+        mkdir -p {params.tmp}
+        mmseqs taxonomy {input.query} {input.target} {params.output} {params.tmp} -e 1e-5 -a 1 \
+            --lca-mode 3 --tax-output-mode 0 --lca-ranks {params.ranks} --tax-lineage 1 \
+            --split-memory-limit {params.split_memory_limit}M --threads {threads} > {log} 2>&1
+        mv {params.tmp}/latest/first.* {params.aln_dir}
+        rm -r {params.tmp}
+        """
+
+rule mmseqs_convertali_co:
+    """
+    Convert mmseqs alignment to m8 format for transdecoder
+    """
+    input:
+        alignment = rules.mmseqs_firstpass_taxonomy_co.output.aln,
+        target = os.path.join(config["mmseqs_db_dir"], "{td_db}"),
+        query = rules.mmseqs_createquerydb_longorfs_co.output
+    output:
+        m8 = "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/{td_db}.m8"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/{td_db}.convertali.log"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
+    params:
+        alignment = lambda wildcards, input: os.path.splitext(input.alignment[0])[0]
+    shell:
+        """
+        mmseqs convertalis {input.query} {input.target} {params.alignment} {output.m8} --threads 1 --format-mode 0 > {log} 2>&1
+        """
+
+rule transdecoder_predict_co:
+    """
+    Run transdecoder predict using homology search results for ORF retention criteria
+    """
+    input:
+        fa = "results/co-assembly/{assembler}/{assembly}/final.fa",
+        m8 = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/{td_db}.m8",
+            td_db = config["transdecoder_homology_db"])
+    output:
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/transdecoder/final.fa.transdecoder.{suff}",
+            suff = ["pep","gff3","cds","bed"])
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/predict.log"
+    container: "docker://trinityrnaseq/transdecoder:5.7.1"
+    params:
+        output_dir = lambda wildcards, output: os.path.dirname(output[0])
+    shell:
+        """
+        TransDecoder.Predict -t {input.fa} --retain_blastp_hits {input.m8} -O {params.output_dir} > {log} 2>&1
+        """
+
+rule mmseqs_createtsv_first_co:
+    """
+    Create tsv file from mmseqs taxonomy output
+    """
+    input:
+        query = rules.mmseqs_createquerydb_longorfs_co.output,
+        result = rules.mmseqs_firstpass_taxonomy_co.output.tax
+    output:
+        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.tsv"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/mmseqs_createtsv_first_co.log"
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
+    params:
+        result = lambda wildcards, input: f"{os.path.dirname(input.result[0])}/{wildcards.td_db}-taxaDB",
+    threads: 1
+    resources:
+        mem_mb = 1000,
+        tasks = 1
+    shell:
+        """
+        mmseqs createtsv {input.query} {params.result} {output.tsv} --threads {threads} > {log} 2>&1
+        """
+
+rule parse_mmseqs_first_co:
+    """
+    Parse mmseqs taxonomy output, adds columns with ranks
+    """
+    input:
+        tsv = rules.mmseqs_createtsv_first_co.output,
+    output:
+        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.parsed.tsv"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.parsed.log"
+    params:
+        script = workflow.source_path("../utils/parse_mmseqs.py"),
+        ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
+    shell:
+        """
+        python {params.script} -i {input.tsv} -o {output.tsv} -r {params.ranks} > {log} 2>&1
+        """
+
+rule firstpass_fungal_proteins_co:
+    """
+    Extract proteins from first taxonomy pass that are classified as fungi
+    """
+    input:
+        parsed = rules.parse_mmseqs_first_co.output.tsv,
+        fa = rules.transdecoder_predict_co.output[0]
+    output:
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/firstpass.fungal.faa"
+    params:
+        idlist = lambda wildcards, input: f"{os.path.dirname(input.parsed)}/fungal.ids"
+    run:
+        import pandas as pd
+        df = pd.read_csv(input.parsed, sep="\t", header=0, index_col=0)
+        fungi = df.loc[df["kingdom"]=="Fungi"].index
+        with open(params.idlist, "w") as f:
+            for i in fungi:
+                f.write(i + "\n")
+        shell("seqkit grep -f {params.idlist} {input.fa} > {output}")
+        os.remove(params.idlist)
+
+rule mmseqs_secondpass_taxonomy_co:
+    """
+    Run mmseqs taxonomy on fungal proteins
+    """
+    input:
+        query = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{td_db}/firstpass.fungal.faa", td_db = config["transdecoder_homology_db"]),
+        target = get_mmseq_taxdb
+    output:
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/secondpass-taxresult_{suff}", suff = ["lca.tsv", "report","tophit_aln","tophit_report"], mmseqs_db = config["mmseqs_db"])
+    log:
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/mmseqs_secondpass_taxonomy_co.log", mmseqs_db = config["mmseqs_db"])
+    params:
+        output = lambda wildcards, output: f"{os.path.dirname(output[0])}/secondpass-taxresult",
+        tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}", 
+        ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
+        split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
+        target = lambda wildcards, input: (input.target).replace("_taxonomy", "")
+    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    conda: "../../envs/mmseqs.yaml"
+    threads: 10
+    shell:
+        """
+        mkdir -p {params.tmp}
+        mmseqs easy-taxonomy {input.query} {params.target} {params.output} {params.tmp} \
+            --lca-ranks {params.ranks} --lca-mode 3 --tax-lineage 1 --split-memory-limit {params.split_memory_limit}M \
+            --threads {threads} > {log} 2>&1
+        """
+
+rule parse_mmseqs_second_co:
+    """
+    Parse mmseqs taxonomy output from second run
+    """
+    input:
+        taxresult = rules.mmseqs_secondpass_taxonomy_co.output,
+    output:
+        tsv = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{mmseqs_db}/secondpass.parsed.log"
+    params:
+        script = workflow.source_path("../utils/parse_mmseqs.py"),
+        tsv = lambda wildcards, input: os.path.join(os.path.dirname(input.taxresult[0]), "secondpass-taxresult_lca.tsv"),
+        ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
+    shell:
+        """
+        python {params.script} -i {params.tsv} -o {output.tsv} -r {params.ranks} > {log} 2>&1
+        """
+
+rule secondpass_fungal_proteins_co:
+    input:
+        parsed = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv", mmseqs_db = config["mmseqs_db"]),
+        genecall = rules.transdecoder_predict_co.output,
+    output:
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/genecall/fungal.{suff}",
+            suff = ["faa","gff3","cds","bed","taxonomy.tsv"])
+    params:
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        indir = lambda wildcards, input: os.path.dirname(input.genecall[0]),
+    shadow: "minimal"
+    run:
+        write_fungal_proteins(input.parsed[0], params.indir, params.outdir)
 
 #################################
 ## READ COUNTING CO-ASSEMBLIES ##
 #################################
 rule featurecount_co:
     input:
-        gff = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.reformat.gff",
+        gff = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.gff3",
         bam = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam"
     output:
         cnt = "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab",
         summary = "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab.summary"
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.log"
     resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*20
+        runtime = 30,
+        tasks = 1,
+        mem_mb = 1000
     params:
         setting = config["fc_params"]
     conda: "../../envs/featurecount.yaml"
     threads: 4
     shell:
         """
-        featureCounts -T {threads} {params.setting} -a {input.gff} -o {output.cnt} {input.bam}
+        featureCounts -T {threads} {params.setting} -a {input.gff} -o {output.cnt} {input.bam} > {log} 2>&1
         """
 
 rule normalize_featurecount_co:
     input:
-        "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab",
-        expand("results/sample_info/{{sample_id}}.{source}_read_lengths.tab",
-            source = config["read_source"])
+        fc="results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab",
+        stats=expand("results/{source}/{{sample_id}}/{{sample_id}}.stats.tsv", source="filtered" if config["filter_reads"] else "unfiltered")
     output:
         "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.tpm.tab",
         "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.raw.tab"
@@ -96,9 +298,9 @@ rule normalize_featurecount_co:
         s = "{sample_id}",
         script = "source/utils/featureCountsTPM.py"
     run:
-        df = pd.read_table(input[1], index_col=0)
-        rl = df.loc[wildcards.sample_id,"avg_len"]
-        shell("python {params.script} --rl {rl} -i {input[0]} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
+        df = pd.csv(input.stats[0], sep="\t")
+        rl = df.avg_len.mean()
+        shell("python {params.script} --rl {rl} -i {input.fc} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
 
 rule collate_featurecount_co:
     input:
@@ -116,7 +318,7 @@ rule collate_featurecount_co:
 rule taxonomy_featurecount_co:
     input:
         abundance = "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
-        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/gene_taxonomy.tsv",
+        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
     output:
         expand("results/collated/co-assembly/{{assembler}}/{{assembly}}/abundance_taxonomy/{tax_rank}.{tax_name}.{{assembly}}.{{fc}}.tsv",
                tax_rank = config["tax_rank"], tax_name = config["tax_name"])
@@ -140,7 +342,7 @@ rule taxonomy_featurecount_co:
 #################################
 rule emapper_search_co:
     input:
-        "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.reformat.faa",
+        "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.faa",
         "resources/eggnog/eggnog.db"
     output:
         "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results.emapper.seed_orthologs"
@@ -209,7 +411,7 @@ rule parse_eggnog_co:
     log: "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/parser.log"
     output:
         expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/eggNOG/{db}.parsed.tab",
-            db = ["enzymes","kos","modules","pathways","tc","cazy"])
+            db = ["enzymes","ko","modules","pathways","tc","cazy"])
     params:
         src = "source/utils/eggnog-parser.py",
         dldir = "resources/kegg",
@@ -246,7 +448,9 @@ rule quantify_eggnog_co:
         """
 
 rule quantify_eggnog_normalized_co:
-    """Normalize modules/pathways further by the number of KEGG orthologs belonging to each module/pathway"""
+    """
+    Normalize modules/pathways further by the number of KEGG orthologs belonging to each module/pathway
+    """
     input:
         abundance = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.{{fc}}.tab",
             sample_id = samples.keys()),
@@ -276,7 +480,7 @@ rule quantify_eggnog_normalized_co:
 rule eggnog_tax_annotations:
     """Collate gene annotations and abundances for a certain rank:taxon combination"""
     input:
-        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/gene_taxonomy.tsv",
+        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
         parsed = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tab",
         abundance = "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv"
     output:
@@ -308,107 +512,9 @@ rule eggnog_tax_annotations:
 ## TAXONOMIC ANNOTATION ##
 ##########################
 
-rule contigtax_search_co:
-    """
-    Runs blastx of contigs against protein database and reports best LCA
-    """
-    input:
-        db = "resources/diamond_legacy/diamond.dmnd",
-        fa = "results/co-assembly/{assembler}/{assembly}/final.fa"
-    output:
-        diamond = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.tsv.gz",
-        logfile = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.log"
-    params:
-        out_dir = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy",
-        tmp_out = "$TMPDIR/{assembly}/diamond.tsv",
-        tmp_log = "$TMPDIR/{assembly}/diamond.log",
-        tmp_dir = "$TMPDIR/{assembly}"
-    threads: 20
-    conda: "../../envs/contigtax.yaml"
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*10
-    shell:
-        """
-        mkdir -p {params.tmp_dir}
-        mkdir -p {params.out_dir}
-        contigtax search -m blastx -p {threads} --top 10 -e 0.001 -b 20 -c 1 \
-            -t {params.tmp_dir} {input.fa} {input.db} {params.tmp_out} > {params.tmp_log}
-        mv {params.tmp_out}.gz {output.diamond}
-        mv {params.tmp_log} {output.logfile}
-        """
-
-rule assign_taxonomy_co:
-    input:
-        diamond = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/diamond.tsv.gz",
-        taxdb = ancient("resources/taxonomy/taxonomy.sqlite")
-    output:
-        tax = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/contig_taxonomy.tsv"
-    log: "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.log"
-    params:
-        taxdir = "resources/taxonomy",
-        reportranks = "superkingdom kingdom phylum class order family genus species"
-    threads: 10
-    conda: "../../envs/contigtax.yaml"
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60
-    shell:
-        """
-        contigtax assign -t {params.taxdir} --reportranks {params.reportranks} -p {threads} \
-            -T 5 {input.diamond} {output.tax} 2>{log}
-        """
-
-rule create_blob_co:
-    input:
-        hit = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/contig_hits.tsv",
-        bam = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam",
-        fa = "results/co-assembly/{assembler}/{assembly}/final.fa",
-        names = "resources/taxonomy/names.dmp",
-        nodes = "resources/taxonomy/nodes.dmp"
-    output:
-        blob = temp("results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/{sample_id}.blobDB.json")
-    params:
-        prefix = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/{sample_id}"
-    conda: "../../envs/blobtools.yaml"
-    shell:
-        """
-        blobtools create --nodes {input.nodes} --names {input.names} -i {input.fa} -b {input.bam} -t {input.hit} \
-            --title {wildcards.sample_id} -o {params.prefix}
-        """
-
-rule plot_blob_co:
-    input:
-        blob = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/{sample_id}.blobDB.json"
-    output:
-        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/{sample_id}.bestsum.{rank}.p{num}.span.100.exclude_other.blobplot.bam0.png",
-        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/{sample_id}.bestsum.{rank}.p{num}.span.100.exclude_other.blobplot.read_cov.bam0.png",
-        "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/{sample_id}.bestsum.{rank}.p{num}.span.100.exclude_other.blobplot.stats.txt"
-    params:
-        prefix = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/",
-    conda: "../../envs/blobtools.yaml"
-    shell:
-        """
-        blobtools blobplot -i {input.blob} --sort_first 'no-hit,undef' -o {params.prefix} -p {wildcards.num} \
-            -r {wildcards.rank} --exclude other
-        """
-
-rule transfer_taxonomy_co:
-    input:
-        contig_tax = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/contig_taxonomy.tsv",
-        gff = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.reformat.gff"
-    output:
-        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/gene_taxonomy.tsv"
-    run:
-        gff = pd.read_table(input.gff, usecols = [0,8], names=["contig","gene"], header=None, index_col=1)
-        contig_tax = pd.read_table(input.contig_tax, header=0, index_col=0)
-        gff.rename(index=lambda x: x.split("=")[-1], inplace=True)
-        gene_tax = pd.merge(gff, contig_tax, left_on="contig", right_index=True, how="left")
-        gene_tax.drop("contig", axis=1, inplace=True)
-        gene_tax.fillna("Unclassified", inplace=True)
-        gene_tax.to_csv(output.gene_tax, sep="\t")
-
 rule sum_taxonomy_co:
     input:
-        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/gene_taxonomy.tsv",
+        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
         abundance = "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv"
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{fc}.tsv"
@@ -426,7 +532,7 @@ rule sum_taxonomy_co:
 #########################
 rule dbcan_scan_co:
     input:
-        fasta = "results/annotation/co-assembly/{assembler}/{assembly}/frame_selection/final.reformat.faa",
+        fasta = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.faa",
         db = "resources/dbCAN/dbCAN-fam-HMMs.txt",
         pressed = expand("resources/dbCAN/dbCAN-fam-HMMs.txt.{suffix}", suffix = ["h3f","h3i","h3m","h3p"])
     output:

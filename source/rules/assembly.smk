@@ -4,15 +4,6 @@ localrules:
 ## Assembly ##
 ##############
 
-def assembly_input(wildcards):
-    suffices = {'unfiltered': 'cut.trim.mRNA.fastq.gz',
-                'filtered': 'filtered.union.fastq.gz',
-                'taxmapper': 'cut.trim.filtered.fastq.gz',
-                'mapped': 'fungi.nohost.fastq.gz'}
-    R1 = f"results/{wildcards.filter_source}/{wildcards.sample_id}/{wildcards.sample_id}_R1.{suffices[wildcards.filter_source]}"
-    R2 = f"results/{wildcards.filter_source}/{wildcards.sample_id}/{wildcards.sample_id}_R2.{suffices[wildcards.filter_source]}"
-    return [R1, R2]
-
 rule transabyss:
     input:
         assembly_input
@@ -82,8 +73,6 @@ rule trinity:
         assembly_input
     output:
         fa="results/assembly/trinity/{filter_source}/{sample_id}/final.fa",
-        R1="results/assembly/trinity/{filter_source}/{sample_id}/{sample_id}_R1.fastq.gz",
-        R2="results/assembly/trinity/{filter_source}/{sample_id}/{sample_id}_R2.fastq.gz"
     log: "results/assembly/trinity/{filter_source}/{sample_id}/log"
     params:
         min_contig_len = config["min_contig_len"],
@@ -91,20 +80,20 @@ rule trinity:
         outdir=lambda wildcards, output: os.path.dirname(output.fa),
         out_base = lambda wildcards, output: os.path.basename(output.fa),
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
-    threads: 10
+    threads: 6
     resources:
-        runtime = 24 * 60
+        runtime = 24 * 60,
+        mem_mb = 5000
     #conda:
     #    "../../envs/trinity.yaml"
-    container:
-        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
         rm -rf {params.outdir}/*
         rm -rf {params.tmpdir}
         mkdir -p {params.tmpdir}
         Trinity --CPU {threads} --min_contig_length {params.min_contig_len} \
-            --output {params.tmpdir} --left {input.R1} --right {input.R2} \
+            --output {params.tmpdir} --left {input[0]} --right {input[1]} \
             --seqType fq --max_memory {params.max_mem}G > {log} 2>&1
         mv {params.tmpdir}/* {params.outdir}/
         mv {params.tmpdir}.Trinity.fasta {output.fa}
@@ -125,6 +114,7 @@ rule megahit:
         tmp_dir = "$TMPDIR/megahit/{sample_id}",
         tmp_dir_base = "$TMPDIR/megahit"
     conda: "../../envs/megahit.yaml"
+    container: "docker://quay.io/biocontainers/megahit:1.2.9--h43eeafb_5"
     threads: 10
     resources:
         runtime = 60 * 10
@@ -150,6 +140,8 @@ rule trinity_normalize:
     output:
         R1="results/in-silico-normalization/{assembly}/left.norm.fq.gz",
         R2="results/in-silico-normalization/{assembly}/right.norm.fq.gz",
+    log:
+        "results/in-silico-normalization/{assembly}/log"
     params:
         max_cov = config["insilico_norm_max_cov"],
         R1 = lambda wildcards: ",".join(sorted(assemblies[wildcards.assembly]["R1"])),
@@ -158,8 +150,7 @@ rule trinity_normalize:
         mem=config["insilico_norm_mem"]
     #conda:
         #"../../envs/trinity.yaml"
-    container:
-        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     threads: 10
     shell:
         """
@@ -168,7 +159,7 @@ rule trinity_normalize:
         echo -e {params.R2} | tr "," "\n" > {params.tmpdir}/R2.list
         $TRINITY_HOME/util/insilico_read_normalization.pl --seqType fq --JM {params.mem} --max_cov {params.max_cov} \
             --left_list {params.tmpdir}/R1.list --right_list {params.tmpdir}/R2.list \
-            --pairs_together --PARALLEL_STATS --CPU {threads} --output {params.tmpdir} --tmp_dir_name out
+            --pairs_together --PARALLEL_STATS --CPU {threads} --output {params.tmpdir} --tmp_dir_name out > {log} 2>&1
         gzip -c {params.tmpdir}/left.norm.fq > {params.tmpdir}/left.norm.fq.gz
         gzip -c {params.tmpdir}/right.norm.fq > {params.tmpdir}/right.norm.fq.gz
         mv {params.tmpdir}/left.norm.fq.gz {output.R1}
@@ -247,13 +238,13 @@ rule trinity_co:
         outdir = lambda wildcards, output: os.path.dirname(output.fa),
         out_base = lambda wildcards, output: os.path.basename(output.fa),
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
-    threads: 10
+    threads: 6
     resources:
-        runtime = 24 * 60
+        runtime = 24 * 60,
+        mem_mb = 5000
     #conda:
     #    "../../envs/trinity.yaml"
-    container:
-        "https://data.broadinstitute.org/Trinity/TRINITY_SINGULARITY/trinityrnaseq.v2.15.1.simg"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
         rm -rf {params.outdir}/*

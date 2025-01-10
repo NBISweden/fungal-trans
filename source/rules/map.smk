@@ -72,6 +72,7 @@ rule bowtie_build:
         expand("results/map/{{assembler}}/{{source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
     params:
         prefix = "results/map/{assembler}/{source}/{sample_id}/final.fa"
+    container: "docker://quay.io/biocontainers/bowtie2:2.5.4--he96a11b_5"
     threads: 1
     resources:
         runtime = 60*24
@@ -82,26 +83,39 @@ rule bowtie_build:
 
 rule bowtie:
     input:
-        R1 = "results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R1.fastq.gz",
-        R2 = "results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R2.fastq.gz",
-        bt = expand("results/map/{{assembler}}/{{source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
+        #R1 = "results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R1.fastq.gz",
+        #R2 = "results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R2.fastq.gz",
+        fq = assembly_input,
+        bt = expand("results/map/{{assembler}}/{{filter_source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
     output:
-        bam = "results/map/{assembler}/{source}/{sample_id}/{sample_id}.bam"
-    log: "results/map/{assembler}/{source}/{sample_id}/bowtie.log"
+        sam = temp("results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.unsorted.sam")
+    log: "results/map/{assembler}/{filter_source}/{sample_id}/bowtie.log"
     params:
-        prefix = "results/map/{assembler}/{source}/{sample_id}/final.fa",
-        tmp_out = "$TMPDIR/{sample_id}.bam",
+        prefix = "results/map/{assembler}/{filter_source}/{sample_id}/final.fa",
+        #tmp_out = "$TMPDIR/{sample_id}.bam",
         setting = config["bowtie2_params"]
+    container: "docker://quay.io/biocontainers/bowtie2:2.5.4--he96a11b_5"
     threads: 10
     resources:
         runtime = 60
     shell:
         """
         bowtie2 {params.setting} -p {threads} -x {params.prefix} \
-         -1 {input.R1} -2 {input.R2} | samtools view -h -b - | samtools sort - -o {params.tmp_out} 2> {log}
-         mv {params.tmp_out} {output.bam}
+         -1 {input.fq[0]} -2 {input.fq[0]} -S {output.sam} 2>{log}
         """
 
+rule samtools_sort:
+    input:
+        sam = rules.bowtie.output.sam
+    output:
+        bam = "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
+    log: "results/map/{assembler}/{filter_source}/{sample_id}/samtools.log"
+    container: "docker://quay.io/biocontainers/samtools:1.21--h96c455f_1"
+    shell:
+        """
+        samtools view {input.sam} -h -b | samtools sort - -o {output.bam}
+        """
+    
 rule gff2bed:
     input:
         gff = "results/annotation/{assembler}/{source}/{sample_id}/frame_selection/final.reformat.gff"
