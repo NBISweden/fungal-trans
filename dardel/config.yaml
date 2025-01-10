@@ -30,31 +30,27 @@ default-resources:
 # the default resources
 set-resources:
   # db.smk
-  ncbi_taxonomy:
-    mem_mb: 16000
-    runtime: 120
   mmseqs_extract_fungalDB:
     runtime: 120
     mem_mb: 35200
-    tasks: 1
   mmseqs_convert2fasta_fungalDB:
     runtime: 60
     mem_mb: 18648
   mmseqs_createseqdb:
     runtime: 30
     mem_mb: 3552
-    tasks: 1
   mmseqs_create_taxidmap:
-    mem_mb: 88800
-    runtime: 120
-    #slurm_partition: main
+    mem_mb: 97680
+    runtime: 60
   mmseqs_createtaxdb:
     runtime: 60
     mem_mb: 3552
   mmseqs_secondpass_taxonomy_co:
-    runtime: 600
-    tasks: 2
-    mem_mb: 53280
+    runtime: 240
+    mem_mb: 35520
+  mmseqs_secondpass_taxonomy:
+    runtime: 240
+    mem_mb: 35520
   # preprocess.smk
   trimmomatic:
     runtime: 60
@@ -83,6 +79,8 @@ set-resources:
   host_reads:
     mem_mb: 40000
     runtime: 360
+  fastq_stats:
+    runtime: 30
   # kraken.smk
   preload_kraken_db:
     slurm_partition: main
@@ -94,23 +92,29 @@ set-resources:
   unload_kraken_db:
     slurm_partition: main
     runtime: 10
-  # annotate_co.smk
+  # annotate.smk
   transdecoder_longorfs_co:
-    runtime: 1440
-    mem_mb: 3552
-    tasks: 1
+    runtime: 60
+    mem_mb: 888
+  transdecoder_longorfs:
+    runtime: 60
+    mem_mb: 888
   mmseqs_createquerydb_longorfs_co:
     runtime: 60
     mem_mb: 3552
-    tasks: 1
-  mmseqs_firstpass_taxonomy_co:
-    runtime: 120
-    tasks: 10
-    mem_mb: 8880
-  transdecoder_predict_co:
-    runtime: 600
-    tasks: 1
+  mmseqs_createquerydb_longorfs:
+    runtime: 60
     mem_mb: 3552
+  mmseqs_firstpass_taxonomy_co:
+    runtime: 60
+    mem_mb: 3552
+  mmseqs_firstpass_taxonomy:
+    runtime: 60
+    mem_mb: 3552
+  transdecoder_predict_co:
+    runtime: 60
+    tasks: 1
+    mem_mb: 888
   mmseqs_createquerydb_co:
     runtime: 60
     mem_mb: 3552
@@ -127,6 +131,8 @@ set-resources:
     runtime: 1440
     tasks: 20
     mem_mb: 88800
+  featurecount:
+    runtime: 60
   emapper_search_co:
     runtime: 1440
   contigtax_search_co:
@@ -141,8 +147,8 @@ set-resources:
     runtime: 1440
     mem_mb: 128000
   trinity_co:
-    runtime: 1440
-    mem_mb: 44400
+    runtime: 600
+    mem_mb: 8880
   megahit_co:
     mem_mb: 17000
     runtime: 600
@@ -152,10 +158,21 @@ set-resources:
   transabyss_merge_co:
     mem_mb: 17000
     runtime: 1440
+  trinity:
+    runtime: 600
+    mem_mb: 5328
+    tasks: 6
 # map.smk
   bowtie_co:
     runtime: 240
     mem_mb: 32000
+  bowtie:
+    runtime: 60
+  bowtie_build:
+    runtime: 60
+    mem_mb: 888
+  samtools_sort:
+    runtime: 240
 # paired_strategy.smk
   fungi_one_mapped:
     runtime: 180
@@ -166,8 +183,7 @@ set-resources:
 set-threads:
   # assembly.smk
   megahit_co: 20
-  trinity_normalize: 10
-  trinity_co: 50
+  trinity_normalize: 6
   transabyss_co: 20
   transabyss_merge_co: 20
   bowtie_build_fungi: 100
@@ -176,6 +192,8 @@ set-threads:
   host_reads: 10
   star_map_host: 96
   run_kraken: 20
+  trinity: 6
+  trinity_co: 6
 
 # Snakemake command line options
 keep-going: True
@@ -188,4 +206,4 @@ latency-wait: 5
 executor: slurm
 software-deployment-method: "apptainer"
 use-conda: False
-apptainer-args: "--bind $PDC_TMP,$PWD,/sw/data"
+apptainer-args: "--bind $PDC_TMP,$PWD,/sw/data --env TMPDIR=$PDC_TMP"
