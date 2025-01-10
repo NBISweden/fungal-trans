@@ -249,27 +249,28 @@ rule secondpass_fungal_proteins:
         indir = lambda wildcards, input: os.path.dirname(input.genecall[0]),
     shadow: "minimal"
     run:
-        write_fungal_proteins(input.parsed, params.indir, params.outdir)
+        write_fungal_proteins(input.parsed[0], params.indir, params.outdir)
 
 ###################
 ## READ COUNTING ##
 ###################
 rule featurecount:
     input:
-        gff = "results/annotation/{assembler}/{filter_source}/{sample_id}/frame_selection/final.reformat.gff",
+        gff = "results/annotation/{assembler}/{filter_source}/{sample_id}/genecall/fungal.gff3",
         bam = "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
     output:
         cnt = "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab",
         summary = "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab.summary"
-    resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*20
+    log:
+        "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.log"
     conda: "../../envs/featurecount.yaml"
     params:
         setting = config["fc_params"]
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
     threads: 4
     shell:
         """
-        featureCounts -T {threads} {params.setting} -a {input.gff} -o {output.cnt} {input.bam}
+        featureCounts -T {threads} {params.setting} -a {input.gff} -o {output.cnt} {input.bam} > {log} 2>&1
         """
 
 rule normalize_featurecount:
@@ -283,35 +284,9 @@ rule normalize_featurecount:
         s = "{sample_id}",
         script = "source/utils/featureCountsTPM.py"
     run:
-        df = pd.csv(input.stats[0], sep="\t")
+        df = pd.read_csv(input.stats, sep="\t")
         rl = df.avg_len.mean()
         shell("python {params.script} --rl {rl} -i {input[0]} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
-        
-############################
-## DIAMOND BLAST SEARCHES ##
-############################
-rule diamond_similarity_search:
-    input:
-        faa = "results/annotation/{assembler}/{filter_source}/{sample_id}/frame_selection/final.reformat.faa",
-        db = "resources/diamond/{db}.dmnd"
-    output:
-        blast_out = "results/annotation/{assembler}/{filter_source}/{sample_id}/similarity_search/blastp_{db}.out"
-    params:
-        tmp_out = "$TMPDIR/{sample_id}/{assembler}/{filter_source}/blastp_{db}.out",
-        tmp_dir = "$TMPDIR/{sample_id}/{assembler}/{filter_source}"
-    resources:
-        runtime=lambda wildcards, attempt: attempt**3*5*60
-    threads: 20
-    shell:
-        """
-        mkdir -p {params.tmp_dir}
-        mkdir -p /dev/shm/$SLURM_JOB_ID
-        diamond blastp -d {input.db} -c 1 -b 20 --query-cover 50.000000 --subject-cover 50.000000 --evalue 0.000010 \
-        --more-sensitive --top 3 -q {input.faa} -o {params.tmp_out} -p {threads} --tmpdir /dev/shm/$SLURM_JOB_ID \
-        -f 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qcovhsp stitle
-        mv {params.tmp_out} {output.blast_out}
-        conda deactivate
-        """
 
 ###################
 ## EGGNOG-MAPPER ##
@@ -513,7 +488,7 @@ rule collate_dbcan:
 
 rule sum_taxonomy:
     input:
-        gene_tax = "results/annotation/{assembler}/{filter_source}/{sample_id}/taxonomy/gene_taxonomy.tsv",
+        gene_tax = "results/annotation/{assembler}/{filter_source}/{sample_id}/genecall/fungal.taxonomy.tsv",
         tpm = "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tpm.tab",
         raw = "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.raw.tab"
     output:
