@@ -4,14 +4,6 @@ localrules:
 ## Assembly ##
 ##############
 
-def assembly_input(wildcards):
-    d = "unfiltered"
-    if config["filter_reads"]:
-        d="filtered"
-    R1 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R1.fastq.gz"
-    R2 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R2.fastq.gz"
-    return [R1, R2]
-
 rule transabyss:
     input:
         assembly_input
@@ -122,6 +114,7 @@ rule megahit:
         tmp_dir = "$TMPDIR/megahit/{sample_id}",
         tmp_dir_base = "$TMPDIR/megahit"
     conda: "../../envs/megahit.yaml"
+    container: "docker://quay.io/biocontainers/megahit:1.2.9--h43eeafb_5"
     threads: 10
     resources:
         runtime = 60 * 10
