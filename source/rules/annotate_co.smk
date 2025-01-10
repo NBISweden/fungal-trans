@@ -260,7 +260,7 @@ rule secondpass_fungal_proteins_co:
         indir = lambda wildcards, input: os.path.dirname(input.genecall[0]),
     shadow: "minimal"
     run:
-        write_fungal_proteins(input.parsed, params.indir, params.outdir)
+        write_fungal_proteins(input.parsed[0], params.indir, params.outdir)
 
 #################################
 ## READ COUNTING CO-ASSEMBLIES ##
