@@ -10,7 +10,6 @@ localrules:
     parse_eggnog_co,
     sum_dbcan_co,
     sum_taxonomy_co,
-    taxonomy_featurecount_co,
     dbcan_tax_annotations,
     eggnog_tax_annotations,
 
