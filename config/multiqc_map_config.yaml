@@ -1,0 +1,19 @@
+title: "Fungal metatranscriptomics mapping report"
+subtitle: "Sample report for the mapping steps (individual assemblies)"
+intro_text: "Preprocessed and filtered reads were aligned to each transcriptome assembly using Kallisto and subread-align."
+show_analysis_paths: False
+
+section_comments:
+  featurecounts: "Assignments were made to all features identified by TransDecoder"
+
+extra_fn_clean_exts:
+    - '.cut'
+    - '.cut.trim'
+    - '.bt.log'
+    - '.bowtie.log'
+    - '.bowtie2.log'
+    - '_R1'
+    - '.bam'
+    - type: remove
+      pattern: '.+\/'
+      
