@@ -29,7 +29,7 @@ star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLr
 # feature counts
 fc_params: "-s 2 -p -t exon -g Parent -Q 10 --countReadPairs"
 # kallisto
-kallisto_params: "-–rf-stranded"
+kallisto_params: "--rf-stranded"
 ## assembly
 # Choose between 'megahit', 'trinity', 'transabyss'
 assembler: trinity
