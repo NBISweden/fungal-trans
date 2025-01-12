@@ -311,7 +311,7 @@ rule collate_featurecount_co:
     run:
         df = pd.DataFrame()
         for f in input:
-            _df = pd.read_table(f, sep="\t", header=0, index_col=0)
+            _df = pd.read_csv(f, sep="\t", header=0, index_col=0)
             df = pd.merge(df, _df, right_index=True, left_index=True, how="outer")
         df.to_csv(output[0], sep="\t", index=True, header=True)
 
@@ -498,8 +498,8 @@ rule sum_taxonomy_co:
         "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{fc}.tsv"
     run:
         ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
-        gene_tax = pd.read_table(input.gene_tax, header=0, sep="\t", index_col=0)
-        abundance = pd.read_table(input.abundance, header=0, sep="\t", index_col=0)
+        gene_tax = pd.read_csv(input.gene_tax, header=0, sep="\t", index_col=0)
+        abundance = pd.read_csv(input.abundance, header=0, sep="\t", index_col=0)
         gene_tax_abundance = pd.merge(gene_tax, abundance, left_index = True, right_index = True)
         species_abundance = gene_tax_abundance.groupby(ranks).sum().reset_index()
         # Write results
@@ -546,9 +546,9 @@ rule sum_dbcan_co:
         evalue = config["dbCAN_eval"],
         coverage = config["dbCAN_cov"]
     run:
-        abundance = pd.read_table(input.abundance, index_col=0)
+        abundance = pd.read_csv(input.abundance, index_col=0, sep="\t")
         samples = list(abundance.columns)
-        dbcan = pd.read_table(input.dbcan, header=None, names=["HMM","HMM length","Query","Query length","evalue",
+        dbcan = pd.read_csv(input.dbcan, header=None, sep="\t", names=["HMM","HMM length","Query","Query length","evalue",
         "hmmstart","hmmend","querystart","queryend","coverage"],
             index_col=2, dtype={"evalue": float, "cov": float})
         l = len(dbcan.index)
