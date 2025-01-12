@@ -183,6 +183,7 @@ rule sortmerna_index:
         runtime = 60
     threads: 2
     conda: "../../envs/sortmerna.yaml"
+    container: "docker://quay.io/biocontainers/sortmerna:4.3.7--hdbdd923_0"
     shell:
         """
         mkdir -p {params.tmpdir}
@@ -205,19 +206,21 @@ rule sortmerna:
         R2_rRNA="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.rRNA.fastq.gz"
     log:
         run="results/preprocess/sortmerna/{sample_id}/run.log",
-        stats="results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log"
+        stats="results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log",
+        log="results/preprocess/sortmerna/{sample_id}/{sample_id}.sortmerna.log"
     params:
         workdir="$TMPDIR/{sample_id}.sortmerna",
         idx_dir=lambda wildcards, input: os.path.dirname(input.ref)
     threads: 4
     conda:
         "../../envs/sortmerna.yaml"
+    container: "docker://quay.io/biocontainers/sortmerna:4.3.7--hdbdd923_0"
     shell:
         """
         rm -rf {params.workdir}
         sortmerna --workdir {params.workdir}/ --threads {threads} --idx {params.idx_dir} \
             --ref {input.ref} --reads {input.R1} --reads {input.R2} \
-            --paired_in --out2 --fastx --blast 1 --num_alignments 1 --aligned --other -v >{log.run} 2>&1
+            --paired_in --out2 --fastx --blast 1 --num_alignments 1 --aligned --other -v --log {log.log} >{log.run} 2>&1
         pigz -9 -p {threads} {params.workdir}/out/*.fastq
         mv {params.workdir}/out/aligned_fwd.fastq.gz {output.R1_rRNA}
         mv {params.workdir}/out/aligned_rev.fastq.gz {output.R2_rRNA}
@@ -274,25 +277,13 @@ rule multiqc:
     output:
         "results/report/preprocess/preprocess_report.html",
         "results/report/preprocess/preprocess_report_data/multiqc.log"
+    log:
+        "results/report/preprocess/preprocess_report.log"
     params:
-        dir = "results/preprocess",
         outdir = "results/report/preprocess",
-        tmpdir = os.path.join(os.path.expandvars("$TMPDIR"),"multiqc"),
-        multiqc_config = "config/multiqc_config.yaml"
-    run:
-        shell("mkdir -p {params.tmpdir}")
-        shell("cp {input} {params.tmpdir}")
-        for f in input.cutlogs:
-            sample = (os.path.basename(f)).replace(".cutadapt.log","")
-            out1 = "{dir}/{sample}_R1.cut.log".format(dir=params.tmpdir, sample=sample)
-            out2 = "{dir}/{sample}_R2.cut.log".format(dir=params.tmpdir, sample=sample)
-            reformat_cutadapt_log(f, out1, out2)
-            shell("rm {params.tmpdir}/{sample}.cutadapt.log")
-        for f in input.trimlogs:
-            sample = (os.path.basename(f)).replace(".cut.trim.log","")
-            out1 = "{dir}/{sample}_R1.cut.trim.log".format(dir=params.tmpdir, sample=sample)
-            out2 = "{dir}/{sample}_R2.cut.trim.log".format(dir=params.tmpdir, sample=sample)
-            reformat_trimmomatic_log(f, out1, out2)
-        shell("multiqc -f -o {params.tmpdir} -c {params.multiqc_config} -n preprocess_report.html {params.tmpdir}")
-        shell("rsync -azv {params.tmpdir}/preprocess_report* {params.outdir}")
-        shell("rm -r {params.tmpdir}")
+        config = workflow.source_path("../../config/multiqc_config.yaml")
+    shell:
+        """
+        multiqc -f -o {params.outdir} -c {params.config} -n preprocess_report {input.cutlogs} \
+            {input.trimlogs} {input.sortmernalogs} {input.qclogs} >{log} 2>&1
+        """
