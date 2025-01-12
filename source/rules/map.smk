@@ -97,22 +97,23 @@ rule subread_align_co:
 
 rule multiqc_map_report_co:
     input:
-        bt_logs = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}.log",
+        kallisto_logs = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto.log",
+            sample_id = samples.keys()),
+        kallisto = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/abundance.h5",
             sample_id = samples.keys()),
         fc_logs = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tab.summary",
             sample_id = samples.keys())
     output:
-        "results/report/map/{assembler}.{assembly}_map_report.html"
+        "results/report/map/{assembler}_{assembly}_map_report.html"
+    log:
+        "results/report/map/{assembler}_{assembly}_map_report.log"
     params:
-        name = "{assembler}.{assembly}_map_report.html",
-        tmpdir = "$TMPDIR/{assembly}"
+        config = workflow.source_path("../../config/multiqc_map_config.yaml"),
+        outdir = lambda wildcards, output: os.path.dirname(output[0])
     shell:
         """
-        mkdir -p {params.tmpdir}
-        cp {input.bt_logs} {params.tmpdir}
-        cp {input.fc_logs} {params.tmpdir}
-        multiqc -o results/report/map/ -n {params.name} {params.tmpdir}
-        rm -r {params.tmpdir}
+        multiqc -f -c {params.config} -n {wildcards.assembler}_{wildcards.assembly}_map_report \
+            -o {params.outdir} {input.kallisto_logs} {input.fc_logs} >{log} 2>&1
         """
 
 #######################################
@@ -207,38 +208,21 @@ rule subread_align:
 
 rule multiqc_map_report:
     input:
-        bt_logs = expand("results/map/{{assembler}}/{{filter_source}}/{sample_id}/bowtie.log",
+        kallisto_logs = expand("results/map/{{assembler}}/{{filter_source}}/{sample_id}/kallisto.log",
+            sample_id = samples.keys()),
+        kallisto = expand("results/map/{{assembler}}/{{filter_source}}/{sample_id}/abundance.h5",
             sample_id = samples.keys()),
         fc_logs = expand("results/annotation/{{assembler}}/{{filter_source}}/{sample_id}/featureCounts/fc.tab.summary",
             sample_id = samples.keys()),
-        rs_logs = expand("results/annotation/{{assembler}}/{{filter_source}}/{sample_id}/rseqc/rseqc.out",
-            sample_id = samples.keys())
     output:
         "results/report/map/{assembler}_{filter_source}_map_report.html",
-        "results/report/map/{assembler}_{filter_source}_map_report_data/multiqc_bowtie2.txt"
+    log:
+        "results/report/map/{assembler}_{filter_source}_map_report.log"
     params:
-        dir = "qc",
-        outdir = "results/report/map",
-        config = "config/multiqc_{assembler}_config.yaml"
-    run:
-        assembler = wildcards.assembler
-        source = wildcards.filter_source
-        for sample_id in samples.keys():
-            tmp_dir = "{dir}/{sample_id}".format(dir=params.dir, sample_id=sample_id)
-            shell("mkdir -p {tmp_dir}")
-            bt_log = "results/map/{assembler}/{filter_source}/{sample_id}/bowtie.log".format(
-                assembler=assembler, source=source, sample_id=sample_id)
-            fc_log = "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab.summary".format(
-                assembler=assembler, source=source, sample_id=sample_id)
-            rs_log = "results/annotation/{assembler}/{filter_source}/{sample_id}/rseqc/rseqc.out".format(
-                assembler=assembler, source=source, sample_id=sample_id)
-            shell("cp {bt_log} {tmp_dir}/{sample_id}.bowtie.log")
-            shell("cp {rs_log} {tmp_dir}/{sample_id}.rseqc.log")
-            with open(fc_log, 'r') as fhin, open("{}/{}.fc.log".format(tmp_dir,sample_id), 'w') as fhout:
-                for line in fhin:
-                    if line[0:6]=="Status":
-                        fhout.write("Status\t{}\n".format(sample_id))
-                    else:
-                        fhout.write(line)
-        shell("cd {params.dir}; multiqc -f -c ../{params.config} -n {wildcards.assembler}_{wildcards.filter_source}_map_report -o ../{params.outdir} .; cd -")
-        shell("rm -rf {params.dir}")
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        config = workflow.source_path("../../config/multiqc_map_config.yaml")
+    shell:
+        """
+        multiqc -f -c {params.config} -n {wildcards.assembler}_{wildcards.filter_source}_map_report \
+            -o {params.outdir} {input.kallisto_logs} {input.kallisto} {input.fc_logs} >{log} 2>&1
+        """
