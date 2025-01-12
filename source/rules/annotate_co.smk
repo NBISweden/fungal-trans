@@ -10,7 +10,6 @@ localrules:
     parse_eggnog_co,
     sum_dbcan_co,
     sum_taxonomy_co,
-    taxonomy_featurecount_co,
     dbcan_tax_annotations,
     eggnog_tax_annotations,
 
@@ -267,7 +266,7 @@ rule secondpass_fungal_proteins_co:
 #################################
 rule featurecount_co:
     input:
-        gff = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.gff3",
+        gff = "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/final.fa.transdecoder.gff3",
         bam = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam"
     output:
         cnt = "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab",
@@ -278,9 +277,10 @@ rule featurecount_co:
         runtime = 30,
         tasks = 1,
         mem_mb = 1000
+    conda: "../../envs/featurecount.yaml"
     params:
         setting = config["fc_params"]
-    conda: "../../envs/featurecount.yaml"
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
     threads: 4
     shell:
         """
@@ -298,7 +298,7 @@ rule normalize_featurecount_co:
         s = "{sample_id}",
         script = "source/utils/featureCountsTPM.py"
     run:
-        df = pd.csv(input.stats[0], sep="\t")
+        df = pd.read_csv(input.stats[0], sep="\t")
         rl = df.avg_len.mean()
         shell("python {params.script} --rl {rl} -i {input.fc} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
 
@@ -311,31 +311,9 @@ rule collate_featurecount_co:
     run:
         df = pd.DataFrame()
         for f in input:
-            _df = pd.read_table(f, sep="\t", header=0, index_col=0)
+            _df = pd.read_csv(f, sep="\t", header=0, index_col=0)
             df = pd.merge(df, _df, right_index=True, left_index=True, how="outer")
         df.to_csv(output[0], sep="\t", index=True, header=True)
-
-rule taxonomy_featurecount_co:
-    input:
-        abundance = "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
-        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
-    output:
-        expand("results/collated/co-assembly/{{assembler}}/{{assembly}}/abundance_taxonomy/{tax_rank}.{tax_name}.{{assembly}}.{{fc}}.tsv",
-               tax_rank = config["tax_rank"], tax_name = config["tax_name"])
-    run:
-        abundance = pd.read_csv(input.abundance, sep="\t", index_col=0, header=0)
-        orig_genes = abundance.shape[0]
-        gene_tax = pd.read_csv(input.gene_tax, sep="\t", index_col=0, header=0)
-        # Filter to taxonomy
-        try:
-            orfs = list(set(gene_tax.loc[gene_tax[config["tax_rank"]]==config["tax_name"]].index))
-        except KeyError:
-            orfs = []
-        if len(orfs) == 0:
-            shell("touch {output}")
-        abundance = abundance.loc[set(orfs).intersection(set(abundance.index))]
-        print("{}/{} genes kept".format(abundance.shape[0], orig_genes))
-        abundance.to_csv(output[0], sep="\t", index=True)
 
 #################################
 ## EGGNOG-MAPPER CO-ASSEMBLIES ##
@@ -520,8 +498,8 @@ rule sum_taxonomy_co:
         "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{fc}.tsv"
     run:
         ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
-        gene_tax = pd.read_table(input.gene_tax, header=0, sep="\t", index_col=0)
-        abundance = pd.read_table(input.abundance, header=0, sep="\t", index_col=0)
+        gene_tax = pd.read_csv(input.gene_tax, header=0, sep="\t", index_col=0)
+        abundance = pd.read_csv(input.abundance, header=0, sep="\t", index_col=0)
         gene_tax_abundance = pd.merge(gene_tax, abundance, left_index = True, right_index = True)
         species_abundance = gene_tax_abundance.groupby(ranks).sum().reset_index()
         # Write results
@@ -568,9 +546,9 @@ rule sum_dbcan_co:
         evalue = config["dbCAN_eval"],
         coverage = config["dbCAN_cov"]
     run:
-        abundance = pd.read_table(input.abundance, index_col=0)
+        abundance = pd.read_csv(input.abundance, index_col=0, sep="\t")
         samples = list(abundance.columns)
-        dbcan = pd.read_table(input.dbcan, header=None, names=["HMM","HMM length","Query","Query length","evalue",
+        dbcan = pd.read_csv(input.dbcan, header=None, sep="\t", names=["HMM","HMM length","Query","Query length","evalue",
         "hmmstart","hmmend","querystart","queryend","coverage"],
             index_col=2, dtype={"evalue": float, "cov": float})
         l = len(dbcan.index)

@@ -256,7 +256,7 @@ rule secondpass_fungal_proteins:
 ###################
 rule featurecount:
     input:
-        gff = "results/annotation/{assembler}/{filter_source}/{sample_id}/genecall/fungal.gff3",
+        gff = "results/annotation/{assembler}/{filter_source}/{sample_id}/transdecoder/final.fa.transdecoder.gff3",
         bam = "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
     output:
         cnt = "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.tab",
@@ -454,9 +454,9 @@ rule sum_dbcan:
         evalue = config["dbCAN_eval"],
         coverage = config["dbCAN_cov"]
     run:
-        tpm = pd.read_table(input.tpm, index_col=0)
-        raw = pd.read_table(input.raw, index_col=0)
-        dbcan = pd.read_table(input.dbcan, header=None, names=["HMM","HMM length","Query","Query length","evalue","hmmstart","hmmend","querystart","queryend","coverage"],
+        tpm = pd.read_csv(input.tpm, index_col=0, sep="\t")
+        raw = pd.read_csv(input.raw, index_col=0, sep="\t")
+        dbcan = pd.read_csv(input.dbcan, header=None, sep="\t", names=["HMM","HMM length","Query","Query length","evalue","hmmstart","hmmend","querystart","queryend","coverage"],
             index_col=2, dtype={"evalue": float, "cov": float})
         l = len(dbcan.index)
         dbcan = dbcan.loc[(dbcan.evalue<float(params.evalue))&(dbcan.coverage>float(params.coverage))]
@@ -478,7 +478,7 @@ rule collate_dbcan:
         df = pd.DataFrame()
         for f in input:
             sample_id = f.split("/")[-3]
-            _df = pd.read_table(f, index_col=0)
+            _df = pd.read_csv(f, index_col=0, sep="\t")
             df = pd.merge(df, _df, left_index=True, right_index=True, how="outer")
         df.to_csv(output[0], sep="\t")
 
@@ -496,9 +496,9 @@ rule sum_taxonomy:
         raw = "results/annotation/{assembler}/{filter_source}/{sample_id}/taxonomy/taxonomy.raw.tsv"
     run:
         ranks = ["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
-        gene_tax = pd.read_table(input.gene_tax, header=0, sep="\t", index_col=0)
-        tpm = pd.read_table(input.tpm, header=0, sep="\t", index_col=0)
-        raw = pd.read_table(input.raw, header=0, sep="\t", index_col=0)
+        gene_tax = pd.read_csv(input.gene_tax, header=0, sep="\t", index_col=0)
+        tpm = pd.read_csv(input.tpm, header=0, sep="\t", index_col=0)
+        raw = pd.read_csv(input.raw, header=0, sep="\t", index_col=0)
         gene_tax_tpm = pd.merge(gene_tax, tpm, left_index = True, right_index = True)
         species_tpm = gene_tax_tpm.groupby(ranks).sum().reset_index()
         gene_tax_raw = pd.merge(gene_tax, raw, left_index = True, right_index = True)
@@ -511,7 +511,7 @@ rule sum_taxonomy:
 def merge_tax(files):
     df = pd.DataFrame()
     for f in files:
-        _df = pd.read_table(f, header=0, sep="\t")
+        _df = pd.read_csv(f, header=0, sep="\t")
         ranks = list(_df.columns[0:-1])
         # Set unique index
         index = []

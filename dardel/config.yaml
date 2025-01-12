@@ -163,6 +163,30 @@ set-resources:
     mem_mb: 5328
     tasks: 6
 # map.smk
+  subread_index:
+    runtime: 60
+    mem_mb: 3552
+  subread_align:
+    runtime: 60
+    mem_mb: 3552
+  subread_index_co:
+    runtime: 60
+    mem_mb: 3552
+  subread_align_co:
+    runtime: 60
+    mem_mb: 3552
+  kallisto_index_co:
+    runtime: 180
+    mem_mb: 1776
+  kallisto_quant_co:
+    runtime: 180
+    mem_mb: 1776
+  kallisto_index:
+    runtime: 180
+    mem_mb: 1776
+  kallisto_quant:
+    runtime: 180
+    mem_mb: 1776
   bowtie_co:
     runtime: 240
     mem_mb: 32000
