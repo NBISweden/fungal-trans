@@ -1,4 +1,8 @@
-localrules: multiqc_map_report, multiqc_map_report_co, gff2bed, infer_experiment
+localrules: 
+    multiqc_map_report, 
+    multiqc_map_report_co, 
+    wrap_assembly,
+    wrap_assembly_co
 
 ###############################
 ## Mapping for co-assemblies ##
@@ -40,44 +44,55 @@ rule kallisto_quant_co:
         kallisto quant -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.R1} {input.R2} > {log} 2>&1
         """
 
-
-rule bowtie_build_co:
+rule wrap_assembly_co:
+    """
+    Subread has a line length limit on fasta files, to be sure we are under this limit we wrap the sequences.
+    """
     input:
         "results/co-assembly/{assembler}/{assembly}/final.fa"
     output:
-        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/final.fa.{index}.bt2l", index=range(1,5))
-    params:
-        prefix = "results/map/co-assembly/{assembler}/{assembly}/final.fa"
-    threads: 1
-    resources:
-        runtime = 60*4
+        temp("results/co-assembly/{assembler}/{assembly}/final.wrap.fa")
+    log:
+        "results/co-assembly/{assembler}/{assembly}/wrap_assembly.log"
     shell:
         """
-        bowtie2-build --large-index --threads {threads} {input[0]} {params.prefix}
+        seqkit seq -w 60 {input} > {output} 2> {log}
         """
 
-rule bowtie_co:
+rule subread_index_co:
     input:
-        bt = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/final.fa.{index}.bt2l", index=range(1,5)),
+        rules.wrap_assembly_co.output
+    output:
+        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/subread_index.{suff}",
+                suff = ["00.b.array", "00.b.tab", "files", "log", "lowinf", "reads"])
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/subread_index.log"
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
+    conda: "../../envs/featurecount.yaml"
+    params:
+        outdir = lambda wildcards, output: os.path.dirname(output[0])
+    shell:
+        """
+        subread-buildindex -o {params.outdir}/subread_index {input} > {log} 2>&1
+        """
+
+rule subread_align_co:
+    input:
+        index = rules.subread_index_co.output,
         R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
         R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     output:
-        bam = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam"
-    log: "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.log"
-    threads: 10
-    resources:
-        runtime = 60*4
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam"
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.subread_align.log"
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
+    conda: "../../envs/featurecount.yaml"
     params:
-        prefix = "results/map/co-assembly/{assembler}/{assembly}/final.fa",
-        tmp_out = "$TMPDIR/{assembly}/{sample_id}.bam",
-        tmp_dir = "$TMPDIR/{assembly}",
-        setting = config["bowtie2_params"]
+        index = lambda wildcards, input: os.path.join(os.path.dirname(input.index[0]), "subread_index"),
+    threads: 4
     shell:
         """
-        mkdir -p {params.tmp_dir}
-        bowtie2 {params.setting} -p {threads} -x {params.prefix} \
-         -1 {input.R1} -2 {input.R2} 2>{log} | samtools view -h -b - | samtools sort - -o {params.tmp_out}
-         mv {params.tmp_out} {output.bam}
+        subread-align -T {threads} -sortReadsByCoordinates -r {input.R1} -R {input.R2} -i {params.index} -o {output} -t 0 > {log} 2>&1
         """
 
 rule multiqc_map_report_co:
@@ -140,80 +155,54 @@ rule kallisto_quant:
         kallisto quant {params.settings} -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.fq[0]} {input.fq[1]} > {log} 2>&1
         """
 
-rule bowtie_build:
+rule wrap_assembly:
+    """
+    Subread has a line length limit on fasta files, to be sure we are under this limit we wrap the sequences.
+    """
     input:
         "results/assembly/{assembler}/{filter_source}/{sample_id}/final.fa"
     output:
-        expand("results/map/{{assembler}}/{{filter_source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
+        temp("results/assembly/{assembler}/{filter_source}/{sample_id}/final.wrap.fa")
+    log:
+        "results/assembly/{assembler}/{filter_source}/{sample_id}/wrap_assembly.log"
+    shell:
+        """
+        seqkit seq -w 60 {input} > {output} 2> {log}
+        """
+
+rule subread_index:
+    input:
+        rules.wrap_assembly.output
+    output:
+        expand("results/map/{{assembler}}/{{filter_source}}/{{sample_id}}/subread_index.{suff}",
+                suff = ["00.b.array", "00.b.tab", "files", "log", "lowinf", "reads"])
+    log:
+        "results/map/{assembler}/{filter_source}/{sample_id}/subread_index.log"
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
+    conda: "../../envs/featurecount.yaml"
     params:
-        prefix = "results/map/{assembler}/{filter_source}/{sample_id}/final.fa"
-    container: "docker://quay.io/biocontainers/bowtie2:2.5.4--he96a11b_5"
-    threads: 1
-    resources:
-        runtime = 60*24
+        outdir = lambda wildcards, output: os.path.dirname(output[0])
     shell:
         """
-        bowtie2-build --large-index --threads {threads} {input[0]} {params.prefix}
+        subread-buildindex -o {params.outdir}/subread_index {input} > {log} 2>&1
         """
 
-rule bowtie:
+rule subread_align:
     input:
-        #R1 = "results/assembly/{assembler}/{filter_source}/{sample_id}/{sample_id}_R1.fastq.gz",
-        #R2 = "results/assembly/{assembler}/{filter_source}/{sample_id}/{sample_id}_R2.fastq.gz",
-        fq = assembly_input,
-        bt = expand("results/map/{{assembler}}/{{filter_source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
+        index = rules.subread_index.output,
+        fq = assembly_input
     output:
-        sam = temp("results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.unsorted.sam")
-    log: "results/map/{assembler}/{filter_source}/{sample_id}/bowtie.log"
+        "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
+    log:
+        "results/map/{assembler}/{filter_source}/{sample_id}/subread_align.log"
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
+    conda: "../../envs/featurecount.yaml"
     params:
-        prefix = "results/map/{assembler}/{filter_source}/{sample_id}/final.fa",
-        #tmp_out = "$TMPDIR/{sample_id}.bam",
-        setting = config["bowtie2_params"]
-    container: "docker://quay.io/biocontainers/bowtie2:2.5.4--he96a11b_5"
-    threads: 10
-    resources:
-        runtime = 60
+        index = lambda wildcards, input: os.path.join(os.path.dirname(input.index[0]), "subread_index"),
+    threads: 4
     shell:
         """
-        bowtie2 {params.setting} -p {threads} -x {params.prefix} \
-         -1 {input.fq[0]} -2 {input.fq[0]} -S {output.sam} 2>{log}
-        """
-
-rule samtools_sort:
-    input:
-        sam = rules.bowtie.output.sam
-    output:
-        bam = "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
-    log: "results/map/{assembler}/{filter_source}/{sample_id}/samtools.log"
-    container: "docker://quay.io/biocontainers/samtools:1.21--h96c455f_1"
-    shell:
-        """
-        samtools view {input.sam} -h -b | samtools sort - -o {output.bam}
-        """
-    
-rule gff2bed:
-    input:
-        gff = "results/annotation/{assembler}/{filter_source}/{sample_id}/frame_selection/final.reformat.gff"
-    output:
-        bed = "results/annotation/{assembler}/{filter_source}/{sample_id}/frame_selection/final.reformat.bed"
-    conda:
-        "../../envs/rseqc.yaml"
-    shell:
-        """
-        gff2bed < {input.gff} > {output.bed}
-        """
-
-rule infer_experiment:
-    input:
-        bed = "results/annotation/{assembler}/{filter_source}/{sample_id}/frame_selection/final.reformat.bed",
-        bam = "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
-    output:
-        "results/annotation/{assembler}/{filter_source}/{sample_id}/rseqc/rseqc.out"
-    conda:
-        "../../envs/rseqc.yaml"
-    shell:
-        """
-        infer_experiment.py -i {input.bam} -r {input.bed}> {output[0]}
+        subread-align -T {threads} -sortReadsByCoordinates -r {input.fq[0]} -R {input.fq[1]} -i {params.index} -o {output} -t 0 > {log} 2>&1
         """
 
 rule multiqc_map_report:
