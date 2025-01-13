@@ -131,9 +131,7 @@ eggnog = expand("results/collated/{assembler}/{source}/eggNOG/{db}.{fc}.tsv",
             assembler = config["assembler"],
             fc = ["tpm","raw"],
             source = config["read_source"])
-mapres = expand("results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R{i}.fastq.gz",
-            assembler = config["assembler"], source = config["read_source"], sample_id = samples.keys(), i = [1,2])
-mapres += expand("results/report/map/{assembler}_{source}_map_report.html",
+mapres = expand("results/report/map/{assembler}_{source}_map_report.html",
             assembler = config["assembler"], source = config["read_source"])
 normalize = expand("results/annotation/{assembler}/{source}/{sample_id}/featureCounts/fc.{fc}.tab",
             assembler = config["assembler"], source = config["read_source"], sample_id = samples.keys(), fc=["tpm","raw"])
