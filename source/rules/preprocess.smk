@@ -30,6 +30,7 @@ rule download_fastq:
         dlparams = config["dlparams"],
         acc=lambda wildcards: generate_sra_acc(wildcards)
     conda: "../../envs/sratools.yaml"
+    container: "docker://quay.io/biocontainers/sra-tools:3.1.1--h4304569_2"
     shell:
         """
         mkdir -p {params.tmpdir}
@@ -42,59 +43,9 @@ rule download_fastq:
         rm -rf {params.tmpdir}
         """
 
-##################
-## READ LENGTHS ##
-##################
-def calc_read_lengths(input, output, replace):
-    import numpy as np
-    sample_lengths = {}
-    lengths = {}
-    for f in input:
-        basename = os.path.basename(f)
-        sample_id = basename.replace(replace,"")
-        for line in shell("seqtk seq -f 0.01 {f} | seqtk comp | cut -f2 | sort | uniq -c", iterable = True):
-            line = (line.rstrip()).lstrip()
-            items = line.split(" ")
-            l = [int(items[1])]*int(items[0])
-            try:
-                lengths[sample_id] += l
-            except KeyError:
-                lengths[sample_id] = l
-        sample_lengths[sample_id] = np.round(np.mean(lengths[sample_id]),2)
-    df = pd.DataFrame(sample_lengths,index=["avg_len"]).T
-    df.to_csv(output[0], sep="\t")
-
-rule avg_seq_length_taxmapper:
-    input:
-        "results/taxmapper/{sample_id}/{sample_id}_R1.cut.trim.filtered.fastq.gz"
-    output:
-        temp("results/sample_info/{sample_id}.taxmapper_read_lengths.tab")
-    run:
-        calc_read_lengths(input, output, "_R1.cut.trim.filtered.fastq.gz")
-
-rule avg_seq_length_bowtie:
-    input:
-        "results/bowtie2/{sample_id}/{sample_id}_R1.fungi.nohost.fastq.gz"
-    output:
-        temp("results/sample_info/{sample_id}.bowtie2_read_lengths.tab")
-    run:
-        calc_read_lengths(input, output, "_R1.fungi.nohost.fastq.gz")
-
-rule avg_seq_length_filtered:
-    input:
-        "results/filtered/{sample_id}/{sample_id}_R1.filtered.union.fastq.gz"
-    output:
-        temp("results/sample_info/{sample_id}.filtered_read_lengths.tab")
-    run:
-        calc_read_lengths(input, output, "_R1.filtered.union.fastq.gz")
-
-rule avg_seq_length_unfiltered:
-    input:
-        "results/preprocess/{sample_id}_R1.cut.trim.fastq.gz"
-    output:
-        temp("results/sample_info/{sample_id}.unfiltered_read_lengths.tab")
-    run:
-        calc_read_lengths(input, output, "_R1.cut.trim.fastq.gz")
+##############
+## TRIMMING ##
+##############
 
 rule cutadapt:
     input:
@@ -113,6 +64,7 @@ rule cutadapt:
         settings = "-e 0.2",
         tmpdir = "$TMPDIR/{sample_id}"
     conda: "../../envs/cutadapt.yaml"
+    container: "docker://quay.io/biocontainers/cutadapt:5.0--py310h1fe012e_0"
     threads: 4
     shell:
         """
@@ -142,6 +94,7 @@ rule trimmomatic:
         R2_temp = "$TMPDIR/{sample_id}/R2.fastq.gz"
     threads: 4
     conda: "../../envs/trimmomatic.yaml"
+    container: "docker://biocontainers/trimmomatic:v0.38dfsg-1-deb_cv1"
     resources: 
         runtime = lambda wildcards, attempt: attempt*20
     shell:
@@ -153,6 +106,10 @@ rule trimmomatic:
         mv {params.R2_temp} {output.R2}
         rm -r {params.tmpdir}
         """
+
+####################
+## rRNA filtering ##
+####################
 
 rule download_rRNA_database:
     output:
@@ -183,7 +140,7 @@ rule sortmerna_index:
         runtime = 60
     threads: 2
     conda: "../../envs/sortmerna.yaml"
-    container: "docker://quay.io/biocontainers/sortmerna:4.3.7--hdbdd923_0"
+    container: "docker://quay.io/biocontainers/sortmerna:4.2.0--h9ee0642_1"
     shell:
         """
         mkdir -p {params.tmpdir}
@@ -207,21 +164,20 @@ rule sortmerna:
     log:
         run="results/preprocess/sortmerna/{sample_id}/run.log",
         stats="results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log",
-        log="results/preprocess/sortmerna/{sample_id}/{sample_id}.sortmerna.log"
     params:
         workdir="$TMPDIR/{sample_id}.sortmerna",
         idx_dir=lambda wildcards, input: os.path.dirname(input.ref)
     threads: 4
     conda:
         "../../envs/sortmerna.yaml"
-    container: "docker://quay.io/biocontainers/sortmerna:4.3.7--hdbdd923_0"
+    container: "docker://quay.io/biocontainers/sortmerna:4.2.0--h9ee0642_1"
     shell:
         """
         rm -rf {params.workdir}
         sortmerna --workdir {params.workdir}/ --threads {threads} --idx {params.idx_dir} \
             --ref {input.ref} --reads {input.R1} --reads {input.R2} \
-            --paired_in --out2 --fastx --blast 1 --num_alignments 1 --aligned --other -v --log {log.log} >{log.run} 2>&1
-        pigz -9 -p {threads} {params.workdir}/out/*.fastq
+            --paired_in --out2 --fastx --blast 1 --num_alignments 1 --aligned --other -v >{log.run} 2>&1
+        gzip {params.workdir}/out/*.fastq
         mv {params.workdir}/out/aligned_fwd.fastq.gz {output.R1_rRNA}
         mv {params.workdir}/out/aligned_rev.fastq.gz {output.R2_rRNA}
         mv {params.workdir}/out/other_fwd.fastq.gz {output.R1}
@@ -242,31 +198,11 @@ rule fastqc:
     resources:
         runtime = lambda wildcards, attempt: attempt*20
     conda: "../../envs/fastqc.yaml"
+    container: "docker://quay.io/biocontainers/fastqc:0.12.1--hdfd78af_0"
     shell:
         """
         fastqc --noextract {input.R1} {input.R2} -o {params.outdir} >{log} 2>&1
         """
-
-def reformat_cutadapt_log(f, out1, out2):
-    sample = (os.path.basename(f)).replace(".cutadapt.log","")
-    with open(f, 'r') as fhin, open(out1, 'w') as fhout1, open(out2, 'w') as fhout2:
-        for line in fhin:
-            line = line.rstrip()
-            if "Command line parameters:" in line:
-                items = line.rsplit()
-                fhout1.write(" ".join(items[0:-1]+[sample+"_R1"])+"\n")
-                fhout2.write(" ".join(items[0:-1]+[sample+"_R2"])+"\n")
-            else:
-                fhout1.write("{}\n".format(line))
-                fhout2.write("{}\n".format(line))
-
-def reformat_trimmomatic_log(f, out1, out2):
-    sample = (os.path.basename(f)).replace(".cut.trim.log","")
-    with open(f, 'r') as fhin, open(out1, 'w') as fhout1, open(out2, 'w') as fhout2:
-        for line in fhin:
-            line = line.rstrip()
-            fhout1.write("{}\n".format(line.replace("_R2.cut.fastq.gz","_R1.cut.fastq.gz")))
-            fhout2.write("{}\n".format(line.replace("_R1.cut.fastq.gz","_R2.cut.fastq.gz")))
 
 rule multiqc:
     input:
