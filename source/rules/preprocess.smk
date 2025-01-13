@@ -1,9 +1,6 @@
 localrules:
     multiqc,
     download_fastq,
-    avg_seq_length_bowtie,
-    avg_seq_length_filtered,
-    avg_seq_length_taxmapper,
     download_rRNA_database
 
 #############
