@@ -77,7 +77,7 @@ rule mmseqs_firstpass_taxonomy_co:
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     conda: "../../envs/mmseqs.yaml"
     params:
-        tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_firstpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}.{wildcards.td_db}", 
+        tmp = lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_firstpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}.{wildcards.td_db}", 
         split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
         output = lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
         ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
@@ -213,7 +213,7 @@ rule mmseqs_secondpass_taxonomy_co:
         expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/mmseqs_secondpass_taxonomy_co.log", mmseqs_db = config["mmseqs_db"])
     params:
         output = lambda wildcards, output: f"{os.path.dirname(output[0])}/secondpass-taxresult",
-        tmp = lambda wildcards: f"{os.environ.get("TMPDIR", "scratch")}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}", 
+        tmp = lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}", 
         ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
         split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
         target = lambda wildcards, input: (input.target).replace("_taxonomy", "")
@@ -320,61 +320,53 @@ rule collate_featurecount_co:
 #################################
 rule emapper_search_co:
     input:
-        "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.faa",
-        "resources/eggnog/eggnog.db"
+        faa="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.faa",
+        db=f"{config['emapper_db_dir']}/eggnog.db",
+        mmseqs_db=f"{config['emapper_db_dir']}/mmseqs/mmseqs.db"
     output:
         "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results.emapper.seed_orthologs"
     params:
-        out_base = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results",
-        resource_dir = "resources/eggnog",
+        data_dir = lambda wc, input: os.path.dirname(input.db),
         out = "annotation_results",
         tmpdir = "$TMPDIR/eggnog/{assembly}",
         tmp_out = "$TMPDIR/eggnog/{assembly}/annotation_results",
-        flags = "-m diamond --no_annot --no_file_comments",
-        outdir = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/"
+        outdir = lambda wc, output: os.path.dirname(output[0]),
     log: "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/emapper.log"
-    threads: 20
-    shadow: "shallow"
-    resources:
-        runtime=lambda wildcards, attempt: attempt**2*60
+    threads: 10
+    #shadow: "shallow"
     conda: "../../envs/emapper.yaml"
+    container: "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
     shell:
         """
         mkdir -p {params.tmpdir}
         mkdir -p {params.outdir}
-        emapper.py {params.flags} --cpu {threads} -i {input[0]} -o {params.out} --temp_dir {params.tmpdir} \
-        --output_dir {params.tmpdir} --data_dir {params.resource_dir} 2>{log}
+        emapper.py -m mmseqs --mmseqs_db {input.mmseqs_db} --no_annot --no_file_comments --itype proteins --cpu {threads} \
+            -i {input[0]} -o {params.out} --temp_dir {params.tmpdir} \
+            --output_dir {params.tmpdir} --data_dir {params.data_dir} 2>{log}
         mv {params.tmp_out}.emapper.seed_orthologs {output[0]}
         """
 
 rule emapper_annotate_hits_co:
     input:
-        "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results.emapper.seed_orthologs",
-        "resources/eggnog/eggnog.db",
-        "resources/eggnog/eggnog_proteins.dmnd"
+        seed_orthologs=rules.emapper_search_co.output,
+        db=f"{config['emapper_db_dir']}/eggnog.db",
+        mmseqs_db=f"{config['emapper_db_dir']}/mmseqs/mmseqs.db"
     output:
         "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results.emapper.annotations"
     params:
-        resource_dir = "resources/eggnog",
+        data_dir = lambda wc, input: os.path.dirname(input.db),
         tmpdir = "$TMPDIR/eggnog/{assembly}/",
         out = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results",
-        flags = "--no_file_comments"
     log: "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/emapper.annotate.log"
     threads: 10
-    shadow: "minimal"
     conda: "../../envs/emapper.yaml"
+    container: "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
     resources:
-        runtime=lambda wildcards, attempt: attempt * 60
+        mem_mb = 50000
     shell:
         """
-        #Copy eggnog.db to /dev/shm
-        mkdir -p /dev/shm/$SLURM_JOB_ID
-        cp {input[1]} {input[2]} /dev/shm/$SLURM_JOB_ID
-        #Run annotation of hits table
-        emapper.py {params.flags} --cpu {threads} --annotate_hits_table {input[0]} -o {params.out} \
-        --data_dir /dev/shm/$SLURM_JOB_ID --usemem 2>{log}
-        # Clean up
-        rm -rf /dev/shm/$SLURM_JOB_ID
+        emapper.py -m no_search --cpu {threads} --annotate_hits_table {input.seed_orthologs} -o {params.out} \
+            --data_dir {params.data_dir} --dbmem 2>{log}
         """
 
 ################################
@@ -382,18 +374,18 @@ rule emapper_annotate_hits_co:
 ################################
 rule parse_eggnog_co:
     input:
-        f = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/annotation_results.emapper.annotations",
+        f = rules.emapper_annotate_hits_co.output,
         db = expand("resources/kegg/{f}",
             f = ["kegg_ec2pathways.tsv","kegg_ko2ec.tsv",
                  "kegg_ko2pathways.tsv","kegg_kos.tsv","kegg_modules.tsv","kegg_pathways.tsv"])
-    log: "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/parser.log"
     output:
-        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/eggNOG/{db}.parsed.tab",
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/eggNOG/{db}.parsed.tsv",
             db = ["enzymes","ko","modules","pathways","tc","cazy"])
+    log: "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/parser.log"
     params:
-        src = "source/utils/eggnog-parser.py",
+        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
         dldir = "resources/kegg",
-        outdir = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/"
+        outdir = lambda wc, output: os.path.dirname(output[0])
     shell:
         """
         python {params.src} parse {params.dldir} {input.f} {params.outdir} 2>{log}
@@ -403,11 +395,11 @@ rule quantify_eggnog_co:
     input:
         abundance = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.{{fc}}.tab",
             sample_id = samples.keys()),
-        parsed = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tab",
+        parsed = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{fc}.tsv"
     params:
-        src = "source/utils/eggnog-parser.py",
+        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
         tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "{db}")
     threads: 4
     resources:
@@ -432,12 +424,12 @@ rule quantify_eggnog_normalized_co:
     input:
         abundance = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.{{fc}}.tab",
             sample_id = samples.keys()),
-        parsed = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tab",
+        parsed = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
         norm = "resources/kegg/kegg_ko2{db}.tsv"
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.norm.{fc}.tsv"
     params:
-        src = "source/utils/eggnog-parser.py",
+        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
         tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "norm", "{db}")
     threads: 4
     resources:
@@ -459,7 +451,7 @@ rule eggnog_tax_annotations:
     """Collate gene annotations and abundances for a certain rank:taxon combination"""
     input:
         gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
-        parsed = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tab",
+        parsed = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
         abundance = "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv"
     output:
         expand("results/collated/co-assembly/{{assembler}}/{{assembly}}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{{db}}.{{fc}}.tsv",
