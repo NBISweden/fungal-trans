@@ -47,6 +47,79 @@ rule fastq_stats:
 ##########################
 include: "paired_strategy.smk"
 
+rule subread_index_fungi:
+    input:
+        rules.concat_transcripts.output
+    output:
+        expand("resources/fungi/subread_index.{suff}",
+               suff = ["00.b.array", "00.b.tab", "files", "lowinf", "reads"])
+    log:
+        "resources/fungi/subread_index.log"
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
+    conda: "../../envs/featurecount.yaml"
+    params:
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        max_mem = lambda wildcards, resources: resources.mem_mb
+    resources:
+        mem_mb = 8000
+    shell:
+        """
+        subread-buildindex -M {params.max_mem} -o {params.outdir}/subread_index {input} > {log} 2>&1
+        """
+
+rule subread_align_fungi:
+    input:
+        index = rules.subread_index_fungi.output,
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+    output:
+        bam="results/subread/{sample_id}/{sample_id}.fungi.bam",
+    log:
+        "results/subread/{sample_id}/{sample_id}.subread_align.log"
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
+    conda: "../../envs/featurecount.yaml"
+    params:
+        index = lambda wildcards, input: os.path.join(os.path.dirname(input.index[0]), "subread_index"),
+    threads: 4
+    shell:
+        """
+        subread-align -T {threads} -sortReadsByCoordinates -r {input.R1} -R {input.R2} -i {params.index} -o {output} -t 0 > {log} 2>&1
+        """
+
+rule strobealign_index:
+    input:
+        rules.concat_transcripts.output
+    output:
+        expand("resources/fungi/fungi_transcripts.fasta.gz.r{rl}.sti", rl = config["strobealign_read_len"])
+    log:
+        "resources/fungi/strobealign_index.log"
+    params:
+        read_len = config["strobealign_read_len"]
+    container: "docker://quay.io/biocontainers/strobealign:0.15.0--h5ca1c30_1"
+    threads: 4
+    shell:
+        """
+        strobealign --create-index -t {threads} {input} -r {params.read_len} > {log} 2>&1
+        """
+
+rule strobealign_map_fungi:
+    input:
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+        index=rules.strobealign_index.output,
+        fa=rules.concat_transcripts.output
+    output:
+        bam="results/strobealign/{sample_id}/{sample_id}.fungi.bam"
+    log:
+        "results/strobealign/{sample_id}/{sample_id}.strobealign.log"
+    container: "docker://quay.io/biocontainers/strobealign:0.15.0--h5ca1c30_1"
+    threads: 4
+    shell:
+        """
+        strobealign -v -t {threads} -o {output.bam} --use-index {input.fa} {input.R1} {input.R2} > {log} 2>&1
+        """
+
+
 rule bowtie_build_fungi:
     """
     Builds bowtie2 index for fungal transcripts. Because gunzip may report 
