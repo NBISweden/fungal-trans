@@ -1,6 +1,5 @@
 localrules:
-    get_all_mapped_fungal_refs,
-    filter_report,
+    strobealign_collect_chunks,
     link_unfiltered,
     link_filtered
 
@@ -19,8 +18,7 @@ rule link_unfiltered:
 
 rule link_filtered:
     input:
-        expand("results/{aligner}/{{sample_id}}/{{sample_id}}_R{{i}}.fungi.nohost.fastq.gz",
-               aligner=config["host_aligner"])
+        expand("results/star/{{sample_id}}/{paired_strategy}/{{sample_id}}_R{{i}}.fungi.nohost.fastq.gz", paired_strategy=config["paired_strategy"])
     output:
         "results/filtered/{sample_id}/{sample_id}_R{i}.fastq.gz"
     shell:
@@ -45,117 +43,75 @@ rule fastq_stats:
 ##########################
 ## Bowtie2/STAR mapping ##
 ##########################
-include: "paired_strategy.smk"
-
-rule subread_index_fungi:
-    input:
-        rules.concat_transcripts.output
-    output:
-        expand("resources/fungi/subread_index.{suff}",
-               suff = ["00.b.array", "00.b.tab", "files", "lowinf", "reads"])
-    log:
-        "resources/fungi/subread_index.log"
-    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
-    conda: "../../envs/featurecount.yaml"
-    params:
-        outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        max_mem = lambda wildcards, resources: resources.mem_mb
-    resources:
-        mem_mb = 8000
-    shell:
-        """
-        subread-buildindex -M {params.max_mem} -o {params.outdir}/subread_index {input} > {log} 2>&1
-        """
-
-rule subread_align_fungi:
-    input:
-        index = rules.subread_index_fungi.output,
-        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
-    output:
-        bam="results/subread/{sample_id}/{sample_id}.fungi.bam",
-    log:
-        "results/subread/{sample_id}/{sample_id}.subread_align.log"
-    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
-    conda: "../../envs/featurecount.yaml"
-    params:
-        index = lambda wildcards, input: os.path.join(os.path.dirname(input.index[0]), "subread_index"),
-    threads: 4
-    shell:
-        """
-        subread-align -T {threads} -sortReadsByCoordinates -r {input.R1} -R {input.R2} -i {params.index} -o {output} -t 0 > {log} 2>&1
-        """
-
-rule strobealign_index:
-    input:
-        rules.concat_transcripts.output
-    output:
-        expand("resources/fungi/fungi_transcripts.fasta.gz.r{rl}.sti", rl = config["strobealign_read_len"])
-    log:
-        "resources/fungi/strobealign_index.log"
-    params:
-        read_len = config["strobealign_read_len"]
-    container: "docker://quay.io/biocontainers/strobealign:0.15.0--h5ca1c30_1"
-    threads: 4
-    shell:
-        """
-        strobealign --create-index -t {threads} {input} -r {params.read_len} > {log} 2>&1
-        """
+#include: "paired_strategy.smk"
 
 rule strobealign_map_fungi:
+    """
+    This rule maps preprocessed reads against fungal genome transcript files.
+    This is done in chunks of 100 genomes to avoid memory issues.
+    The output is a PAF file with the mapping results. Reads listed twice in the PAF
+    file have both ends mapped (properly or not) and these are output to a separate
+    file for each chunk.
+    """
     input:
         R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
         R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
-        index=rules.strobealign_index.output,
-        fa=rules.concat_transcripts.output
+        fna=lambda wildcards: strobealign_chunks[wildcards.chunk]
     output:
-        bam="results/strobealign/{sample_id}/{sample_id}.fungi.bam"
+        paf="results/strobealign/{sample_id}/{chunk}/{sample_id}.fungi.paf.gz",
+        both="results/strobealign/{sample_id}/{chunk}/{sample_id}.fungi.both_mapped.gz",
     log:
-        "results/strobealign/{sample_id}/{sample_id}.strobealign.log"
+        "results/strobealign/{sample_id}/{chunk}/{sample_id}.strobealign.log"
+    params:
+        tmpdir = "$TMPDIR/{sample_id}.{chunk}",
     container: "docker://quay.io/biocontainers/strobealign:0.15.0--h5ca1c30_1"
-    threads: 4
+    threads: 6
     shell:
         """
-        strobealign -v -t {threads} -o {output.bam} --use-index {input.fa} {input.R1} {input.R2} > {log} 2>&1
+        mkdir -p {params.tmpdir}
+        cat {input.fna} > {params.tmpdir}/ref.fna.gz
+        strobealign -v -x -t {threads} {params.tmpdir}/ref.fna.gz {input.R1} {input.R2} 2>{log} | igzip > {output.paf}
+        igzip -c -d {output.paf} | cut -f1 | sort | uniq -d | igzip > {output.both}
+        rm -r {params.tmpdir}
         """
 
-
-rule bowtie_build_fungi:
+rule strobealign_collect_chunks:
     """
-    Builds bowtie2 index for fungal transcripts. Because gunzip may report 
-    'decompression OK, trailing garbage ignored' when decompressing the transcript file
-    and exiting with an error code of 2 we handle this by checking the exit code and only 
-    exiting with a 1 if the exit code is exactly 1. Otherwise this rule may fail because
-    Snakemake runs in strict mode.
+    This rule collects the PAF output from the different chunks and concatenates them.
     """
     input:
-        rules.concat_transcripts.output
+        paf=expand("results/strobealign/{{sample_id}}/{chunk}/{{sample_id}}.fungi.paf.gz", chunk=strobealign_chunks.keys()),
+        both=expand("results/strobealign/{{sample_id}}/{chunk}/{{sample_id}}.fungi.both_mapped.gz", chunk=strobealign_chunks.keys())
     output:
-        expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l",
-               index=range(1,5))
-    log:
-        bt2="resources/fungi/bowtie2.log",
-        shell="resources/fungi/shell.log"
-    params:
-        fasta = "$TMPDIR/fungi_transcripts/fungi_transcripts.fasta",
-        tmpdir = "$TMPDIR/fungi_transcripts",
-        outdir = "resources/fungi/"
-    threads: 64
-    conda: "../../envs/bowtie2.yaml"
+        paf="results/strobealign/{sample_id}/{sample_id}.fungi.paf.gz",
+        both="results/strobealign/{sample_id}/{sample_id}.fungi.both_mapped.gz",
     shell:
         """
-        set +e
-        exec &>{log.shell}
-        mkdir -p {params.tmpdir}
-        gunzip -c {input} > {params.fasta}
-        exitcode=$?
-        if [ $exitcode -eq 1 ]
-        then
-            exit 1
-        fi
-        bowtie2-build --threads {threads} --large-index {params.fasta} {params.fasta} >{log.bt2} 2>&1
-        mv {params.fasta}*.bt2l {params.outdir}/
-        rm -r {params.tmpdir}
+        cat {input.paf} > {output.paf}
+        cat {input.both} > {output.both}
+        """
+
+rule process_fungal_bam:
+    """
+    This rule extracts reads from the preprocessed fastq files that map to fungi.
+    Reads with both ends and one or both ends mapped are extracted separately.
+    """
+    input:
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+        paf="results/strobealign/{sample_id}/{sample_id}.fungi.paf.gz",
+        both="results/strobealign/{sample_id}/{sample_id}.fungi.both_mapped.gz",
+    output:
+        R1one="results/strobealign/{sample_id}/{sample_id}_R1.fungi.one_mapped.fastq.gz",
+        R2one="results/strobealign/{sample_id}/{sample_id}_R2.fungi.one_mapped.fastq.gz",
+        R1both="results/strobealign/{sample_id}/{sample_id}_R1.fungi.both_mapped.fastq.gz",
+        R2both="results/strobealign/{sample_id}/{sample_id}_R2.fungi.both_mapped.fastq.gz",
+    shell:
+        """
+        seqkit grep -f <(gunzip -c {input.paf} | cut -f1) {input.R1} -o {output.R1one}
+        seqkit grep -f <(gunzip -c {input.paf} | cut -f1) {input.R2} -o {output.R2one}
+        seqkit grep -f <(gunzip -c {input.both}) {input.R1} -o {output.R1both}
+        seqkit grep -f <(gunzip -c {input.both}) {input.R2} -o {output.R2both}
         """
 
 if not config["host_fna"] and config["host_aligner"]=="star":
@@ -189,6 +145,7 @@ rule star_build_host:
         runtime = 60 * 24,
         mem_mb = config["star_limitGenomeGenerateRAM"]*1000, # converts ram in GB to MB
     conda: "../../envs/star.yaml"
+    container: "docker://quay.io/biocontainers/star:2.7.11b--h5ca1c30_5"
     shell:
         """
         exec &>{log}
@@ -202,105 +159,21 @@ rule star_build_host:
         rm -rf {params.tmpdir}
         """
 
-
-rule bowtie_build_host:
-    input:
-        "resources/host/host.fna"
-    output:
-        expand("resources/host/host.fna.{index}.bt2l", index=range(1,5))
-    log:
-        "resources/host/bowtie2.log"
-    resources:
-        runtime = 60
-    conda: "../../envs/bowtie2.yaml"
-    shell:
-        """
-        bowtie2-build \
-            --threads {threads} \
-            --large-index {input} \
-            {input} >{log} 2>&1
-        """
-
-rule bowtie_map_fungi:
-    """
-    Maps preprocessed reads against fungal transcripts.
-    
-    Reads that do or do not map concordantly in this step are saved directly
-    in separate fastq files. If the 'paired_strategy' is set to 'concordant' 
-    these files will be used to separate host and fungal reads.
-    """
-    input:
-        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
-        db=expand("resources/fungi/fungi_transcripts.fasta.{index}.bt2l", index=range(1,5))
-    output:
-        bam="results/bowtie2/{sample_id}/{sample_id}.fungi.bam",
-        R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.conc.fastq.gz",
-        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.conc.fastq.gz",
-        R1u="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.noconc.fastq.gz",
-        R2u="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.noconc.fastq.gz",
-    params:
-        prefix = "resources/fungi/fungi_transcripts.fasta",
-        al_conc_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.conc.fastq.gz",
-        un_conc_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.noconc.fastq.gz",
-        R1 = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.conc.fastq.gz",
-        R2 = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.conc.fastq.gz",
-        R1u = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.noconc.fastq.gz",
-        R2u = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.noconc.fastq.gz",
-        tmpdir = "$TMPDIR/{sample_id}",
-        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.fungi.bam",
-        setting = config["bowtie2_params"]
-    log:
-        bt2 = "results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
-        st_sort = "results/bowtie2/{sample_id}/{sample_id}.samtools_sort.fungi.log",
-    threads: 10
-    conda: "../../envs/bowtie2.yaml"
-    shell:
-        """
-        mkdir -p {params.tmpdir}
-        bowtie2 {params.setting} -p {threads} -x {params.prefix} -1 {input.R1} \
-            -2 {input.R2} --al-conc-gz {params.al_conc_path} \
-            --un-conc-gz {params.un_conc_path} 2> {log.bt2} | samtools sort -n -O BAM - >{params.temp_bam} 2>{log.st_sort} 
-        mv {params.temp_bam} {output.bam}
-        mv {params.R1} {output.R1} 
-        mv {params.R2} {output.R2}
-        mv {params.R1u} {output.R1u}
-        mv {params.R2u} {output.R2u}
-        """
-
-rule get_mapped_fungal_refs:
-    input:
-        "results/bowtie2/{sample_id}/{sample_id}.fungi.bam"
-    output:
-        "results/bowtie2/{sample_id}/{sample_id}.fungi.refs"
-    resources:
-        runtime = 30
-    shell:
-        """
-        samtools view -F 4 -f 64 {input[0]} | cut -f3 | sort -u > {output[0]}
-        """
-
-rule get_all_mapped_fungal_refs:
-    input:
-        expand("results/bowtie2/{sample_id}/{sample_id}.fungi.refs",
-               sample_id = samples.keys())
-    output:
-        "results/collated/bowtie2/fungi.refs.ids"
-    shell:
-        """
-        cat {input} | sort -u > {output[0]}
-        """
+def get_putative_fungal_reads(wc):
+    if config["paired_strategy"] == "both_mapped":
+        return expand("results/strobealign/{sample_id}/{sample_id}_R{i}.fungi.both_mapped.fastq.gz", i=[1,2], sample_id=wc.sample_id)
+    return expand("results/strobealign/{sample_id}/{sample_id}_R{i}.fungi.one_mapped.fastq.gz", i=[1,2], sample_id=wc.sample_id)
 
 rule star_map_host:
     """
-    Maps putative fungal reads against host with STAR
+    Maps any read that mapped to fungi against the host genome.
     """
     input:
         db=expand("resources/host/{f}",
             f=["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
                "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"]),
-        R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
-        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.fastq.gz"
+        R1=rules.process_fungal_bam.output.R1one,
+        R2=rules.process_fungal_bam.output.R2one,
     output:
         "results/star/{sample_id}/{sample_id}.host.bam"
     log:
@@ -308,6 +181,7 @@ rule star_map_host:
         all="results/star/{sample_id}/map.log",
         stat="results/star/{sample_id}/{sample_id}.Log.final.out"
     params:
+        tmpdir = "$TMPDIR/{sample_id}",
         prefix = "$TMPDIR/{sample_id}/{sample_id}.",
         genomedir = lambda wildcards, input: os.path.dirname(input.db[0]),
         temp_bam = "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam",
@@ -315,9 +189,11 @@ rule star_map_host:
         temp_stat = "$TMPDIR/{sample_id}/{sample_id}.Log.final.out",
         setting = config["star_extra_params"]
     conda: "../../envs/star.yaml"
-    threads: 20
+    container: "docker://quay.io/biocontainers/star:2.7.11b--h5ca1c30_5"
+    threads: 10
     shell:
         """
+        mkdir -p {params.tmpdir}
         exec &>{log.all}
         STAR --outFileNamePrefix {params.prefix} --runThreadN {threads} \
             --genomeDir {params.genomedir} --readFilesIn {input.R1} {input.R2} \
@@ -328,113 +204,49 @@ rule star_map_host:
         mv {params.temp_stat} {log.stat}
         """
 
-rule bowtie_map_host:
+rule process_host_bam:
     """
-    Maps putative fungal reads against host sequences with bowtie2 
-    """
-    input:
-        db = expand("resources/host/host.fna.{index}.bt2l", index=range(1,5)),
-        R1="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.fastq.gz",
-        R2="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.fastq.gz"
-    output:
-        bam="results/bowtie2/{sample_id}/{sample_id}.host.bam",
-        R1f="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.host.noconc.fastq.gz",
-        R2f="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.host.noconc.fastq.gz",
-        R1h="results/bowtie2/{sample_id}/{sample_id}_R1.fungi.host.conc.fastq.gz",
-        R2h="results/bowtie2/{sample_id}/{sample_id}_R2.fungi.host.conc.fastq.gz"
-    params:
-        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.host.bam",
-        no_al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.host.noconc.fastq.gz",
-        al_path = "$TMPDIR/{sample_id}/{sample_id}_R%.fungi.host.conc.fastq.gz",
-        R1h = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.host.conc.fastq.gz",
-        R2h ="$TMPDIR/{sample_id}/{sample_id}_R2.fungi.host.conc.fastq.gz",
-        R1f = "$TMPDIR/{sample_id}/{sample_id}_R1.fungi.host.noconc.fastq.gz",
-        R2f = "$TMPDIR/{sample_id}/{sample_id}_R2.fungi.host.noconc.fastq.gz",
-        tmpdir = "$TMPDIR/{sample_id}",
-        prefix = "resources/host/host.fna",
-        setting = config["bowtie2_params"]
-    log:
-        bt2 = "results/bowtie2/{sample_id}/{sample_id}.host.log",
-        samtools = "results/bowtie2/{sample_id}/{sample_id}.samtools.host.log"
-    threads: 10
-    resources:
-        runtime = 60
-    shell:
-        """
-        exec &> {log.samtools}
-        mkdir -p {params.tmpdir}
-        bowtie2 {params.setting} -p {threads} -x {params.prefix} -1 {input.R1} \
-            -2 {input.R2} --al-conc-gz {params.al_path} --un-conc-gz {params.no_al_path} \
-            2>{log.bt2} | samtools sort -n -O BAM - > {params.temp_bam} 2>{log.samtools}
-        mv {params.temp_bam} {output.bam}
-        mv {params.R1f} {output.R1f}
-        mv {params.R2f} {output.R2f}
-        mv {params.R1h} {output.R1h}
-        mv {params.R2h} {output.R2h}
-        """
-
-rule host_reads:
-    """
-    This rule extracts reads from the preprocessed fastq files that are either not mapped to fungi,
-    or are marked as putative host reads.
+    This rule extracts reads from the host bam file. Reads with both ends mapped
+    and with one or both ends mapped are put into separate files.
     """
     input:
-        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
-        R1_1 = "results/bowtie2/{sample_id}/{sample_id}_R1.nonfungi.fastq.gz",
-        R2_1 = "results/bowtie2/{sample_id}/{sample_id}_R2.nonfungi.fastq.gz",
-        R1_2 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R1.fungi.putative-host.fastq.gz",
-        R2_2 = "results/"+config["host_aligner"]+"/{sample_id}/{sample_id}_R2.fungi.putative-host.fastq.gz"
+        bam=rules.star_map_host.output[0],
     output:
-        R1 = "results/host/{sample_id}_R1.host.fastq.gz",
-        R2 = "results/host/{sample_id}_R2.host.fastq.gz"
-    params:
-        tmpids="$TMPDIR/{sample_id}.tmp",
-        ids = "$TMPDIR/{sample_id}.ids",
-        R1 = "$TMPDIR/{sample_id}_R1.host.fastq.gz",
-        R2 = "$TMPDIR/{sample_id}_R2.host.fastq.gz"
+        R1both="results/star/{sample_id}/both_mapped/{sample_id}_R1.fungi.host.fastq.gz",
+        R2both="results/star/{sample_id}/both_mapped/{sample_id}_R2.fungi.host.fastq.gz",
+        R1one="results/star/{sample_id}/one_mapped/{sample_id}_R1.fungi.host.fastq.gz",
+        R2one="results/star/{sample_id}/one_mapped/{sample_id}_R2.fungi.host.fastq.gz",
     log:
-        "results/host/{sample_id}.log"
-    threads: 1
+        "results/star/{sample_id}/{sample_id}.host_both_mapped.log"
+    container: "docker://quay.io/biocontainers/samtools:1.21--h96c455f_1"
     shell:
         """
-        exec &>{log}
-        touch {params.tmpids}
-        seqkit seq -n -i --threads {threads} {input.R1_1} {input.R1_2} {input.R2_1} {input.R2_2} | sort -u > {params.ids}
-        seqkit grep -f {params.ids} --immediate-output --threads {threads} -o {params.R1} {input.R1}
-        seqkit grep -f {params.ids} --immediate-output --threads {threads} -o {params.R2} {input.R2}
-        mv {params.R1} {output.R1}
-        mv {params.R2} {output.R2}
-        rm {params.ids}
-        rm {params.tmpids}
+        # Extract reads with both ends mapped
+        samtools fastq -F 12 -1 {output.R1both} -2 {output.R2both} -s /dev/null -0 /dev/null {input.bam}
+        # Extract reads with not both ends mapped
+        samtools fastq -F 4 -1 {output.R1one} -2 {output.R2one} -s /dev/null -0 /dev/null {input.bam}
         """
 
-def get_host_logs(config, samples):
-    if config["host_aligner"] == "star":
-        return expand("results/star/{sample_id}/{sample_id}.host.log", sample_id = samples.keys())
-    elif config["host_aligner"] == "bowtie2":
-        return expand("results/bowtie2/{sample_id}/{sample_id}.host.log", sample_id = samples.keys())
+rule filter_fungal_reads:
+    """
+    This rule combines mapping results from the fungi and host mapping.
 
-rule filter_report:
+    If paired_strategy is 'both_mapped', then reads that mapped with both ends to the host
+    are subtracted from reads that mapped with both ends to fungi.
+
+    If paired_strategy is 'one_mapped', then reads that mapped with one or both ends to the host
+    are subtracted from reads that mapped with one or both ends to fungi.
+    """
     input:
-        hostlogs = get_host_logs(config, samples),
-        fungallogs = expand("results/bowtie2/{sample_id}/{sample_id}.bowtie2.fungi.log",
-            sample_id = samples.keys())
+        R1_host="results/star/{sample_id}/{paired_strategy}/{sample_id}_R1.fungi.host.fastq.gz",
+        R2_host="results/star/{sample_id}/{paired_strategy}/{sample_id}_R2.fungi.host.fastq.gz",
+        R1_fungi="results/strobealign/{sample_id}/{sample_id}_R1.fungi.{paired_strategy}.fastq.gz",
+        R2_fungi="results/strobealign/{sample_id}/{sample_id}_R2.fungi.{paired_strategy}.fastq.gz",
     output:
-        "results/report/filtering/filter_report.html"
-    log:
-        "results/report/filtering/filter_report.log"
-    params:
-        tmpdir = "multiqc_filter",
-        config = "config/multiqc_filter_config.yaml"
+        R1="results/star/{sample_id}/{paired_strategy}/{sample_id}_R1.fungi.nohost.fastq.gz",
+        R2="results/star/{sample_id}/{paired_strategy}/{sample_id}_R2.fungi.nohost.fastq.gz"
     shell:
         """
-        mkdir -p {params.tmpdir}
-        cp {input.hostlogs} {params.tmpdir}
-        cp {input.fungallogs} {params.tmpdir}
-        multiqc \
-            -f -c {params.config} \
-            -n filter_report \
-            -o results/report/filtering {params.tmpdir}
-        rm -r {params.tmpdir}
+        seqkit grep -v -f <(seqkit seq -n -i {input.R1_host}) {input.R1_fungi} -o {output.R1}
+        seqkit grep -v -f <(seqkit seq -n -i {input.R2_host}) {input.R2_fungi} -o {output.R2}
         """
