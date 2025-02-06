@@ -37,11 +37,12 @@ rule kallisto_quant_co:
     conda: "../../envs/kallisto.yaml"
     params:
         bootstrap = 100,
-        outdir = lambda wildcards, output: os.path.dirname(output.h5)
+        outdir = lambda wildcards, output: os.path.dirname(output.h5),
+        settings = config["kallisto_params"]
     threads: 2
     shell:
         """
-        kallisto quant -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.R1} {input.R2} > {log} 2>&1
+        kallisto quant {params.settings} -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.R1} {input.R2} > {log} 2>&1
         """
 
 rule wrap_assembly_co:
