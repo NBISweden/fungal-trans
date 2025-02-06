@@ -1,7 +1,8 @@
 #!/usr/bin/env
 
 import pandas as pd
-
+import os
+import sys
 
 def parse_sample_list(f, config):
     """
@@ -14,13 +15,7 @@ def parse_sample_list(f, config):
         input_dir = 'filtered'
     else:
         input_dir = 'unfiltered'
-    host_aligner = config["host_aligner"]
     dir = config['datadir']
-    suffices = {'unfiltered': 'cut.trim.fastq.gz',
-                'filtered': 'filtered.union.fastq.gz',
-                'taxmapper': 'cut.trim.filtered.fastq.gz',
-                'bowtie2': 'fungi.nohost.fastq.gz',
-                'star': 'fungi.nohost.fastq.gz'}
     # Read sample list
     df = pd.read_csv(f, comment='#', header=0, sep='\t', index_col=0, dtype=str)
     df.fillna('', inplace=True)
@@ -38,8 +33,14 @@ def parse_sample_list(f, config):
             R1 = df.loc[sample,'Read_file']
             R2 = df.loc[sample,'Pair_file']
         except KeyError:
-            R1 = '{}_1.fastq.gz'.format(sample)
-            R2 = '{}_2.fastq.gz'.format(sample)
+            R1 = f'{sample}_1.fastq.gz'
+            R2 = f'{sample}_2.fastq.gz'
+        if not os.path.exists(R1) and not os.path.exists(R2):
+            if os.path.exists(f'{dir}/{R1}') and os.path.exists(f'{dir}/{R2}'):
+                R1 = f'{dir}/{R1}'
+                R2 = f'{dir}/{R2}'
+            else:
+                sys.exit("Error: Read files not found")
         if 'accession' in df.columns:
             accession = df.loc[sample, 'accession']
         else:
@@ -54,8 +55,8 @@ def parse_sample_list(f, config):
                 assemblies[assembly]['R2'].append(R2_f)
                 map_dict[sample] = {'R1': R1_f, 'R2': R2_f}
 
-        samples[sample]={'R1': f'{dir}/{R1}',
-                         'R2': f'{dir}/{R2}',
+        samples[sample]={'R1': R1,
+                         'R2': R2,
                          'accession': accession}
     return samples, map_dict, assemblies
 
