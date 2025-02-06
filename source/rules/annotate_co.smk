@@ -380,10 +380,10 @@ rule parse_eggnog_co:
                  "kegg_ko2pathways.tsv","kegg_kos.tsv","kegg_modules.tsv","kegg_pathways.tsv"])
     output:
         expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/eggNOG/{db}.parsed.tsv",
-            db = ["enzymes","ko","modules","pathways","tc","cazy"])
+            db = ["enzymes","kos","modules","pathways","tc","cazy"])
     log: "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/parser.log"
     params:
-        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
+        src = workflow.source_path("../utils/eggnog-parser.py"),
         dldir = "resources/kegg",
         outdir = lambda wc, output: os.path.dirname(output[0])
     shell:
@@ -399,7 +399,7 @@ rule quantify_eggnog_co:
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{fc}.tsv"
     params:
-        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
+        src = workflow.source_path("../utils/eggnog-parser.py"),
         tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "{db}")
     threads: 4
     resources:
@@ -429,7 +429,7 @@ rule quantify_eggnog_normalized_co:
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.norm.{fc}.tsv"
     params:
-        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
+        src = workflow.source_path("../utils/eggnog-parser.py"),
         tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "norm", "{db}")
     threads: 4
     resources:
@@ -554,7 +554,7 @@ rule dbcan_tax_annotations:
     input:
         abundance = "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
         parsed = "results/annotation/co-assembly/{assembler}/{assembly}/dbCAN/dbCAN.parsed.tsv",
-        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/gene_taxonomy.tsv"
+        gene_tax = "results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv"
     output:
         expand("results/collated/co-assembly/{{assembler}}/{{assembly}}/dbCAN_taxonomy/{rank}.{taxon}.dbCAN.{{fc}}.tsv",
                rank = config["tax_rank"], taxon = config["tax_name"])
