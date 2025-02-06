@@ -356,7 +356,7 @@ rule parse_eggnog:
             db = ["enzymes","kos","modules","pathways","tc","cazy"])
     log: "results/annotation/{assembler}/{filter_source}/{sample_id}/eggNOG/parser.log"
     params:
-        src = workflow.source_path("source/utils/eggnog-parser.py"),
+        src = workflow.source_path("../utils/eggnog-parser.py"),
         dldir = "resources/kegg",
         outdir = lambda wc, output: os.path.dirname(output[0])
     shell:
@@ -371,7 +371,7 @@ rule quantify_eggnog:
     output:
         "results/annotation/{assembler}/{filter_source}/{sample_id}/eggNOG/{db}.{fc}.tsv"
     params:
-        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
+        src = workflow.source_path("../utils/eggnog-parser.py"),
     shell:
         """
         python {params.src} quantify {input.abundance} {input.parsed} {output[0]}
@@ -386,7 +386,7 @@ rule quantify_eggnog_normalized:
     output:
         "results/annotation/{assembler}/{filter_source}/{sample_id}/eggNOG/{db}.norm.{fc}.tsv"
     params:
-        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
+        src = workflow.source_path("../utils/eggnog-parser.py"),
     shell:
         """
         python {params.src} quantify --normalize {input.norm} {input.abundance} {input.parsed} {output[0]}
@@ -399,7 +399,7 @@ rule eggnog_merge_and_sum:
     output:
         "results/collated/{assembler}/{filter_source}/eggNOG/{db}.{fc}.tsv"
     params:
-        src = workflow.source_path("../../source/utils/eggnog-parser.py"),
+        src = workflow.source_path("../utils/eggnog-parser.py"),
     shell:
         """
         python {params.src} merge --sum {input} {output[0]}
