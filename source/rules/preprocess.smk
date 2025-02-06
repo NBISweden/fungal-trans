@@ -44,65 +44,28 @@ rule download_fastq:
 ## TRIMMING ##
 ##############
 
-rule cutadapt:
+rule fastp:
     input:
         R1 = lambda wildcards: samples[wildcards.sample_id]["R1"],
         R2 = lambda wildcards: samples[wildcards.sample_id]["R2"]
     output:
-        R1 = "results/preprocess/cutadapt/{sample_id}_R1.cut.fastq.gz",
-        R2 = "results/preprocess/cutadapt/{sample_id}_R2.cut.fastq.gz",
+        R1 = "results/preprocess/fastp/{sample_id}_R1.fastp.fastq.gz",
+        R2 = "results/preprocess/fastp/{sample_id}_R2.fastp.fastq.gz"
     log:
-        "results/preprocess/{sample_id}.cutadapt.log"
-    resources:
-        runtime = lambda wildcards, attempt: attempt*20
+        log="results/preprocess/fastp/{sample_id}.fastp.log",
+        json="results/preprocess/fastp/{sample_id}.fastp.json"
     params:
-        a = config["cutadapt_R1"],
-        A = config["cutadapt_R2"],
-        cutadapt_error_rate = config["cutadapt_error_rate"],
-        extra_settings = config["cutadapt_extra_settings"],
-        tmpdir = "$TMPDIR/{sample_id}"
-    conda: "../../envs/cutadapt.yaml"
-    container: "docker://quay.io/biocontainers/cutadapt:5.0--py310h1fe012e_0"
+        adapter_sequence = config["fastp_adapter_sequence"],
+        adapter_sequence_r2 = config["fastp_adapter_sequence_r2"],
+        length_required = config["fastp_length_required"],
+    container: "docker://quay.io/biocontainers/fastp:0.24.0--heae3180_1"
+    conda: "../../envs/fastp.yaml"
     threads: 4
     shell:
         """
-        mkdir -p {params.tmpdir}
-        cutadapt {params.extra_settings} -e {params.cutadapt_error_rate} -j {threads} -a {params.a} -A {params.A} \
-        -o {params.tmpdir}/R1.fastq.gz -p {params.tmpdir}/R2.fastq.gz {input.R1} {input.R2} > {log} 2>{log}
-        mv {params.tmpdir}/R1.fastq.gz {output.R1}
-        mv {params.tmpdir}/R2.fastq.gz {output.R2}
-        rm -r {params.tmpdir}
-        """
-
-rule trimmomatic:
-    input:
-        R1 = "results/preprocess/cutadapt/{sample_id}_R1.cut.fastq.gz",
-        R2 = "results/preprocess/cutadapt/{sample_id}_R2.cut.fastq.gz"
-    output:
-        R1 = "results/preprocess/trimmomatic/{sample_id}_R1.cut.trim.fastq.gz",
-        R2 = "results/preprocess/trimmomatic/{sample_id}_R2.cut.trim.fastq.gz",
-    log:
-        "results/preprocess/trimmomatic/{sample_id}.cut.trim.log"
-    params:
-        jarpath=config["trimmomatic_home"]+"/trimmomatic.jar",
-        qc_trim_settings=config["qc_trim_settings"],
-        tmpdir = "$TMPDIR/{sample_id}",
-        outdir = "results/preprocess",
-        R1_temp = "$TMPDIR/{sample_id}/R1.fastq.gz",
-        R2_temp = "$TMPDIR/{sample_id}/R2.fastq.gz"
-    threads: 4
-    conda: "../../envs/trimmomatic.yaml"
-    container: "docker://biocontainers/trimmomatic:v0.38dfsg-1-deb_cv1"
-    resources: 
-        runtime = lambda wildcards, attempt: attempt*20
-    shell:
-        """
-        mkdir -p {params.tmpdir}
-        trimmomatic PE -threads {threads} {input.R1} {input.R2} {params.R1_temp} /dev/null \
-        {params.R2_temp} /dev/null {params.qc_trim_settings} 2>{log}
-        mv {params.R1_temp} {output.R1}
-        mv {params.R2_temp} {output.R2}
-        rm -r {params.tmpdir}
+        fastp --thread {threads} -i {input.R1} -I {input.R2} -o {output.R1} -O {output.R2} \
+            --adapter_sequence {params.adapter_sequence} --adapter_sequence_r2 {params.adapter_sequence_r2} \
+            --length_required {params.length_required} --json {log.json} > {log.log} 2>{log.log}
         """
 
 ####################
@@ -151,8 +114,8 @@ rule sortmerna_index:
 
 rule sortmerna:
     input:
-        R1=rules.trimmomatic.output.R1,
-        R2=rules.trimmomatic.output.R2,
+        R1=rules.fastp.output.R1,
+        R2=rules.fastp.output.R2,
         ref=rules.download_rRNA_database.output.default
     output:
         R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
@@ -205,8 +168,7 @@ rule fastqc:
 rule multiqc:
     input:
         qclogs = expand("results/preprocess/fastqc/{sample_id}_R{i}.cut.trim.mRNA_fastqc.zip", sample_id = samples.keys(), i = [1,2]),
-        cutlogs = expand("results/preprocess/cutadapt/{sample_id}.cutadapt.log", sample_id = samples.keys()),
-        trimlogs = expand("results/preprocess/trimmomatic/{sample_id}.cut.trim.log", sample_id = samples.keys()),
+        fastplogs = expand("results/preprocess/fastp/{sample_id}.fastp.json", sample_id = samples.keys()),
         sortmernalogs = expand("results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log", sample_id = samples.keys())
     output:
         "results/report/preprocess/preprocess_report.html",
