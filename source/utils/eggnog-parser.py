@@ -74,44 +74,42 @@ def get_kegg_ortholog_info(outdir):
     hier = get_kegg_ortholog_hierarchy(s)
     pathways = {}
     ec2path = {}
-    ko_out = "{}/kegg_kos.tsv".format(outdir)
-    ko2path_out = "{}/kegg_ko2pathways.tsv".format(outdir)
-    ko2ec_out = "{}/kegg_ko2ec.tsv".format(outdir)
-    ec2path_out = "{}/kegg_ec2pathways.tsv".format(outdir)
-    pathways_out = "{}/kegg_pathways.tsv".format(outdir)
+    ko_out = f"{outdir}/kegg_kos.tsv"
+    ko2path_out = f"{outdir}/kegg_ko2pathways.tsv"
+    ko2ec_out = f"{outdir}/kegg_ko2ec.tsv"
+    ec2path_out = f"{outdir}/kegg_ec2pathways.tsv"
+    pathways_out = f"{outdir}/kegg_pathways.tsv"
     for f in [ko_out, ko2path_out, ko2ec_out, ec2path_out, pathways_out]:
-        logging.info("Writing to {f}".format(f=f))
+        logging.info(f"Writing to {f}")
     # Write KEGG Ortholog names, KEGG Ortholog -> Pathway map, and KEGG Ortholog -> Enzyme map
     with open(ko_out, 'w') as fh_kos, open(ko2path_out, 'w') as fh_ko2path, open(ko2ec_out, 'w') as fh_ko2ec:
         fh_kos.write("ko\tKO_name\n")
         for ko_id, l in hier.items():
             for i, d in enumerate(l):
                 if i == 0:
-                    fh_kos.write("{}\t{}\n".format(ko_id, d["name"]))
+                    fh_kos.write(f"{ko_id}\t{d['name']}\n")
                     for enzyme in d["enzymes"]:
-                        fh_ko2ec.write("{}\t{}\n".format(ko_id, enzyme))
-                fh_ko2path.write("{}\t{}\n".format(ko_id, "map{}".format(d["pathway"].split(" ")[0])))
+                        fh_ko2ec.write(f"{ko_id}\t{enzyme}\n")
+                fh_ko2path.write(f"{ko_id}\tmap{d['pathway'].split(' ')[0]}\n")
                 pathways[d["pathway"]] = {"Pathway_category1": d["KO_category1"],
                                           "Pathway_category2": d["KO_category2"]}
                 for enzyme in d["enzymes"]:
                     try:
-                        ec2path[enzyme].append("map{}".format(d["pathway"].split(" ")[0]))
+                        ec2path[enzyme].append(f"map{d['pathway'].split(' ')[0]}")
                     except KeyError:
-                        ec2path[enzyme] = ["map{}".format(d["pathway"].split(" ")[0])]
+                        ec2path[enzyme] = [f"map{d['pathway'].split(' ')[0]}"]
     # Write Pathway information
     with open(pathways_out, 'w') as fh_pathways:
-        fh_pathways.write("{}\t{}\t{}\t{}\n".format("Pathway_id", "Pathway_name", "Pathway_category1",
-                                                    "Pathway_category2"))
+        fh_pathways.write("Pathway_id\tPathway_name\tPathway_category1\tPathway_category2\n")
         for pathway, d in pathways.items():
             pathway_id = pathway.split(" ")[0]
-            pathway_name = pathway.replace("{} ".format(pathway_id), "")
-            fh_pathways.write("map{}\t{}\t{}\t{}\n".format(pathway_id, pathway_name, d["Pathway_category1"],
-                                                           d["Pathway_category2"]))
+            pathway_name = pathway.replace(f"{pathway_id} ", "")
+            fh_pathways.write(f"map{pathway_id}\t{pathway_name}\t{d['Pathway_category1']}\t{d['Pathway_category2']}\n")
     # Write Enzyme -> Pathway map
     with open(ec2path_out, 'w') as fh_ec2path:
         for enzyme, l in ec2path.items():
             for pathway in set(l):
-                fh_ec2path.write("{}\t{}\n".format(enzyme, pathway))
+                fh_ec2path.write(f"{enzyme}\t{pathway}\n")
 
 
 def get_kegg_module_info(outdir):
@@ -121,18 +119,17 @@ def get_kegg_module_info(outdir):
     url = "https://www.kegg.jp/kegg-bin/download_htext?htext=ko00002.keg&format=json"
     tmp_out = os.path.expandvars("$TMPDIR/ko00002.json")
     urllib.request.urlretrieve(url, tmp_out)
-    modules_out = "{}/kegg_modules.tsv".format(outdir)
+    modules_out = f"{outdir}/kegg_modules.tsv"
     with open(tmp_out) as fh:
         s = json.load(fh)
     hier = get_kegg_module_hierarchy(s)
-    logging.info("Writing to {}".format(modules_out))
+    logging.info(f"Writing to {modules_out}")
     with open(modules_out, 'w') as fh_modules:
         fh_modules.write("Module_id\tModule_name\tModule_category1\tModule_category2\tModule_category3\n")
         for module_name, d in hier.items():
             module_key = module_name.split(" ")[0]
             module_name = " ".join(module_name.split(" ")[1:]).lstrip()
-            fh_modules.write("{}\t{}\t{}\t{}\t{}\n".format(module_key, module_name, d["Module_category1"],
-                                                           d["Module_category2"], d["Module_category3"]))
+            fh_modules.write(f"{module_key}\t{module_name}\t{d['Module_category1']}\t{d['Module_category2']}\t{d['Module_category3']}\n")
 
 
 # Parse functions
@@ -158,35 +155,35 @@ def feature2orf(df, feature, lstrip=False, match=False, extra=""):
         return pd.DataFrame([orfs, features, extras], index=["orf", feature, extra]).T
 
 def parse_ko_annotations(annotations, dldir, outdir, map_go=False):
-    logging.info("Reading annotations from {}".format(annotations))
-    annot = pd.read_csv(annotations, header=None, usecols=[0, 2, 3, 6, 8, 9, 10, 14, 15, 21],
-                        names=["orf", "evalue", "score", "GO", "ko", "pathway", "module", "tc", "cazy", "desc"],
+    logging.info(f"Reading annotations from {annotations}")
+    annot = pd.read_csv(annotations, header=None, usecols=[0, 2, 3, 4, 6, 9, 10, 11, 12, 13, 16, 17, 18, 20], comment="#",
+                        names=["orf", "evalue", "score", "COG", "COG_category", "GO", "EC", "ko", "pathway", "module", "BRITE", "tc", "cazy", "pfams"],
                         sep="\t")
     logging.info("Mapping ORFs to KEGG Orthologs")
-    orf2ko = feature2orf(annot.loc[annot["ko"] == annot["ko"]], "ko", lstrip="ko:")
-    logging.info("{} ORFs with {} KOs".format(len(orf2ko["orf"].unique()), len(orf2ko["ko"].unique())))
+    orf2ko = feature2orf(annot.loc[annot["ko"]!="-"], "ko", lstrip="ko:")
+    logging.info(f"{len(orf2ko["orf"].unique())} ORFs with {len(orf2ko["ko"].unique())} KOs")
     logging.info("Mapping ORFs to modules")
-    orf2module = feature2orf(annot.loc[annot["module"]==annot["module"]], "module")
-    logging.info("{} ORFs in {} modules".format(len(orf2module["orf"].unique()), len(orf2module["module"].unique())))
+    orf2module = feature2orf(annot.loc[annot["module"]!="-"], "module")
+    logging.info(f"{len(orf2module["orf"].unique())} ORFs in {len(orf2module["module"].unique())} modules")
     logging.info("Mapping ORFs to pathways")
-    orf2pathway = feature2orf(annot.loc[annot["pathway"]==annot["pathway"]], "pathway", match="map")
-    logging.info("{} ORFs in {} Pathways".format(len(orf2pathway["orf"].unique()), len(orf2pathway["pathway"].unique())))
+    orf2pathway = feature2orf(annot.loc[annot["pathway"]!="-"], "pathway", match="map")
+    logging.info(f"{len(orf2pathway["orf"].unique())} ORFs in {len(orf2pathway["pathway"].unique())} Pathways")
     logging.info("Mapping ORFs to transporters")
-    orf2tc = feature2orf(annot.loc[annot["tc"]==annot["tc"]], feature="tc")
-    logging.info("{} ORFs in {} transporters".format(len(orf2tc["orf"].unique()), len(orf2tc["tc"].unique())))
+    orf2tc = feature2orf(annot.loc[annot["tc"]!="-"], feature="tc")
+    logging.info(f"{len(orf2tc["orf"].unique())} ORFs in {len(orf2tc["tc"].unique())} transporters")
     orf2tc.set_index("orf", inplace=True)
     orf2tc.sort_index(inplace=True)
     logging.info("Mapping ORFs to CAZY")
-    orf2caz = feature2orf(annot.loc[annot["cazy"]==annot["cazy"]], feature="cazy")
-    logging.info("{} ORFs in {} CAZYs".format(len(orf2caz["orf"].unique()), len(orf2caz["cazy"].unique())))
+    orf2caz = feature2orf(annot.loc[annot["cazy"]!="-"], feature="cazy")
+    logging.info(f"{len(orf2caz["orf"].unique())} ORFs in {len(orf2caz["cazy"].unique())} CAZYs")
     orf2caz.set_index("orf", inplace=True)
     orf2caz.sort_index(inplace=True)
 
-    logging.info("Loading KEGG info files from {}".format(dldir))
-    ko2ec = pd.read_table("{}/kegg_ko2ec.tsv".format(dldir), header=None, names=["ko", "ec"], index_col=0)
-    kos = pd.read_table("{}/kegg_kos.tsv".format(dldir), index_col=0)
-    modules = pd.read_table("{}/kegg_modules.tsv".format(dldir), index_col=0)
-    pathways = pd.read_table("{}/kegg_pathways.tsv".format(dldir), index_col=0)
+    logging.info(f"Loading KEGG info files from {dldir}")
+    ko2ec = pd.read_csv(f"{dldir}/kegg_ko2ec.tsv", header=None, names=["ko", "ec"], index_col=0, sep="\t")
+    kos = pd.read_csv(f"{dldir}/kegg_kos.tsv", index_col=0, sep="\t")
+    modules = pd.read_csv(f"{dldir}/kegg_modules.tsv", index_col=0, sep="\t")
+    pathways = pd.read_csv(f"{dldir}/kegg_pathways.tsv", index_col=0, sep="\t")
     # Because each orf can have multiple enzyme annotations it might get placed into the same pathway several times
     # select the first combination for each orf to avoid redundancy.
     # Add KEGG Ortholog names
@@ -212,18 +209,18 @@ def parse_ko_annotations(annotations, dldir, outdir, map_go=False):
     # Map GO IDs
     if map_go:
         logging.info("Mapping ORFs to GO terms")
-        orf2go = feature2orf(annot.loc[annot["GO"]==annot["GO"]], feature="GO")
-        logging.info("{} ORFs in {} GO terms".format(len(orf2go["orf"].unique()), len(orf2go["GO"].unique())))
+        orf2go = feature2orf(annot.loc[annot["GO"]!="-"], feature="GO")
+        logging.info(f"{len(orf2go["orf"].unique())} ORFs in {len(orf2go["GO"].unique())} GO terms")
     # Write files
-    logging.info("Writing files to {}".format(outdir))
-    orf2ko.to_csv("{}/kos.parsed.tab".format(outdir), index=True, sep="\t")
-    orf2ec.to_csv("{}/enzymes.parsed.tab".format(outdir), index=True, sep="\t")
-    orf2pathway.to_csv("{}/pathways.parsed.tab".format(outdir), index=True, sep="\t")
-    orf2module.to_csv("{}/modules.parsed.tab".format(outdir), index=True, sep="\t")
-    orf2tc.to_csv("{}/tc.parsed.tab".format(outdir), index=True, sep="\t")
-    orf2caz.to_csv("{}/cazy.parsed.tab".format(outdir), index=True, sep="\t")
+    logging.info(f"Writing files to {outdir}")
+    orf2ko.to_csv(f"{outdir}/kos.parsed.tsv", index=True, sep="\t")
+    orf2ec.to_csv(f"{outdir}/enzymes.parsed.tsv", index=True, sep="\t")
+    orf2pathway.to_csv(f"{outdir}/pathways.parsed.tsv", index=True, sep="\t")
+    orf2module.to_csv(f"{outdir}/modules.parsed.tsv", index=True, sep="\t")
+    orf2tc.to_csv(f"{outdir}/tc.parsed.tsv", index=True, sep="\t")
+    orf2caz.to_csv(f"{outdir}/cazy.parsed.tsv", index=True, sep="\t")
     if map_go:
-        orf2go.to_csv("{}/gos.parsed.tab".format(outdir), index=True, sep="\t")
+        orf2go.to_csv(f"{outdir}/gos.parsed.tsv", index=True, sep="\t")
 
 
 # Quantify functions
@@ -240,17 +237,17 @@ def process_and_sum(q_df, annot_df):
 
 
 def sum_to_features(abundance, parsed):
-    parsed_df = pd.read_table(parsed, index_col=0)
-    abundance_df = pd.read_table(abundance, index_col=0)
+    parsed_df = pd.read_csv(parsed, index_col=0, sep="\t")
+    abundance_df = pd.read_csv(abundance, index_col=0, sep="\t")
     feature_sum = process_and_sum(abundance_df, parsed_df)
     return feature_sum
 
 
 def normalize(q_df, parsed, normalize_file):
-    info_df = pd.read_table(normalize_file, header=None)
+    info_df = pd.read_csv(normalize_file, header=None, sep="\t")
     info_norm_df = info_df.groupby(1).count()
     info_norm_df.columns = ["norm_factor"]
-    annot_df = pd.read_table(parsed, index_col=0)
+    annot_df = pd.read_csv(parsed, index_col=0, sep="\t")
     annot_cols = list(set(annot_df.columns).intersection(set(q_df.columns)))
     sample_cols = list(set(q_df.columns).difference(annot_cols))
     q_df = pd.merge(q_df, info_norm_df, left_index=True, right_index=True, how="left")
@@ -263,7 +260,7 @@ def normalize(q_df, parsed, normalize_file):
 def merge_files(files, sum_abundance=False):
     df = pd.DataFrame()
     for i, f in enumerate(files):
-        _df = pd.read_table(f, header=0, sep="\t")
+        _df = pd.read_csv(f, header=0, sep="\t")
         if sum_abundance:
             group_cols = list(_df.columns)[1:-1]
             if len(group_cols) == 0:
@@ -288,16 +285,16 @@ def merge_files(files, sum_abundance=False):
 def download(args):
     if not os.path.exists(args.dldir):
         os.makedirs(args.dldir)
-    logging.info("Downloading KEGG module info to {}".format(args.dldir))
+    logging.info(f"Downloading KEGG module info to {args.dldir}")
     get_kegg_module_info(args.dldir)
-    logging.info("Downloading KEGG ortholog info to {}".format(args.dldir))
+    logging.info(f"Downloading KEGG ortholog info to {args.dldir}")
     get_kegg_ortholog_info(args.dldir)
 
 
 def parse(args):
     for f in ["kegg_ec2pathways.tsv", "kegg_ko2ec.tsv", "kegg_ko2pathways.tsv",
               "kegg_kos.tsv", "kegg_modules.tsv", "kegg_pathways.tsv"]:
-        if not os.path.exists("{}/{}".format(args.dldir, f)):
+        if not os.path.exists(f"{args.dldir}/{f}"):
             download(args)
             break
     parse_ko_annotations(args.annotations, args.dldir, args.outdir, args.map_go)
