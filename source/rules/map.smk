@@ -64,7 +64,7 @@ rule subread_index_co:
         rules.wrap_assembly_co.output
     output:
         expand("results/map/co-assembly/{{assembler}}/{{assembly}}/subread_index.{suff}",
-                suff = ["00.b.array", "00.b.tab", "files", "log", "lowinf", "reads"])
+                suff = ["00.b.array", "00.b.tab", "files", "lowinf", "reads"])
     log:
         "results/map/co-assembly/{assembler}/{assembly}/subread_index.log"
     container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
@@ -176,7 +176,7 @@ rule subread_index:
         rules.wrap_assembly.output
     output:
         expand("results/map/{{assembler}}/{{filter_source}}/{{sample_id}}/subread_index.{suff}",
-                suff = ["00.b.array", "00.b.tab", "files", "log", "lowinf", "reads"])
+                suff = ["00.b.array", "00.b.tab", "files", "lowinf", "reads"])
     log:
         "results/map/{assembler}/{filter_source}/{sample_id}/subread_index.log"
     container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
