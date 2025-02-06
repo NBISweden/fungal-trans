@@ -45,6 +45,11 @@ except WorkflowError as e:
 
 workdir: config["workdir"]
 
+if config["filter_reads"]:
+    config["filter_source"] = "filtered"
+else:
+    config["filter_source"] = "unfiltered"
+
 # Parse samples and assemblies
 samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], config)
 # Parse JGI genomes from fungi info url, also save to file for quick re-use in future runs
@@ -114,42 +119,42 @@ filtered_reads = expand("results/star/{sample_id}/{paired_strategy}/{sample_id}_
 
 ## Sourmash
 sourmash = expand("results/sourmash/{sample_id}/{sample_id}.{source}.sig",
-            sample_id = samples.keys(), source = config["read_source"])
-sourmash += expand("results/report/sourmash/{source}_sample.dist.labels.txt", source = config["read_source"])
+            sample_id = samples.keys(), source = config["filter_source"])
+sourmash += expand("results/report/sourmash/{source}_sample.dist.labels.txt", source = config["filter_source"])
 sourmash_assembly = expand("results/assembly/{assembler}/{source}/{sample_id}/final.sig",
-            assembler = config["assembler"], source = config["read_source"], sample_id=samples.keys())
+            assembler = config["assembler"], source = config["filter_source"], sample_id=samples.keys())
 sourmash_assembly += expand("results/report/sourmash/{source}_assembly_{assembler}.dist.labels.txt",
-            source = config["read_source"], assembler = config["assembler"])
+            source = config["filter_source"], assembler = config["assembler"])
 
 ## Single-assemblies
 assembly = expand("results/report/assembly/{source}_{assembler}_stats.tsv",
-            source = config["read_source"], assembler = config["assembler"])
+            source = config["filter_source"], assembler = config["assembler"])
 assembly += expand("results/assembly/{assembler}/{source}/{sample_id}/final.fa",
-                assembler = config["assembler"], source = config["read_source"], sample_id = samples.keys())
+                assembler = config["assembler"], source = config["filter_source"], sample_id = samples.keys())
 ## Annotations
 taxonomy = expand("results/collated/{assembler}/{source}/taxonomy/taxonomy.{fc}.tsv",
             assembler = config["assembler"],
             fc = ["tpm","raw"],
-            source = config["read_source"])
+            source = config["filter_source"])
 dbCAN = expand("results/collated/{assembler}/{source}/dbCAN/dbCAN.{fc}.tsv",
             assembler = config["assembler"],
             fc = ["tpm","raw"],
-            source = config["read_source"])
+            source = config["filter_source"])
 eggnog = expand("results/collated/{assembler}/{source}/eggNOG/{db}.{fc}.tsv",
             db = ["enzymes","pathways","pathways.norm","modules","kos","tc","cazy"],
             assembler = config["assembler"],
             fc = ["tpm","raw"],
-            source = config["read_source"])
+            source = config["filter_source"])
 mapres = expand("results/report/map/{assembler}_{source}_map_report.html",
-            assembler = config["assembler"], source = config["read_source"])
+            assembler = config["assembler"], source = config["filter_source"])
 normalize = expand("results/annotation/{assembler}/{source}/{sample_id}/featureCounts/fc.{fc}.tab",
-            assembler = config["assembler"], source = config["read_source"], sample_id = samples.keys(), fc=["tpm","raw"])
+            assembler = config["assembler"], source = config["filter_source"], sample_id = samples.keys(), fc=["tpm","raw"])
 
 ### Optional blobtools output
 blobtools = expand("results/annotation/{assembler}/{source}/{sample_id}/taxonomy/{sample_id}.bestsum.phylum.p5.span.100.exclude_other.blobplot.bam0.png",
-            assembler = config["assembler"], sample_id = samples.keys(), source = config["read_source"])
+            assembler = config["assembler"], sample_id = samples.keys(), source = config["filter_source"])
 blobtools += expand("results/annotation/{assembler}/{source}/{sample_id}/taxonomy/{sample_id}.bestsum.order.p6.span.100.exclude_other.blobplot.bam0.png",
-            assembler = config["assembler"], sample_id = samples.keys(), source = config["read_source"])
+            assembler = config["assembler"], sample_id = samples.keys(), source = config["filter_source"])
 
 ### Optional kraken output
 kraken_output = expand("results/kraken/{sample_id}.{suffix}", sample_id = samples.keys(), suffix = ["out.gz","kreport"])
