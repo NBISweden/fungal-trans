@@ -23,13 +23,29 @@ default-resources:
   slurm_account: <your-slurm-account>
   slurm_partition: shared
   runtime: 120
-  tasks: f"{threads}"
-  cpus_per_task: 1
+  #tasks: f"{threads}"
+  #cpus_per_task: 1
 
 # The set-resources section specifies the resources to use for specific rules, this overrides
 # the default resources
 set-resources:
   # db.smk
+  filter_transcripts:
+    runtime: 30
+    mem_mb: 888
+  split_transcripts:
+    runtime: 1440
+    mem_mb: 10656
+  cluster_splits:
+    runtime: 360
+    mem_mb: 35520
+  cluster_concat_transcripts:
+    runtime: 10080
+    mem_mb: 106560
+  cdhit_cluster_transcripts:
+    runtime: 4320
+    mem_mb: 71040
+    partition: long
   mmseqs_extract_fungalDB:
     runtime: 120
     mem_mb: 35200
@@ -58,27 +74,27 @@ set-resources:
     runtime: 240
     mem_mb: 5328
   # filter.smk
-  strobealign_build_fungi:
-    runtime: 240
-    mem_mb: 64000
-  strobealign_map_fungi:
-    runtime: 720
-    mem_mb: 64000
-  bowtie_build_fungi:
-    runtime: 720
-    mem_mb: 915456
-    slurm_partition: memory
-  bowtie_map_fungi:
-    runtime: 720
+  strobealign_index:
+    runtime: 60
     mem_mb: 227328
+    slurm_partition: main
+  strobealign_map_fungi:
+    runtime: 30
+    mem_mb: 14208
+  process_fungal_bam:
+    runtime: 60
+    mem_mb: 1776
   star_build_host:
     runtime: 1440
   star_map_host:
     slurm_partition: shared
-    mem_mb: 96000
-  host_reads:
-    mem_mb: 40000
-    runtime: 360
+    mem_mb: 88800
+  process_host_bam:
+    runtime: 60
+    mem_mb: 1776
+  filter_fungal_reads:
+    runtime: 60
+    mem_mb: 1776
   fastq_stats:
     runtime: 30
   # kraken.smk
@@ -134,14 +150,16 @@ set-resources:
   featurecount:
     runtime: 60
   emapper_search_co:
-    runtime: 1440
+    runtime: 300
+    mem_mb: 71040
   contigtax_search_co:
     runtime: 2880
     mem_mb: 128000
   assign_taxonomy_co:
     mem_mb: 64000
   emapper_annotate_hits_co:
-    mem_mb: 64000
+    runtime: 30
+    mem_mb: 53280
 # assembly.smk
   trinity_normalize:
     runtime: 1440
@@ -202,14 +220,13 @@ set-resources:
     runtime: 180
   fungi_both_mapped:
     runtime: 180
-    mem_mb: 6000
+    mem_mb: 7104
 
 # Snakemake command line options
 keep-going: True
 printshellcmds: True
 rerun-triggers: mtime
 rerun-incomplete: True
-local-cores: 1
 jobs: 200
 latency-wait: 5
 executor: slurm
