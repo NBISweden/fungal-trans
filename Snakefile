@@ -50,6 +50,18 @@ samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], co
 # Parse JGI genomes from fungi info url, also save to file for quick re-use in future runs
 genomes = parse_genomes(config["fungi_info"], f="resources/JGI/genomes.tsv")
 
+strobealign_chunks = {}
+
+def chunks(lst, n):
+    """
+    Yield successive n-sized chunks from list
+    """
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+for i, chunk in enumerate(chunks(genomes.index.tolist(), 100)):
+    strobealign_chunks[f"chunk{i}"] = expand("resources/JGI/genomes/{portal}.transcripts.filt.fna.gz", portal=chunk)
+
 # Reads list of additional genomes to include when building custom mmseqs2 database
 extra_genomes = {}
 config["mmseqs_db_path"] = os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"])
@@ -68,7 +80,6 @@ wildcard_constraints:
     filter_source = "unfiltered|filtered",
     portals = f"({'|'.join(list(genomes.index.tolist()))})",
     taxname = f"({'|'.join(list(config['taxmap'].keys()))})",
-    aligner = "bowtie2|star",
     i = "1|2",
 
 # Get environment info
@@ -98,10 +109,8 @@ host_reads = expand("results/host/{sample_id}_R{i}.host.fastq.gz",
             sample_id = samples.keys(), i = [1,2])
 
 ## filter
-filtered_reads = expand("results/{aligner}/{sample_id}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
-            sample_id = samples.keys(), i = [1,2], aligner = config["host_aligner"])
-filtered_reads += ["results/report/filtering/filter_report.html"]
-filtered_reads += host_reads
+filtered_reads = expand("results/star/{sample_id}/{paired_strategy}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
+            sample_id = samples.keys(), i = [1,2], paired_strategy = ["both_mapped","one_mapped"])
 
 ## Sourmash
 sourmash = expand("results/sourmash/{sample_id}/{sample_id}.{source}.sig",
@@ -164,11 +173,6 @@ eggnog_co_tax = expand("results/collated/co-assembly/{assembler}/{assembly}/eggN
 abundance_co = expand("results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
             assembly = assemblies.keys(), assembler = config["assembler"],
             fc = ["raw","tpm"])
-abundance_co_tax = expand("results/collated/co-assembly/{assembler}/{assembly}/abundance_taxonomy/{tax_rank}.{tax_name}.{assembly}.{fc}.tsv",
-            assembly = assemblies.keys(), assembler = config["assembler"],
-            fc = ["raw","tpm"],
-            tax_rank = config["tax_rank"],
-            tax_name = config["tax_name"])
 dbCAN_co = expand("results/collated/co-assembly/{assembler}/{assembly}/dbCAN/dbCAN.{fc}.tsv",
             assembly = assemblies.keys(), assembler = config["assembler"],
             fc = ["raw","tpm"])
@@ -181,7 +185,7 @@ taxonomy_co = expand("results/collated/co-assembly/{assembler}/{assembly}/taxono
             assembly = assemblies.keys(), assembler = config["assembler"],
             fc = ["raw","tpm"])
 # Map and normalize
-map_co = expand("results/report/map/{assembler}.{assembly}_map_report.html", assembly = assemblies.keys(), assembler=config["assembler"])
+map_co = expand("results/report/map/{assembler}_{assembly}_map_report.html", assembly = assemblies.keys(), assembler=config["assembler"])
 normalize_co = expand("results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
                 assembly = assemblies.keys(), assembler = config["assembler"], fc = ["tpm","raw"])
 ### Optional blobtools output
@@ -194,7 +198,7 @@ inputs = []
 inputs += preprocess
 
 if config["co_assembly"]:
-    inputs += [eggnog_co, map_co, co_assembly_stats, abundance_co, abundance_co_tax, dbCAN_co, taxonomy_co, dbCAN_co_tax, eggnog_co_tax]
+    inputs += [eggnog_co, map_co, co_assembly_stats, abundance_co, dbCAN_co, taxonomy_co, dbCAN_co_tax, eggnog_co_tax]
 if config["single_assembly"]:
     inputs += [eggnog, dbCAN, taxonomy]
 
