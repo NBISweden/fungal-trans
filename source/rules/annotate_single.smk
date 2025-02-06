@@ -532,9 +532,9 @@ def merge_tax(files):
 rule collate_taxonomy:
     input:
         tpm = expand("results/annotation/{assembler}/{filter_source}/{sample_id}/taxonomy/taxonomy.tpm.tsv",
-            assembler = config["assembler"], filter_source = config["read_source"], sample_id = samples.keys()),
+            assembler = config["assembler"], filter_source = config["filter_source"], sample_id = samples.keys()),
         raw = expand("results/annotation/{assembler}/{filter_source}/{sample_id}/taxonomy/taxonomy.raw.tsv",
-            assembler = config["assembler"], filter_source = config["read_source"], sample_id = samples.keys())
+            assembler = config["assembler"], filter_source = config["filter_source"], sample_id = samples.keys())
     output:
         tpm = "results/collated/{assembler}/{filter_source}/taxonomy/taxonomy.tpm.tsv",
         raw = "results/collated/{assembler}/{filter_source}/taxonomy/taxonomy.raw.tsv"
