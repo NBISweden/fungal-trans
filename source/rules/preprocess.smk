@@ -56,9 +56,10 @@ rule cutadapt:
     resources:
         runtime = lambda wildcards, attempt: attempt*20
     params:
-        a = "AGATCGGAAGAGCACACGTCTGAACTCCAGTCA",
-        A = "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT",
-        settings = "-e 0.2",
+        a = config["cutadapt_R1"]
+        A = config["cutadapt_R2"],
+        cutadapt_error_rate = config["cutadapt_error_rate"],
+        extra_settings = config["cutadapt_extra_settings"],
         tmpdir = "$TMPDIR/{sample_id}"
     conda: "../../envs/cutadapt.yaml"
     container: "docker://quay.io/biocontainers/cutadapt:5.0--py310h1fe012e_0"
@@ -66,7 +67,7 @@ rule cutadapt:
     shell:
         """
         mkdir -p {params.tmpdir}
-        cutadapt {params.settings} -j {threads} -a {params.a} -A {params.A} \
+        cutadapt {params.extra_settings} -e {params.cutadapt_error_rate} -j {threads} -a {params.a} -A {params.A} \
         -o {params.tmpdir}/R1.fastq.gz -p {params.tmpdir}/R2.fastq.gz {input.R1} {input.R2} > {log} 2>{log}
         mv {params.tmpdir}/R1.fastq.gz {output.R1}
         mv {params.tmpdir}/R2.fastq.gz {output.R2}
