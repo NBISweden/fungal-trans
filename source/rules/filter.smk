@@ -138,6 +138,7 @@ rule star_build_host:
     params:
         tmpdir="$TMPDIR/host",
         limitGenomeGenerateRAM = config["star_limitGenomeGenerateRAM"]*1000000000,
+        sjdbOverhang=config["read_length"] - 1,
         extra_params = config["star_extra_build_params"],
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
     threads: 20
@@ -153,7 +154,7 @@ rule star_build_host:
         gunzip -c {input[0]} > {params.tmpdir}/host.fna
         gunzip -c {input[1]} > {params.tmpdir}/host.gff
         STAR --runMode genomeGenerate --genomeDir {params.tmpdir} --genomeFastaFiles {params.tmpdir}/host.fna \
-            --sjdbGTFfile {params.tmpdir}/host.gff --runThreadN {threads} --limitGenomeGenerateRAM {params.limitGenomeGenerateRAM} \
+            --sjdbGTFfile {params.tmpdir}/host.gff --sjdbOverhang {params.sjdbOverhang} --runThreadN {threads} --limitGenomeGenerateRAM {params.limitGenomeGenerateRAM} \
             {params.extra_params}
         mv {params.tmpdir}/* {params.outdir}/
         rm -rf {params.tmpdir}
