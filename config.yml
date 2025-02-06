@@ -1,58 +1,134 @@
-workdir: "."
 # Download parameters for fastq-dump (leave empty unless testing)
 dlparams: ""
+
+## PATHS ##
+# Set work directory
+workdir: "."
+# Sample information file
+# The file should be a tab-separated file with the following columns:
+# Sample accession assembly
 sample_file_list: "sample_list.tsv"
+# Path to raw sequence files
+# each sample listed in the sample_file_list should have corresponding
+# R1 and R2 files under datadir
 datadir: "data/raw"
-mem_per_cpu: 6
-## data for filtering
+
+## SAMPLE INFO ##
+# Set read length of samples
+# This is used by STAR when generating the genome index
+# If samples have different read lengths, set this to the maximum read length
+# among the samples
+read_length: 150
+
+## PREPROCESSING ##
+## fastp
+# the default values are for Illumina TruSeq adapters
+fastp_adapter_sequence: "AGATCGGAAGAGCACACGTCTGAACTCCAGTCA"
+fastp_adapter_sequence_r2: "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
+fastp_length_required: 50
+
+## FILTERING ##
+# Should reads be filtered?
+# If set to True reads will be mapped against JGI fungal transcriptomes,
+# then against the host genome. Reads mapped to fungi but not to host will be
+# kept for assembly and annotation
+filter_reads: True
+# The paired strategy sets how to handle read-pair mapping during filtering
+# if 'both_mapped', then both reads in a pair have to map to fungal transcriptomes
+# and neither read can map to the host genome
+# if 'one_mapped', then only one read in a pair has to map to fungal transcriptomes
+# and pairs where at least one read maps to the host genome will be discarded
+paired_strategy: "one_mapped"
+# URL to file listing JGI genomes for which to download transcript files
 fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
-host_fna: ""
-host_gff: ""
-# partition reads into taxonomic bins
-taxmap:
-  Bacteria: 2
-  Archaea: 2157
-  Eukaryota: 2759
-## mapping
-host_aligner: "star"
-bowtie2_params: "--very-sensitive"
+# In order to download from JGI, you need to provide your JGI username and password
+# If you do not have a JGI account, you can create one at https://contacts.jgi.doe.gov/registration/new
+jgi_user: john.sundh@scilifelab.se
+jgi_password: fungi2024
+# Host files (fna and gff)
+host_fna: "data/Picab02_chromosomes_and_unplaced.fa.gz"
+host_gff: "data/Picab02_230926_at01_longest_no_TE_sorted.gff3.gz"
+# STAR parameters
 # star_limitGenomeGenerateRAM sets the maximum allowed RAM usage (in GB)
+# when generating the genome index
 star_limitGenomeGenerateRAM: 128
 # star_extra_build_params sets the extra parameters for star index build
-star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent --sjdbOverhang 100"
+star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent"
 # star_extra_params sets the extra parameters for star alignment
 # if STAR aligner fails to map reads to host, consider lowering the values below
 # in order to increase sensitivity of the aligner. WARNING: Note that this may
 # increase the number of false positive host reads meaning that fungal reads
 # may end up in the 'host' bin
 star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
-# feature counts
+
+
+## READ ASSIGNMENT ##
+# feature counts parameters
+# the -s parameter sets strandedness that featureCounts expects
+# for IlluminaTruSeq Stranded libraries, set this to 2
+# for Standard Illumina, set this to 0
 fc_params: "-s 2 -p -t exon -g Parent -Q 10 --countReadPairs"
-# kallisto
-kallisto_params: "--rf-stranded"
-## assembly
-# Choose between 'megahit', 'trinity', 'transabyss'
-assembler: trinity
-transabyss_kmers: [21, 25, 29, 31, 65, 75, 85, 95]
+## kallisto parameters
+# Use the settings below for strandedness
+# if using IlluminaTruSeq Stranded libraries this should be '–rf-stranded'
+# for Standard Illumina, this should be an empty string ("")'
+kallisto_params: "–rf-stranded"
+
+## ASSEMBLY ##
+# should a co-assembly be generated?
+# if True, assemblies will be generated based on the assembly
+# column in the sample_file_list
 co_assembly: True
+# should single-sample assemblies be generated?
 single_assembly: False
+# Choose what assembler to use
+# allowed values are 'megahit', 'trinity' or 'transabyss'
+assembler: trinity
+# for transabyss, set the kmer values to use for iterative assembly
+transabyss_kmers: [21, 25, 29, 31, 65, 75, 85, 95]
+# set the minimum contig length 
 min_contig_len: 200
+# set the target max coverage for insilico normalization
+# this is used to normalize the reads for co-assemblies
 insilico_norm_max_cov: 30
+# set the maximum memory to use for insilico normalization
 insilico_norm_mem: "100G"
-## Filtering is performed by first mapping reads to fungi transcriptomes, then taking mappead reads and mapping them to a host genome.
-## Reads that come out as unmapped in the second step are considered as fungal reads.
-filter_reads: True
-# Choose between 'concordant', 'both_mapped' or 'one_mapped'
-paired_strategy: "one_mapped"
-# trimmomatic
-trimmomatic_home: ""
-qc_trim_settings: "LEADING:25 TRAILING:25 SLIDINGWINDOW:4:15 HEADCROP:2 MINLEN:50"
-# diamond
-diamond_fasta_url: "https://zenodo.org/record/3737678/files/fasta.gz?download=1"
-diamond_nodes_url: "https://zenodo.org/record/3737678/files/nodes.dmp.gz?download=1"
-diamond_taxonmap_url: "https://zenodo.org/record/3737678/files/taxonmap.gz?download=1"
-# dbCAN (Suggested thresholds for fungi, see: http://csbl.bmb.uga.edu/dbCAN/download/readme.txt)
+
+## ANNOTATION ##
+## MMseqs2 paths ##
+# mmseqs_db_dir is the path to where MMSeqs2 databases are stored
+# this path must contain databases used in the transdecoder_homology_db
+# and mmseqs_db parameters
+mmseqs_db_dir: "/sw/data/MMseqs2_data/latest/rackham"
+# what database to use for the homology filtering step by TransDecoder
+# this database is both used to filter predicted genes called and for
+# a first round of taxonomic assignment/filtering of transcripts
+transdecoder_homology_db: "UniProtKB_Swiss-Prot"
+# mmseqs_db is the database to use for the actual taxonomic assignment
+mmseqs_db: "NR"
+# extra_genomes is a file listing additional genomes to include in the
+# taxonomic assignment step. The file should be tab-separated with
+# the following two first columns: 'portal' and 'taxid' where portal
+# is the shorthand JGI name of the genome portal and taxid is the NCBI
+# taxonomic ID of the genome
+extra_genomes: "extra_JGI_genomes.tsv"
+# emapper_db_dir is the path to where the eggNOG database is stored
+# this path must contain the 'eggnog.db', 'eggnog_proteins.dmnd', 'eggnog.taxa.db' files
+# and 'mmseqs/' directory
+emapper_db_dir: "/sw/data/eggNOG_data/5.0.0/rackham"
+# dbCAN settings (Suggested thresholds for fungi, see: http://csbl.bmb.uga.edu/dbCAN/download/readme.txt)
 dbCAN_eval: 0.00000000000000001
 dbCAN_cov: 0.45
+
+## TAXONOMIC SUMMARY ##
 tax_rank: kingdom
 tax_name: Fungi
+
+## READ PARTITIONING ##
+# kraken database path
+kraken_db: "/sw/data/Kraken2_data/prebuilt/k2_pluspfp_20240112"
+# partition reads into taxonomic bins
+taxmap:
+    Bacteria: 2
+    Archaea: 2157
+    EuKaryota: 2759
