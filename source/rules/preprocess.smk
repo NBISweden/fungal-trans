@@ -56,7 +56,7 @@ rule cutadapt:
     resources:
         runtime = lambda wildcards, attempt: attempt*20
     params:
-        a = config["cutadapt_R1"]
+        a = config["cutadapt_R1"],
         A = config["cutadapt_R2"],
         cutadapt_error_rate = config["cutadapt_error_rate"],
         extra_settings = config["cutadapt_extra_settings"],
