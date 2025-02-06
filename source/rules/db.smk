@@ -7,12 +7,10 @@ localrules:
     press_dbCAN,
     get_kegg_files,
     download_refseq_db,
-    download_host,
     init_jgi,
     download_jgi_transcripts,
     download_jgi_proteins,
     concat_proteins,
-    prepare_diamond_JGI,
     mmseqs_filter_fungalDB
 
 wildcard_constraints:
@@ -360,25 +358,6 @@ rule mmseqs_createtaxdb:
         mmseqs createtaxdb {input.db} {params.tmpdir} --ncbi-tax-dump {params.taxdump} --tax-mapping-file {params.mapfile} --threads {threads} > {log} 2>&1
         """
 
-## Host data ##
-rule download_host:
-    """
-    Downloads host sequences for filtering 
-    """
-    output:
-        "resources/host/host.{suff}"
-    log:
-        "resources/host/host.{suff}.download.log"
-    params:
-        url = lambda wildcards: config["host_"+wildcards.suff+"_url"]
-    shell:
-        """
-        exec &>{log}
-        curl -L -o {output[0]}.gz {params.url}
-        gunzip -c {output[0]}.gz > {output[0]}
-        rm {output[0]}.gz
-        """
-
 ## Protein databases ##
 rule download_refseq_db:
     output:
@@ -393,126 +372,6 @@ rule download_refseq_db:
         gunzip -c {params.dir}/*.faa.gz > {output[0]}
         rm {params.dir}/*.faa.gz
         wget -O - ftp://ftp.ncbi.nlm.nih.gov/refseq/release/RELEASE_NUMBER > {output[1]}
-        """
-
-rule prepare_diamond_JGI:
-    input:
-        zip = "resources/JGI/fungi_proteins_download.zip",
-        list = "resources/JGI/fungi_proteins_download.protfile1",
-        gzip = "resources/taxmapper/databases/taxonomy/meta_database.fa.gz",
-        extra = "resources/refseq/hygrophorus/HygMG78.faa",
-        extra_id = "resources/refseq/hygrophorus/HygMG78.idmap.gz",
-        tmmap = "resources/taxmapper/taxmapper_taxonomy_taxids.tsv",
-        jgimap = "resources/JGI/taxonomy_taxids_newids.tsv",
-        jgiidmap = "resources/JGI/JGI_idmap.tsv"
-    output:
-        "resources/diamond/taxonmap.gz",
-        "resources/diamond/jgi.map.gz",
-        "resources/diamond/tm.map.gz",
-        "resources/diamond/refseq.map.gz",
-        "resources/diamond/fasta.gz"
-    params:
-        src = "source/utils/reformat_prot_fasta.py"
-    shell:
-        """
-        # Create temporary directory
-        mkdir -p $TMPDIR/fasta
-        rm -rf $TMPDIR/fasta/*
-        # Add taxmapper proteins
-        gunzip -c {input.gzip} | python {params.src} {input.tmmap} --accessionlength 14 > $TMPDIR/fasta/db.fasta 2>$TMPDIR/fasta/tm.map
-        # Add JGI proteins
-        files=$(cat {input.list})
-        for f in $files;
-        do
-            genome_id=$(echo $f | cut -f1 -d '/')
-            new_id=$(grep -w $genome_id {input.jgiidmap} | cut -f1)
-            unzip -p {input.zip} $f | gunzip -c | python {params.src} {input.jgimap} --accessionlength 14 --genome_id $new_id >> $TMPDIR/fasta/db.fasta 2>>$TMPDIR/fasta/jgi.map
-        done
-        # Add extra Hygro proteins
-        cat {input.extra} >> $TMPDIR/fasta/db.fasta
-        gunzip -c {input.extra_id} >> $TMPDIR/fasta/refseq.map
-        # Make taxonmap file
-        echo -e "accession\taccession.version\ttaxid\tgi" > $TMPDIR/fasta/taxonmap
-        cut -f1 $TMPDIR/fasta/tm.map $TMPDIR/fasta/jgi.map $TMPDIR/fasta/refseq.map > $TMPDIR/fasta/taxonmap.1
-        cut -f1,3 $TMPDIR/fasta/tm.map $TMPDIR/fasta/jgi.map > $TMPDIR/fasta/taxonmap.2
-        paste $TMPDIR/fasta/taxonmap.1 $TMPDIR/fasta/taxonmap.2 $TMPDIR/fasta/taxonmap.1 >> $TMPDIR/fasta/taxonmap
-        gzip $TMPDIR/fasta/taxonmap
-        gzip $TMPDIR/fasta/jgi.map
-        gzip $TMPDIR/fasta/tm.map
-        gzip $TMPDIR/fasta/refseq.map
-        gzip $TMPDIR/fasta/db.fasta
-        mv $TMPDIR/fasta/taxonmap.gz {output[0]}
-        mv $TMPDIR/fasta/jgi.map.gz {output[1]}
-        mv $TMPDIR/fasta/tm.map.gz {output[2]}
-        mv $TMPDIR/fasta/refseq.map.gz {output[3]}
-        mv $TMPDIR/fasta/db.fasta.gz {output[4]}
-        rm -r $TMPDIR/fasta
-        """
-
-rule download_diamond_files:
-    output:
-        taxonmap = "resources/diamond/taxonmap.gz",
-        fasta = "resources/diamond/fasta.gz",
-        nodes = "resources/diamond/nodes.dmp"
-    params:
-        diamond_taxonmap_url = config["diamond_taxonmap_url"],
-        diamond_fasta_url = config["diamond_fasta_url"],
-        diamond_nodes_url = config["diamond_nodes_url"]
-    shell:
-        """
-        curl -L -o {output.taxonmap} {params.diamond_taxonmap_url}
-        curl -L -o {output.fasta} {params.diamond_fasta_url}
-        curl -L -o {output.nodes}.gz {params.diamond_nodes_url}
-        gunzip {output.nodes}.gz
-        """
-ruleorder: download_diamond_files > prepare_diamond_JGI
-
-rule build_diamond_JGI:
-    input:
-        taxonmap = "resources/diamond/taxonmap.gz",
-        fasta = "resources/diamond/fasta.gz",
-        nodes = "resources/diamond/nodes.dmp"
-    output:
-        db = "resources/diamond/diamond.dmnd"
-    conda: "../../envs/diamond.yaml"
-    params:
-        tmpdir = "$TMPDIR/diamond"
-    threads: 4
-    resources:
-        runtime = 60*5
-    shell:
-        """
-        # Create temporary directory
-        mkdir -p $TMPDIR
-        # Create the database
-        zcat {input.fasta} | diamond makedb -d $TMPDIR/diamond -p {threads} \
-         --taxonmap {input.taxonmap} --taxonnodes {input.nodes}
-        # Move to output
-        mv $TMPDIR/diamond.dmnd {output.db}
-        """
-
-rule build_diamond_JGI_legacy:
-    input:
-        taxonmap = "resources/diamond/taxonmap.gz",
-        fasta = "resources/diamond/fasta.gz",
-        nodes = "resources/diamond/nodes.dmp"
-    output:
-        db = "resources/diamond_legacy/diamond.dmnd"
-    conda: "../../envs/contigtax.yaml"
-    params:
-        tmpdir = "$TMPDIR/diamond"
-    threads: 4
-    resources:
-        runtime = 60*5
-    shell:
-        """
-        # Create temporary directory
-        mkdir -p $TMPDIR
-        # Create the database
-        zcat {input.fasta} | diamond makedb -d $TMPDIR/diamond -p {threads} \
-         --taxonmap {input.taxonmap} --taxonnodes {input.nodes}
-        # Move to output
-        mv $TMPDIR/diamond.dmnd {output.db}
         """
 
 ## KEGG info ##
