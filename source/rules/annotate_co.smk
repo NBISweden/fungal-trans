@@ -36,7 +36,6 @@ rule transdecoder_longorfs_co:
     params:
         output_dir = lambda wildcards: f"results/annotation/co-assembly/{wildcards.assembler}/{wildcards.assembly}/transdecoder"
     resources:
-        tasks= 1,
         runtime = 240
     shell:
         """
@@ -84,7 +83,6 @@ rule mmseqs_firstpass_taxonomy_co:
         aln_dir = lambda wildcards, output: os.path.dirname(output.aln[0])
     resources:
         mem_mb = 3600,
-        tasks = 1
     shell:
         """
         mkdir -p {params.tmp}
@@ -155,7 +153,6 @@ rule mmseqs_createtsv_first_co:
     threads: 1
     resources:
         mem_mb = 1000,
-        tasks = 1
     shell:
         """
         mmseqs createtsv {input.query} {params.result} {output.tsv} --threads {threads} > {log} 2>&1
@@ -275,7 +272,6 @@ rule featurecount_co:
         "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.log"
     resources:
         runtime = 30,
-        tasks = 1,
         mem_mb = 1000
     conda: "../../envs/featurecount.yaml"
     params:
