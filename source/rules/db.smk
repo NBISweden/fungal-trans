@@ -11,7 +11,6 @@ localrules:
     init_jgi,
     download_jgi_transcripts,
     download_jgi_proteins,
-    concat_transcripts,
     concat_proteins,
     prepare_diamond_JGI,
     mmseqs_filter_fungalDB
@@ -129,7 +128,7 @@ rule init_jgi:
 
 rule download_jgi_transcripts:
     """
-    For each 'portal', download the filtered transcripts 
+    For each 'portal', download a transcripts file
     """
     output:
         transcripts=temp(touch("resources/JGI/genomes/{portal}.transcripts.fna.gz")),
@@ -144,29 +143,29 @@ rule download_jgi_transcripts:
         python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {output.transcripts} 2>{log}
         """
 
-rule concat_transcripts:
+rule filter_transcripts:
     """
-    Concatenates all non-zero transcripts downloaded
+    Filters transcripts to remove sequences shorter than 300 bp
+    Also renames sequences so as to be compatible with downstream mapping
     """
     output:
-        "resources/fungi/fungi_transcripts.fasta.gz"
+        touch("resources/JGI/genomes/{portal}.transcripts.filt.fna.gz")
     input:
-        expand(rules.download_jgi_transcripts.output.transcripts, portal=genomes.index.tolist())
+        rules.download_jgi_transcripts.output.transcripts
     log:
-        "resources/fungi/concat_transcripts.log"
-    params:
-        tmpfile = "$TMPDIR/fungi_transcripts.fasta.gz"
+        "resources/JGI/genomes/filter_transcripts.{portal}.log"
     shell:
         """
-        for f in {input};
-        do
-            if [-s $f];
-            then
-                cat $f >> {params.tmpfile}
-            fi
-        done
-        mv {params.tmpfile} {output} 
+        exec &>{log}
+        if [ -s {input} ];
+        then
+            seqkit seq -m 300 {input} | seqkit replace -p .+ -r "{wildcards.portal}_{{nr}}" | gzip -c > {output}
+        fi
         """
+
+rule all_filtered_transcripts:
+    input:
+        expand(rules.filter_transcripts.output, portal=genomes.index)
 
 rule download_jgi_proteins:
     """
@@ -359,33 +358,6 @@ rule mmseqs_createtaxdb:
         """
         cat {input.mapfiles} > {params.mapfile}
         mmseqs createtaxdb {input.db} {params.tmpdir} --ncbi-tax-dump {params.taxdump} --tax-mapping-file {params.mapfile} --threads {threads} > {log} 2>&1
-        """
-
-rule cluster_transcripts:
-    """
-    Clusters transcripts using vsearch
-    """
-    output:
-        "resources/fungi/fungi_transcripts.clustered.fasta"
-    input:
-        rules.concat_transcripts.output
-    log:
-        "resources/fungi/cluster_transcripts.log"
-    params:
-        tmpdir = "$TMPDIR/fungi",
-        id = 1.0
-    conda:
-        "../../envs/vsearch.yaml"
-    threads: 10
-    shell:
-        """
-        mkdir -p {params.tmpdir}
-        pigz -p {threads} -c -d {input} > {params.tmpdir}/fungi_transcripts.fasta
-        vsearch --cluster_fast {params.tmpdir}/fungi_transcripts.fasta \
-            --centroids {params.tmpdir}/fungi_transcripts.clustered.fasta --id {params.id} \
-            --log {log} --threads {threads}
-        mv {params.tmpdir}/fungi_transcripts.clustered.fasta {output}
-        rm -r {params.tmpdir}
         """
 
 ## Host data ##
