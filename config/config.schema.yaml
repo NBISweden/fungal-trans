@@ -1,10 +1,6 @@
 $schema: "http://json-schema.org/draft-06/schema#"
 description: Configuration schema
 properties:
-  mem_per_cpu:
-    type: number
-    default: 6
-    description: GB RAM per CPU available
   ## PATHS ##
   workdir:
     type: string
@@ -18,12 +14,62 @@ properties:
     type: string
     description: Directory with raw sequence files
     default: "data/raw"
+  read_length:
+    type: integer
+    description: Read length of samples
+    default: 150
   ## SRA DOWNLOAD ##
   dlparams:
     type: string
     description: Parameters to supply to sra-tools for development purposes
     default: ""
-  ## HOST FILES ##
+  ## PREPROCESSING ##
+  trimmomatic_home:
+    type: string
+    description: Trimmomatic home path (will be detected automatically)
+    default: ""
+  qc_trim_settings:
+    type: string
+    description: Trimmomatic trim settings
+    default: "LEADING:25 TRAILING:25 SLIDINGWINDOW:4:15 HEADCROP:2 MINLEN:50"
+  cutadapt_R1:
+    type: string
+    description: Cutadapt R1 adapter
+    default: "AGATCGGAAGAGCACACGTCTGAACTCCAGTCA"
+  cutadapt_R2:
+    type: string
+    description: Cutadapt R2 adapter
+    default: "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
+  cutadapt_error_rate:
+    type: number
+    description: Cutadapt maximum error rate
+    default: 0.2
+  cutadapt_extra_settings:
+    type: string
+    description: Additional flags for cutadapt
+    default: ""
+  ## FILTERING ##
+  filter_reads:
+    type: boolean
+    description: Whether to filter reads
+    default: true
+  paired_strategy:
+    type: string
+    description: Strategy for handling read pairs. If 'both_mapped', both reads in a pair must map to fungi and neither to host. If 'one_mapped', only one read in a pair must map to fungi and pairs with at least one read mapping to host will be discarded.
+    default: "one_mapped"
+    enum: ["both_mapped","one_mapped"]
+  fungi_info:
+    type: string
+    description: URL to fungi info page
+    default: https://mycocosm.jgi.doe.gov/fungi/fungi.info.html
+  jgi_user:
+    type: string
+    description: JGI username
+    default: ""
+  jgi_password:
+    type: string
+    description: JGI password
+    default: ""
   host_fna:
     type: string
     description: Path to host fasta file
@@ -32,16 +78,7 @@ properties:
     type: string
     description: Path to host GFF file
     default: ""
-  ## MAPPING ##
-  host_aligner:
-    type: string
-    description: Aligner to use for mapping reads against host
-    default: "star"
-    enum: ["star", "bowtie2"]
-  bowtie2_params:
-    type: string
-    description: Parameters for bowtie2 aligner
-    default: "--very-sensitive"
+  # STAR parameters
   star_limitGenomeGenerateRAM:
     type: integer
     description: Maximum RAM to use for genome generation (in GB)
@@ -49,15 +86,12 @@ properties:
   star_extra_build_params:
     type: string
     description: Extra parameters for star index build
-    default: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent --sjdbOverhang 100"
+    default: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent"
   star_extra_params:
     type: string
     description: Extra parameters for star alignment
     default: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
-  fc_params:
-    type: string
-    description: Parameters for featureCounts
-    default: "-p -B -t CDS -g gene_id -Q 10"
+  
   ## ASSEMBLY ##
   co-assembly:
     type: boolean
@@ -70,7 +104,7 @@ properties:
   assembler:
     type: string
     description: Assembler to use
-    default: "transabyss"
+    default: "trinity"
     enum: ["trinity", "megahit", "transabyss"]
   transabyss_kmers:
     type: array
@@ -82,63 +116,35 @@ properties:
     type: integer
     description: Minimum contig length for megahit assembler
     default: 200
-  ## FILTERING ##
-  taxmap:
-    type: object
-    description: Taxonomic mapping for partitioning
-    properties:
-      Bacteria:
-        type: integer
-        description: NCBI taxon ID for Bacteria
-        default: 2
-      Archaea:
-        type: integer
-        description: NCBI taxon ID for Archaea
-        default: 2157
-      Eukaryota:
-        type: integer
-        description: NCBI taxon ID for Eukaryota
-        default: 2759
-  paired_strategy:
+  insilico_norm_max_cov:
+    type: integer
+    description: Target max coverage for insilico normalization
+    default: 30
+  insilico_norm_mem:
     type: string
-    description: "How to treat paired alignments: 'concordant' = only keep concordantly mapping reads,
-      'both_mapped' = requires that both ends are mapped or 'one_mapped' = keep paired reads even if only one end maps"
-    default: "both_mapped"
-    enum: ["concordant","both_mapped","one_mapped"]
-  fungi_info:
+    description: Maximum memory to use for insilico normalization
+    default: "100G"
+  ## ANNOTATION ##
+  mmseqs_db_dir:
     type: string
-    description: URL to fungi info page
-    default: https://mycocosm.jgi.doe.gov/fungi/fungi.info.html
-  spruce_transcript_url:
+    description: Path to MMSeqs2 databases
+    default: "/sw/data/MMseqs2_data/latest/rackham"
+  transdecoder_homology_db:
     type: string
-    description: Dataset url for spruce transcripts to use in filtering
-    default: "https://zenodo.org/record/3550762/files/spruce.fna.gz?download=1"
-  filter_reads:
-    type: boolean
-    description: Whether to filter reads
-    default: true
-  ## DIAMOND DATABASE ##
-  diamond_fasta_url:
+    description: Database for TransDecoder homology filtering
+    default: "UniProtKB_Swiss-Prot"
+  mmseqs_db:
     type: string
-    description: Dataset url for fasta file to use for diamond database
-    default: "https://zenodo.org/record/3737678/files/fasta.gz?download=1"
-  diamond_nodes_url:
+    description: Database for MMSeqs2 taxonomic assignment
+    default: "NR"
+  extra_genomes:
     type: string
-    description: Dataset url for nodes.dmp file to use for diamond database
-    default: "https://zenodo.org/record/3737678/files/nodes.dmp.gz?download=1"
-  diamond_taxonmap_url:
+    description: File listing additional genomes for taxonomic assignment
+    default: "extra_JGI_genomes.tsv"
+  emapper_db_dir:
     type: string
-    description: Dataset url for taxonmap.gz file to use for diamond database
-    default: "https://zenodo.org/record/3737678/files/taxonmap.gz?download=1"
-  ## PREPROCESSING ##
-  trimmomatic_home:
-    type: string
-    description: Trimmomatic home path (will be detected automatically)
-    default: ""
-  qc_trim_settings:
-    type: string
-    description: Trimmomatic trim settings
-    default: "LEADING:25 TRAILING:25 SLIDINGWINDOW:4:15 HEADCROP:2 MINLEN:50"
+    description: Path to eggNOG database
+    default: "/sw/data/eggnog/5.0/rackham"
   dbCAN_eval:
     type: number
     description: E-value to use for dbCAN parsing
@@ -156,3 +162,29 @@ properties:
     type: string
     description: Taxonomic name at which to summarize eggNOG annotations for
     default: "Fungi"
+  ## READ ASSIGNMENT ##
+  fc_params:
+    type: string
+    description: Parameters for featureCounts
+    default: "-s 2 -p -B -t CDS -g gene_id -Q 10"
+  ## READ PARTITIONING ##
+  kraken_db:
+    type: string
+    description: Path to Kraken database
+    default: "/sw/data/Kraken2_data/prebuilt/k2_pluspfp_20240112"
+  taxmap:
+    type: object
+    description: Taxonomic mapping for partitioning
+    properties:
+      Bacteria:
+        type: integer
+        description: NCBI taxon ID for Bacteria
+        default: 2
+      Archaea:
+        type: integer
+        description: NCBI taxon ID for Archaea
+        default: 2157
+      Eukaryota:
+        type: integer
+        description: NCBI taxon ID for Eukaryota
+        default: 2759
