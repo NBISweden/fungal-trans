@@ -50,14 +50,10 @@ properties:
     type: string
     description: URL to fungi info page
     default: https://mycocosm.jgi.doe.gov/fungi/fungi.info.html
-  jgi_user:
+  jgi_account_info:
     type: string
-    description: JGI username
-    default: ""
-  jgi_password:
-    type: string
-    description: JGI password
-    default: ""
+    description: Path to JGI account file
+    default: config/jgi_account.yml
   host_fna:
     type: string
     description: Path to host fasta file

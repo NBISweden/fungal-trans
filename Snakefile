@@ -3,6 +3,7 @@ import glob
 import os
 import sys
 import platform
+import yaml
 from snakemake.utils import min_version, validate
 from snakemake.exceptions import WorkflowError
 from source.utils.list_jgi_genomes import parse_genomes
@@ -49,6 +50,10 @@ if config["filter_reads"]:
     config["filter_source"] = "filtered"
 else:
     config["filter_source"] = "unfiltered"
+
+# set jgi account info
+with open(config["jgi_account_info"], 'r') as fhin:
+    config.update(yaml.safe_load(fhin))
 
 # Parse samples and assemblies
 samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], config)

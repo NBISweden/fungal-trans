@@ -42,9 +42,12 @@ paired_strategy: "one_mapped"
 # URL to file listing JGI genomes for which to download transcript files
 fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
 # In order to download from JGI, you need to provide your JGI username and password
+# in a file that you point to with 'jgi_account_info'
+# this file should contain
+# jgi_user: your_jgi_username
+# jgi_password: your_jgi_password
 # If you do not have a JGI account, you can create one at https://contacts.jgi.doe.gov/registration/new
-jgi_user: john.sundh@scilifelab.se
-jgi_password: fungi2024
+jgi_account_info: "config/jgi_account_info.yml"
 # Host files (fna and gff)
 host_fna: "data/Picab02_chromosomes_and_unplaced.fa.gz"
 host_gff: "data/Picab02_230926_at01_longest_no_TE_sorted.gff3.gz"
