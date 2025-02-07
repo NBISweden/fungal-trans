@@ -8,7 +8,7 @@ localrules:
 ################
 rule link_unfiltered:
     input:
-        "results/preprocess/{sample_id}_R{i}.cut.trim.mRNA.fastq.gz"
+        "results/preprocess/{sample_id}_R{i}.mRNA.fastq.gz"
     output:
         "results/unfiltered/{sample_id}/{sample_id}_R{i}.fastq.gz"
     shell:
@@ -54,8 +54,8 @@ rule strobealign_map_fungi:
     file for each chunk.
     """
     input:
-        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+        R1=rules.sortmerna.output.R1,
+        R2=rules.sortmerna.output.R2,
         fna=lambda wildcards: strobealign_chunks[wildcards.chunk]
     output:
         paf="results/strobealign/{sample_id}/{chunk}/{sample_id}.fungi.paf.gz",
@@ -97,8 +97,8 @@ rule process_fungal_bam:
     Reads with both ends and one or both ends mapped are extracted separately.
     """
     input:
-        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+        R1=rules.sortmerna.output.R1,
+        R2=rules.sortmerna.output.R2,
         paf="results/strobealign/{sample_id}/{sample_id}.fungi.paf.gz",
         both="results/strobealign/{sample_id}/{sample_id}.fungi.both_mapped.gz",
     output:
