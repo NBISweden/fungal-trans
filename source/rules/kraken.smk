@@ -31,8 +31,8 @@ rule preload_kraken_db:
 
 rule run_kraken:
     input:
-        R1 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+        R1 = rules.sortmerna.output.R1,
+        R2 = rules.sortmerna.output.R2,
         db=rules.preload_kraken_db.output
     output:
         "results/kraken/{sample_id}.out.gz",
@@ -79,8 +79,8 @@ rule extract_kraken_reads:
     input:
         kraken=rules.run_kraken.output[0],
         report=rules.run_kraken.output[1],
-        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
+        R1=rules.sortmerna.output.R1,
+        R2=rules.sortmerna.output.R2,
     log:
         "results/taxbins/{taxname}/extract_kraken_reads.{sample_id}.log"
     params:
