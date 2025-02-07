@@ -138,7 +138,7 @@ rule kallisto_index:
 rule kallisto_quant:
     input:
         index = rules.kallisto_index.output,
-        fq = assembly_input
+        fq = fungi_input
     output:
         h5 = "results/map/{assembler}/{filter_source}/{sample_id}/abundance.h5",
         tsv = "results/map/{assembler}/{filter_source}/{sample_id}/abundance.tsv",
@@ -192,7 +192,7 @@ rule subread_index:
 rule subread_align:
     input:
         index = rules.subread_index.output,
-        fq = assembly_input
+        fq = fungi_input
     output:
         "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
     log:
