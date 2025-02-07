@@ -44,10 +44,47 @@ rule download_fastq:
 ## TRIMMING ##
 ##############
 
-rule fastp:
+rule fastq_replace_ids:
+    """
+    Replace fastq read ids with sample id and read number.
+    This is done as a precaution since some downstream tools (such as SortMeRNA) 
+    gets stuck on files with read ids with special characters.
+
+    The mapping of original read ids to new read ids is stored in a map file.
+
+    The combination of commands used to sort the fastq files is taken from https://edwards.flinders.edu.au/sorting-fastq-files-by-their-sequence-identifiers/
+    """
     input:
         R1 = lambda wildcards: samples[wildcards.sample_id]["R1"],
         R2 = lambda wildcards: samples[wildcards.sample_id]["R2"]
+    output:
+        R1="results/preprocess/replace_ids/{sample_id}_R1.fastq.gz",
+        R2="results/preprocess/replace_ids/{sample_id}_R2.fastq.gz",
+        mapfile="results/preprocess/replace_ids/{sample_id}.map",
+    params:
+        R1sort = "$TMPDIR/{sample_id}_R1.sort.fastq",
+        R2sort = "$TMPDIR/{sample_id}_R2.sort.fastq",
+        orig = "results/preprocess/replace_ids/{sample_id}.orig",
+        renamed = "results/preprocess/replace_ids/{sample_id}.renamed"
+    shell:
+        """
+        gunzip -c {input.R1} | paste - - - - | sort -k1,1 -t " " | tr "\t" "\n" > {params.R1sort}
+        gunzip -c {input.R2} | paste - - - - | sort -k1,1 -t " " | tr "\t" "\n" > {params.R2sort}
+        seqkit replace -p '.+' -r "{wildcards.sample_id}_{{nr}}" {params.R1sort} | gzip -c > {output.R1}
+        seqkit replace -p '.+' -r "{wildcards.sample_id}_{{nr}}" {params.R2sort} | gzip -c > {output.R2}
+        seqkit seq -n -i {params.R1sort} > {params.orig}
+        seqkit seq -n -i {output.R1} > {params.renamed}
+        paste {params.orig} {params.renamed} > {output.mapfile}
+        rm {params.R1sort} {params.R2sort} {params.orig} {params.renamed}
+        """
+
+rule fastp:
+    """
+    Trim adapters and filter low quality reads using fastp.
+    """
+    input:
+        R1 = rules.fastq_replace_ids.output.R1,
+        R2 = rules.fastq_replace_ids.output.R2
     output:
         R1 = "results/preprocess/fastp/{sample_id}_R1.fastp.fastq.gz",
         R2 = "results/preprocess/fastp/{sample_id}_R2.fastp.fastq.gz"
