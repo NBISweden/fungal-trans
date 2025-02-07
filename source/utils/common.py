@@ -29,22 +29,14 @@ def parse_sample_list(f, config):
         for assembly in df.assembly.unique():
             assemblies[assembly] = {'R1': [], 'R2': []}
     for sample in df.index:
-        try:
+        accession = ""
+        if "Read_file" and "Pair_file" in df.columns:
             R1 = df.loc[sample,'Read_file']
             R2 = df.loc[sample,'Pair_file']
-        except KeyError:
-            R1 = f'{sample}_1.fastq.gz'
-            R2 = f'{sample}_2.fastq.gz'
-        if not os.path.exists(R1) and not os.path.exists(R2):
-            if os.path.exists(f'{dir}/{R1}') and os.path.exists(f'{dir}/{R2}'):
-                R1 = f'{dir}/{R1}'
-                R2 = f'{dir}/{R2}'
-            else:
-                sys.exit("Error: Read files not found")
-        if 'accession' in df.columns:
+        elif 'accession' in df.columns:
             accession = df.loc[sample, 'accession']
-        else:
-            accession = ''
+            R1 = f"{dir}/{sample}_1.fastq.gz"
+            R2 = f"{dir}/{sample}_2.fastq.gz"
         if len(assemblies.keys()) > 0:
             if df.loc[sample,'assembly'] != '':
                 assembly = df.loc[sample, 'assembly']
@@ -60,25 +52,12 @@ def parse_sample_list(f, config):
                          'accession': accession}
     return samples, map_dict, assemblies
 
-def assembly_input(wildcards):
+def fungi_input(wildcards):
     d = "unfiltered"
     if config["filter_reads"]:
         d="filtered"
     R1 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R1.fastq.gz"
     R2 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R2.fastq.gz"
-    return [R1, R2]
-
-def fungi_input(wc):
-    suffices = {'unfiltered': 'cut.trim.fastq.gz',
-                'filtered': 'filtered.union.fastq.gz',
-                'taxmapper': 'cut.trim.filtered.fastq.gz',
-                'bowtie2': 'fungi.nohost.fastq.gz'}
-    if wc.filter_source == "bowtie2":
-        aligndir = config["host_aligner"]
-    else:
-        aligndir = wc.filter_source
-    R1 = f'results/{aligndir}/{wc.sample_id}/{wc.sample_id}_R1.{suffices[wc.filter_source]}'
-    R2 = f'results/{aligndir}/{wc.sample_id}/{wc.sample_id}_R2.{suffices[wc.filter_source]}'
     return [R1, R2]
 
 def parse_extra_genomes(f):
