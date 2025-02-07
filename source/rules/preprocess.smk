@@ -110,6 +110,9 @@ rule fastp:
 ####################
 
 rule download_rRNA_database:
+    """
+    Download SortMeRNA rRNA databases.
+    """
     output:
         default="resources/sortmerna/rRNA_databases_v4/smr_v4.3_default_db.fasta", 
         fast="resources/sortmerna/rRNA_databases_v4/smr_v4.3_fast_db.fasta",
@@ -125,6 +128,9 @@ rule download_rRNA_database:
         """
 
 rule sortmerna_index:
+    """
+    Index SortMeRNA rRNA databases.
+    """
     output:
         touch("resources/sortmerna/rRNA_databases_v4/indexed")
     input:
@@ -138,27 +144,30 @@ rule sortmerna_index:
         runtime = 60
     threads: 2
     conda: "../../envs/sortmerna.yaml"
-    container: "docker://quay.io/biocontainers/sortmerna:4.2.0--h9ee0642_1"
+    container: "docker://quay.io/biocontainers/sortmerna:4.3.6--h9ee0642_0"
     shell:
         """
         mkdir -p {params.tmpdir}
         head -2 {input} > {params.tmpdir}/tmp.fasta
         sortmerna --workdir {params.tmpdir}/ --threads {threads} \
-            --idx {params.outdir} --reads {params.tmpdir}/tmp.fasta \
+            --idx-dir {params.outdir} --reads {params.tmpdir}/tmp.fasta \
             --ref {input[0]} --task 1 --blast 1 --num_alignments 1 > {log} 2>&1
         rm -r {params.tmpdir}
         """
 
 rule sortmerna:
+    """
+    Filter rRNA reads using SortMeRNA.
+    """
     input:
         R1=rules.fastp.output.R1,
         R2=rules.fastp.output.R2,
         ref=rules.download_rRNA_database.output.default
     output:
-        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz",
-        R1_rRNA="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.rRNA.fastq.gz",
-        R2_rRNA="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.rRNA.fastq.gz"
+        R1="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.mRNA.fastq.gz",
+        R2="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.mRNA.fastq.gz",
+        R1_rRNA="results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.rRNA.fastq.gz",
+        R2_rRNA="results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.rRNA.fastq.gz"
     log:
         run="results/preprocess/sortmerna/{sample_id}/run.log",
         stats="results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log",
@@ -168,11 +177,11 @@ rule sortmerna:
     threads: 4
     conda:
         "../../envs/sortmerna.yaml"
-    container: "docker://quay.io/biocontainers/sortmerna:4.2.0--h9ee0642_1"
+    container: "docker://quay.io/biocontainers/sortmerna:4.3.6--h9ee0642_0"
     shell:
         """
         rm -rf {params.workdir}
-        sortmerna --workdir {params.workdir}/ --threads {threads} --idx {params.idx_dir} \
+        sortmerna --workdir {params.workdir}/ --threads {threads} --idx-dir {params.idx_dir} \
             --ref {input.ref} --reads {input.R1} --reads {input.R2} \
             --paired_in --out2 --fastx --blast 1 --num_alignments 1 --aligned --other -v >{log.run} 2>&1
         gzip {params.workdir}/out/*.fastq
@@ -184,12 +193,15 @@ rule sortmerna:
         """
 
 rule fastqc:
+    """
+    Run FastQC on the trimmed, rRNA filtered fastq files.
+    """
     input:
-        R1 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.cut.trim.mRNA.fastq.gz",
-        R2 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.cut.trim.mRNA.fastq.gz"
+        R1 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R1.mRNA.fastq.gz",
+        R2 = "results/preprocess/sortmerna/{sample_id}/{sample_id}_R2.mRNA.fastq.gz"
     output:
-        R1 = "results/preprocess/fastqc/{sample_id}_R1.cut.trim.mRNA_fastqc.zip",
-        R2 = "results/preprocess/fastqc/{sample_id}_R2.cut.trim.mRNA_fastqc.zip"
+        R1 = "results/preprocess/fastqc/{sample_id}_R1.mRNA_fastqc.zip",
+        R2 = "results/preprocess/fastqc/{sample_id}_R2.mRNA_fastqc.zip"
     log: "results/preprocess/fastqc/{sample_id}.fastqc.log"
     params:
         outdir = "results/preprocess/fastqc"
@@ -203,8 +215,11 @@ rule fastqc:
         """
 
 rule multiqc:
+    """
+    Run MultiQC on the preprocessing results.
+    """
     input:
-        qclogs = expand("results/preprocess/fastqc/{sample_id}_R{i}.cut.trim.mRNA_fastqc.zip", sample_id = samples.keys(), i = [1,2]),
+        qclogs = expand("results/preprocess/fastqc/{sample_id}_R{i}.mRNA_fastqc.zip", sample_id = samples.keys(), i = [1,2]),
         fastplogs = expand("results/preprocess/fastp/{sample_id}.fastp.json", sample_id = samples.keys()),
         sortmernalogs = expand("results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log", sample_id = samples.keys())
     output:
