@@ -6,7 +6,7 @@ localrules:
 
 rule transabyss:
     input:
-        assembly_input
+        fungi_input
     output:
         fa = "results/assembly/transabyss/{filter_source}/{sample_id}/{k}/{sample_id}.{k}-final.fa",
     log: "results/assembly/transabyss/{filter_source}/{sample_id}/{k}/log"
@@ -35,7 +35,7 @@ rule transabyss:
 
 rule transabyss_merge:
     input:
-        assembly_input,
+        fungi_input,
         expand("results/assembly/transabyss/{{filter_source}}/{{sample_id}}/{k}/{{sample_id}}.{k}-final.fa",
             k = config["transabyss_kmers"])
     output:
@@ -70,7 +70,7 @@ rule transabyss_merge:
 
 rule trinity:
     input:
-        assembly_input
+        fungi_input
     output:
         fa="results/assembly/trinity/{filter_source}/{sample_id}/final.fa",
     log: "results/assembly/trinity/{filter_source}/{sample_id}/log"
@@ -102,7 +102,7 @@ rule trinity:
 
 rule megahit:
     input:
-        assembly_input
+        fungi_input
     output:
         fa = "results/assembly/megahit/{filter_source}/{sample_id}/final.fa",
         R1 = "results/assembly/megahit/{filter_source}/{sample_id}/{sample_id}_R1.fastq.gz",
