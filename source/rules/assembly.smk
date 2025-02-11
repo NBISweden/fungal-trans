@@ -1,17 +1,22 @@
 localrules: 
     assembly_stats,
+    co_assembly_stats
+
 ##############
 ## Assembly ##
 ##############
 
 rule transabyss:
+    """
+    Assemble fungal reads with transabyss at a certain k-mer size.
+    """
     input:
         fungi_input
     output:
         fa = "results/assembly/transabyss/{filter_source}/{sample_id}/{k}/{sample_id}.{k}-final.fa",
     log: "results/assembly/transabyss/{filter_source}/{sample_id}/{k}/log"
-    conda:
-        "../../envs/transabyss.yaml"
+    conda: "../../envs/transabyss.yaml"
+    container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
         tmpdir = "$TMPDIR/{filter_source}.{sample_id}.{k}.transabyss",
@@ -34,6 +39,9 @@ rule transabyss:
         """
 
 rule transabyss_merge:
+    """
+    Merge transabyss assemblies from different k-mer sizes.
+    """
     input:
         fungi_input,
         expand("results/assembly/transabyss/{{filter_source}}/{{sample_id}}/{k}/{{sample_id}}.{k}-final.fa",
@@ -44,8 +52,8 @@ rule transabyss_merge:
         R2= "results/assembly/transabyss/{filter_source}/{sample_id}/{sample_id}_R2.fastq.gz"
     log:
         "results/logs/transabyss/{sample_id}.{filter_source}.merge.log"
-    conda:
-        "../../envs/transabyss.yaml"
+    conda: "../../envs/transabyss.yaml"
+    container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         mink = min(config["transabyss_kmers"]),
         maxk = max(config["transabyss_kmers"]),
@@ -67,8 +75,10 @@ rule transabyss_merge:
         mv {params.tmpout} {output.fa}
         """
 
-
 rule trinity:
+    """
+    Assemble fungal reads with Trinity.
+    """
     input:
         fungi_input
     output:
@@ -84,8 +94,7 @@ rule trinity:
     resources:
         runtime = 24 * 60,
         mem_mb = 5000
-    #conda:
-    #    "../../envs/trinity.yaml"
+    conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
@@ -101,6 +110,9 @@ rule trinity:
         """
 
 rule megahit:
+    """
+    Assemble fungal reads with Megahit.
+    """
     input:
         fungi_input
     output:
@@ -133,7 +145,14 @@ rule megahit:
         rm -rf {params.tmp_dir}
         """
 
+#################
+## CO-ASSEMBLY ##
+#################
+
 rule trinity_normalize:
+    """
+    Normalize reads with Trinity in-silico normalization.
+    """
     input:
         R1 = lambda wildcards: assemblies[wildcards.assembly]["R1"],
         R2 = lambda wildcards: assemblies[wildcards.assembly]["R2"]
@@ -148,8 +167,7 @@ rule trinity_normalize:
         R2 = lambda wildcards: ",".join(sorted(assemblies[wildcards.assembly]["R2"])),
         tmpdir="$TMPDIR/{assembly}.norm",
         mem=config["insilico_norm_mem"]
-    #conda:
-        #"../../envs/trinity.yaml"
+    conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     threads: 10
     shell:
@@ -168,14 +186,17 @@ rule trinity_normalize:
         """
 
 rule transabyss_co:
+    """
+    Co-assemble fungal reads with transabyss at a certain k-mer size.
+    """
     input:
         R1=rules.trinity_normalize.output.R1,
         R2=rules.trinity_normalize.output.R2
     output:
         "results/co-assembly/transabyss/{assembly}/{k}/{assembly}-final.fa",
     log: "results/co-assembly/transabyss/{assembly}/{k}/log"
-    conda:
-        "../../envs/transabyss.yaml"
+    conda: "../../envs/transabyss.yaml"
+    container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         outdir=lambda wildcards, output: os.path.dirname(output[0]),
         tmpdir="$TMPDIR/{assembly}.{k}.transabyss",
@@ -198,14 +219,17 @@ rule transabyss_co:
         """
 
 rule transabyss_merge_co:
+    """
+    Merge transabyss co-assemblies from different k
+    """
     input:
         expand("results/co-assembly/transabyss/{{assembly}}/{k}/{{assembly}}-final.fa",
             k = config["transabyss_kmers"])
     output:
         fa = "results/co-assembly/transabyss/{assembly}/final.fa"
     log: "results/co-assembly/transabyss/{assembly}/merge.log"
-    conda:
-        "../../envs/transabyss.yaml"
+    conda: "../../envs/transabyss.yaml"
+    container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         mink = min(config["transabyss_kmers"]),
         maxk=max(config["transabyss_kmers"]),
@@ -226,6 +250,9 @@ rule transabyss_merge_co:
         """
 
 rule trinity_co:
+    """
+    Co-assemble fungal reads with Trinity.
+    """
     input:
         R1=rules.trinity_normalize.output.R1,
         R2=rules.trinity_normalize.output.R2
@@ -242,8 +269,7 @@ rule trinity_co:
     resources:
         runtime = 24 * 60,
         mem_mb = 5000
-    #conda:
-    #    "../../envs/trinity.yaml"
+    conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
@@ -259,6 +285,9 @@ rule trinity_co:
         """
 
 rule megahit_co:
+    """
+    Co-assemble fungal reads with Megahit.
+    """
     input:
         R1=rules.trinity_normalize.output.R1,
         R2=rules.trinity_normalize.output.R2
@@ -271,6 +300,7 @@ rule megahit_co:
         tmp_dir = "$TMPDIR/megahit/{assembly}",
         tmp_dir_base = "$TMPDIR/megahit"
     conda: "../../envs/megahit.yaml"
+    container: "docker://quay.io/biocontainers/megahit:1.2.9--h43eeafb_5"
     threads: 20
     resources:
         runtime = 24 * 60
@@ -287,17 +317,23 @@ rule megahit_co:
         """
 
 rule assembly_stats:
+    """
+    Calculate assembly statistics.
+    """
     input:
-        expand("results/assembly/{{assembler}}/{{source}}/{sample_id}/final.fa",
+        expand("results/assembly/{{assembler}}/{{filter_source}}/{sample_id}/final.fa",
             sample_id = samples.keys())
     output:
-        "results/report/assembly/{source}_{assembler}_stats.tsv",
-        "results/report/assembly/{source}_{assembler}_size_dist.tsv"
+        "results/report/assembly/{filter_source}_{assembler}_stats.tsv",
+        "results/report/assembly/{filter_source}_{assembler}_size_dist.tsv"
     run:
         names = [x.split("/")[-2] for x in input]
         shell("python source/utils/assembly_stats.py -i {input} -n {names} --size-dist-file {output[1]} > {output[0]}")
 
 rule co_assembly_stats:
+    """
+    Calculate assembly statistics for co-assembly
+    """
     input:
         "results/co-assembly/{assembler}/{assembly}/final.fa"
     output:
