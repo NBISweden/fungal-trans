@@ -1,12 +1,16 @@
 localrules:
     strobealign_collect_chunks,
     link_unfiltered,
-    link_filtered
+    link_filtered,
+    fastq_stats,
 
 ################
 ## Link fastq ##
 ################
 rule link_unfiltered:
+    """
+    This rule creates symlinks to the unfiltered fastq files.
+    """
     input:
         "results/preprocess/{sample_id}_R{i}.mRNA.fastq.gz"
     output:
@@ -17,6 +21,9 @@ rule link_unfiltered:
         """
 
 rule link_filtered:
+    """
+    This rule creates symlinks to the filtered fastq files.
+    """
     input:
         expand("results/star/{{sample_id}}/{paired_strategy}/{{sample_id}}_R{{i}}.fungi.nohost.fastq.gz", paired_strategy=config["paired_strategy"])
     output:
@@ -27,6 +34,9 @@ rule link_filtered:
         """
 
 rule fastq_stats:
+    """
+    This rule calculates statistics for the fastq files.
+    """
     input:
         R1="results/{source}/{sample_id}/{sample_id}_R1.fastq.gz",
         R2="results/{source}/{sample_id}/{sample_id}_R2.fastq.gz"
@@ -39,11 +49,9 @@ rule fastq_stats:
         seqkit stats -T {input.R1} {input.R2} > {output}
         """
 
-
-##########################
-## Bowtie2/STAR mapping ##
-##########################
-#include: "paired_strategy.smk"
+#############
+## MAPPING ##
+#############
 
 rule strobealign_map_fungi:
     """
@@ -70,7 +78,7 @@ rule strobealign_map_fungi:
         """
         mkdir -p {params.tmpdir}
         cat {input.fna} > {params.tmpdir}/ref.fna.gz
-        strobealign -v -x -t {threads} {params.tmpdir}/ref.fna.gz {input.R1} {input.R2} 2>{log} | igzip > {output.paf}
+        strobealign -v --mcs -x -t {threads} {params.tmpdir}/ref.fna.gz {input.R1} {input.R2} 2>{log} | igzip > {output.paf}
         igzip -c -d {output.paf} | cut -f1 | sort | uniq -d | igzip > {output.both}
         rm -r {params.tmpdir}
         """
@@ -108,18 +116,19 @@ rule process_fungal_bam:
         R2both="results/strobealign/{sample_id}/{sample_id}_R2.fungi.both_mapped.fastq.gz",
     shell:
         """
+        # Output reads that map with one or two ends to fungi
         seqkit grep -f <(gunzip -c {input.paf} | cut -f1) {input.R1} -o {output.R1one}
         seqkit grep -f <(gunzip -c {input.paf} | cut -f1) {input.R2} -o {output.R2one}
+        # Output reads that map with both ends to fungi
         seqkit grep -f <(gunzip -c {input.both}) {input.R1} -o {output.R1both}
         seqkit grep -f <(gunzip -c {input.both}) {input.R2} -o {output.R2both}
         """
 
-if not config["host_fna"] and config["host_aligner"]=="star":
+if not config["host_fna"]:
     sys.exit("ERROR: No host genome fasta file given for STAR mapping")
 
 def star_build_input(wildcards):
     input = []
-    # if host_fna_url is given, put this download under resources/host/host.fna
     if config["host_fna"]:
         input.append(config["host_fna"])
     if config["host_gff"]:
@@ -160,11 +169,6 @@ rule star_build_host:
         rm -rf {params.tmpdir}
         """
 
-def get_putative_fungal_reads(wc):
-    if config["paired_strategy"] == "both_mapped":
-        return expand("results/strobealign/{sample_id}/{sample_id}_R{i}.fungi.both_mapped.fastq.gz", i=[1,2], sample_id=wc.sample_id)
-    return expand("results/strobealign/{sample_id}/{sample_id}_R{i}.fungi.one_mapped.fastq.gz", i=[1,2], sample_id=wc.sample_id)
-
 rule star_map_host:
     """
     Maps any read that mapped to fungi against the host genome.
@@ -173,8 +177,8 @@ rule star_map_host:
         db=expand("resources/host/{f}",
             f=["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
                "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"]),
-        R1=rules.process_fungal_bam.output.R1one,
-        R2=rules.process_fungal_bam.output.R2one,
+        R1=rules.sortmerna.output.R1,
+        R2=rules.sortmerna.output.R2,
     output:
         "results/star/{sample_id}/{sample_id}.host.bam"
     log:
@@ -207,47 +211,60 @@ rule star_map_host:
 
 rule process_host_bam:
     """
-    This rule extracts reads from the host bam file. Reads with both ends mapped
-    and with one or both ends mapped are put into separate files.
+    This rule extracts reads from the host bam file that did not map to the host genome.
     """
     input:
         bam=rules.star_map_host.output[0],
     output:
-        R1both="results/star/{sample_id}/both_mapped/{sample_id}_R1.fungi.host.fastq.gz",
-        R2both="results/star/{sample_id}/both_mapped/{sample_id}_R2.fungi.host.fastq.gz",
-        R1one="results/star/{sample_id}/one_mapped/{sample_id}_R1.fungi.host.fastq.gz",
-        R2one="results/star/{sample_id}/one_mapped/{sample_id}_R2.fungi.host.fastq.gz",
+        R1_nohost="results/star/{sample_id}/{sample_id}_R1.nohost.fastq.gz",
+        R2_nohost="results/star/{sample_id}/{sample_id}_R2.nohost.fastq.gz",
+        R1_host="results/star/{sample_id}/{sample_id}_R1.host.fastq.gz",
+        R2_host="results/star/{sample_id}/{sample_id}_R2.host.fastq.gz"
     log:
-        "results/star/{sample_id}/{sample_id}.host_both_mapped.log"
+        "results/star/{sample_id}/{sample_id}.process_host_bam.log"
     container: "docker://quay.io/biocontainers/samtools:1.21--h96c455f_1"
     shell:
         """
-        # Extract reads with both ends mapped
-        samtools fastq -F 12 -1 {output.R1both} -2 {output.R2both} -s /dev/null -0 /dev/null {input.bam}
-        # Extract reads with not both ends mapped
-        samtools fastq -F 4 -1 {output.R1one} -2 {output.R2one} -s /dev/null -0 /dev/null {input.bam}
+        exec &>{log}
+        samtools fastq -f 4 -1 {output.R1_nohost} -2 {output.R2_nohost} -s /dev/null -0 /dev/null {input.bam}
+        samtools fastq -F 4 -1 {output.R1_host} -2 {output.R2_host} -s /dev/null -0 /dev/null {input.bam}
         """
 
 rule filter_fungal_reads:
     """
-    This rule combines mapping results from the fungi and host mapping.
-
-    If paired_strategy is 'both_mapped', then reads that mapped with both ends to the host
-    are subtracted from reads that mapped with both ends to fungi.
-
-    If paired_strategy is 'one_mapped', then reads that mapped with one or both ends to the host
-    are subtracted from reads that mapped with one or both ends to fungi.
+    This rule intersects the reads that mapped to fungi with the reads that did not map to the host.
     """
     input:
-        R1_host="results/star/{sample_id}/{paired_strategy}/{sample_id}_R1.fungi.host.fastq.gz",
-        R2_host="results/star/{sample_id}/{paired_strategy}/{sample_id}_R2.fungi.host.fastq.gz",
+        R1_nohost=rules.process_host_bam.output.R1_nohost,
+        R2_nohost=rules.process_host_bam.output.R2_nohost,
         R1_fungi="results/strobealign/{sample_id}/{sample_id}_R1.fungi.{paired_strategy}.fastq.gz",
         R2_fungi="results/strobealign/{sample_id}/{sample_id}_R2.fungi.{paired_strategy}.fastq.gz",
     output:
-        R1="results/star/{sample_id}/{paired_strategy}/{sample_id}_R1.fungi.nohost.fastq.gz",
-        R2="results/star/{sample_id}/{paired_strategy}/{sample_id}_R2.fungi.nohost.fastq.gz"
+        R1="results/filtered/{sample_id}/{paired_strategy}/{sample_id}_R1.fungi.nohost.fastq.gz",
+        R2="results/filtered/{sample_id}/{paired_strategy}/{sample_id}_R2.fungi.nohost.fastq.gz"
     shell:
         """
-        seqkit grep -v -f <(seqkit seq -n -i {input.R1_host}) {input.R1_fungi} -o {output.R1}
-        seqkit grep -v -f <(seqkit seq -n -i {input.R2_host}) {input.R2_fungi} -o {output.R2}
+        seqkit grep -f <(seqkit seq -n -i {input.R1_nohost}) {input.R1_fungi} -o {output.R1}
+        seqkit grep -f <(seqkit seq -n -i {input.R2_nohost}) {input.R2_fungi} -o {output.R2}
+        """
+
+rule remove_prok_add_fungi:
+    """
+    This rule removes reads classified by Kraken2 as Prokaryota and adds reads classified as Fungi.
+    """
+    input:
+        R1prok="results/kraken/{kraken_db}/{sample_id}/taxbins/Prokaryota_R1.fastq.gz",
+        R2prok="results/kraken/{kraken_db}/{sample_id}/taxbins/Prokaryota_R2.fastq.gz",
+        R1fungi="results/kraken/{kraken_db}/{sample_id}/taxbins/Fungi_R1.fastq.gz",
+        R2fungi="results/kraken/{kraken_db}/{sample_id}/taxbins/Fungi_R2.fastq.gz",
+        R1_nohost="results/star/{sample_id}/{sample_id}_R1.nohost.fastq.gz",
+        R2_nohost="results/star/{sample_id}/{sample_id}_R2.nohost.fastq.gz",
+        R1one="results/strobealign/{sample_id}/{sample_id}_R1.fungi.one_mapped.fastq.gz",
+        R2one="results/strobealign/{sample_id}/{sample_id}_R2.fungi.one_mapped.fastq.gz",
+        R1both="results/strobealign/{sample_id}/{sample_id}_R1.fungi.both_mapped.fastq.gz",
+        R2both="results/strobealign/{sample_id}/{sample_id}_R2.fungi.both_mapped.fastq.gz",
+    shell:
+        """
+        # Reads must be in R*_nohost
+        seqkit grep -f <(seqkit seq -n -i {input.R1_nohost}) {input.R1fungi} -o {params.tmpdir}/kraken_fungi
         """
