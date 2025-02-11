@@ -8,6 +8,8 @@ localrules:
     dbcan_parse_co,
     normalize_featurecount_co,
     parse_eggnog_co,
+    quantify_eggnog_co,
+    quantify_eggnog_normalized_co,
     sum_dbcan_co,
     sum_taxonomy_co,
     dbcan_tax_annotations,
@@ -262,6 +264,9 @@ rule secondpass_fungal_proteins_co:
 ## READ COUNTING CO-ASSEMBLIES ##
 #################################
 rule featurecount_co:
+    """
+    Count read assignments to co-assemblies
+    """
     input:
         gff = "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/final.fa.transdecoder.gff3",
         bam = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam"
@@ -274,9 +279,9 @@ rule featurecount_co:
         runtime = 30,
         mem_mb = 1000
     conda: "../../envs/featurecount.yaml"
+    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
     params:
         setting = config["fc_params"]
-    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
     threads: 4
     shell:
         """
@@ -284,6 +289,9 @@ rule featurecount_co:
         """
 
 rule normalize_featurecount_co:
+    """
+    Parses featureCounts output and outputs raw and TPM normalized counts
+    """
     input:
         fc="results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tab",
         stats=expand("results/{source}/{{sample_id}}/{{sample_id}}.stats.tsv", source="filtered" if config["filter_reads"] else "unfiltered")
@@ -299,6 +307,9 @@ rule normalize_featurecount_co:
         shell("python {params.script} --rl {rl} -i {input.fc} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
 
 rule collate_featurecount_co:
+    """
+    Collate featureCounts output for all samples
+    """
     input:
         expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.{{fc}}.tab",
             sample_id = samples.keys())
@@ -315,6 +326,9 @@ rule collate_featurecount_co:
 ## EGGNOG-MAPPER CO-ASSEMBLIES ##
 #################################
 rule emapper_search_co:
+    """
+    Run eggNOG-mapper on fungal proteins from co-assembly
+    """
     input:
         faa="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.faa",
         db=f"{config['emapper_db_dir']}/eggnog.db",
@@ -329,7 +343,6 @@ rule emapper_search_co:
         outdir = lambda wc, output: os.path.dirname(output[0]),
     log: "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/emapper.log"
     threads: 10
-    #shadow: "shallow"
     conda: "../../envs/emapper.yaml"
     container: "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
     shell:
@@ -343,6 +356,9 @@ rule emapper_search_co:
         """
 
 rule emapper_annotate_hits_co:
+    """
+    Annotate hits from eggNOG-mapper
+    """
     input:
         seed_orthologs=rules.emapper_search_co.output,
         db=f"{config['emapper_db_dir']}/eggnog.db",
@@ -369,6 +385,25 @@ rule emapper_annotate_hits_co:
 ## PARSE EGGNOG CO-ASSEMBLIES ##
 ################################
 rule parse_eggnog_co:
+    """
+    Parses the eggnog-mapper output and outputs tab-separated files for pathways, kegg orthologs, enzymes and modules.
+
+    Each tab-separated file contains the ORF id in the first column. ORFs annotated to multiple features are duplicated in the output.
+
+    For example, an ORF annotated like so in the emapper output:
+    #query ... KEGG_ko              KEGG_Pathway                                                       ...
+    ORF1   ... ko:K07901,ko:K18158 ko04144,ko04152,ko04530,ko04972,map04144,map04152,map04530,map04972 ...
+
+    Will be output as:
+    # kos.parsed.tsv
+    ORF1     K18158  K18158  NCA2; nuclear control of ATPase protein 2
+    ORF1     K07901  K07901  RAB8A, MEL; Ras-related protein Rab-8A
+    # pathways.parsed.tsv
+    ORF1     map04144        Endocytosis [PATH:ko04144]      09140 Cellular Processes        09141 Transport and catabolism
+    ORF1     map04152        AMPK signaling pathway [PATH:ko04152]   09130 Environmental Information Processing      09132 Signal transduction
+    ORF1     map04530        Tight junction [PATH:ko04530]   09140 Cellular Processes        09144 Cellular community - eukaryotes
+    ORF1     map04972        Pancreatic secretion [PATH:ko04972]     09150 Organismal Systems        09154 Digestive system
+    """
     input:
         f = rules.emapper_annotate_hits_co.output,
         db = expand("resources/kegg/{f}",
@@ -388,6 +423,11 @@ rule parse_eggnog_co:
         """
 
 rule quantify_eggnog_co:
+    """
+    Sums up read counts and TPM values for each feature in the eggNOG database
+    Note that since ORFs can be annotated to multiple features, the same ORF can be counted multiple times
+    This will cause normalized TPM values to be higher than the 1M factor
+    """
     input:
         abundance = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.{{fc}}.tab",
             sample_id = samples.keys()),
@@ -397,9 +437,6 @@ rule quantify_eggnog_co:
     params:
         src = workflow.source_path("../utils/eggnog-parser.py"),
         tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "{db}")
-    threads: 4
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*4
     shell:
         """
         mkdir -p {params.tmpdir}
@@ -427,9 +464,6 @@ rule quantify_eggnog_normalized_co:
     params:
         src = workflow.source_path("../utils/eggnog-parser.py"),
         tmpdir = os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "norm", "{db}")
-    threads: 4
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*4
     shell:
         """
         mkdir -p {params.tmpdir}
