@@ -165,14 +165,18 @@ properties:
     description: Taxonomic mapping for partitioning
     properties:
       Bacteria:
-        type: integer
+        type: array
         description: NCBI taxon ID for Bacteria
-        default: 2
+        default: [2]
       Archaea:
-        type: integer
+        type: array
         description: NCBI taxon ID for Archaea
-        default: 2157
+        default: [2157]
+      Prokaryota:
+        type: array
+        description: NCBI taxon ID for Prokaryota
+        default: [2, 2157]
       Eukaryota:
-        type: integer
+        type: array
         description: NCBI taxon ID for Eukaryota
-        default: 2759
+        default: [2759]
