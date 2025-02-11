@@ -23,6 +23,9 @@ rule kallisto_index_co:
         """
 
 rule kallisto_quant_co:
+    """
+    Quantify reads with kallisto.
+    """
     input:
         index = rules.kallisto_index_co.output,
         R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
@@ -61,6 +64,9 @@ rule wrap_assembly_co:
         """
 
 rule subread_index_co:
+    """
+    Build subread index for co-assemblies.
+    """
     input:
         rules.wrap_assembly_co.output
     output:
@@ -78,6 +84,9 @@ rule subread_index_co:
         """
 
 rule subread_align_co:
+    """
+    Align reads to co-assemblies.
+    """
     input:
         index = rules.subread_index_co.output,
         R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
@@ -97,6 +106,9 @@ rule subread_align_co:
         """
 
 rule multiqc_map_report_co:
+    """
+    Generate a multiqc report for co-assemblies.
+    """
     input:
         kallisto_logs = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto.log",
             sample_id = samples.keys()),
@@ -121,6 +133,9 @@ rule multiqc_map_report_co:
 ## Mapping for individual assemblies ##
 #######################################
 rule kallisto_index:
+    """
+    Build kallisto index for individual assemblies.
+    """
     input:
         "results/assembly/{assembler}/{filter_source}/{sample_id}/final.fa"
     output:
@@ -136,6 +151,9 @@ rule kallisto_index:
         """
 
 rule kallisto_quant:
+    """
+    Quantify reads with kallisto.
+    """
     input:
         index = rules.kallisto_index.output,
         fq = fungi_input
@@ -173,6 +191,9 @@ rule wrap_assembly:
         """
 
 rule subread_index:
+    """
+    Build subread index for individual assemblies.
+    """
     input:
         rules.wrap_assembly.output
     output:
@@ -190,6 +211,9 @@ rule subread_index:
         """
 
 rule subread_align:
+    """
+    Align reads to individual assemblies.
+    """
     input:
         index = rules.subread_index.output,
         fq = fungi_input
@@ -208,6 +232,9 @@ rule subread_align:
         """
 
 rule multiqc_map_report:
+    """
+    Generate a multiqc report for individual assemblies.
+    """
     input:
         kallisto_logs = expand("results/map/{{assembler}}/{{filter_source}}/{sample_id}/kallisto.log",
             sample_id = samples.keys()),
