@@ -184,12 +184,12 @@ rule sortmerna:
         sortmerna --workdir {params.workdir}/ --threads {threads} --idx-dir {params.idx_dir} \
             --ref {input.ref} --reads {input.R1} --reads {input.R2} \
             --paired_in --out2 --fastx --blast 1 --num_alignments 1 --aligned --other -v >{log.run} 2>&1
-        gzip {params.workdir}/out/*.fastq
-        mv {params.workdir}/out/aligned_fwd.fastq.gz {output.R1_rRNA}
-        mv {params.workdir}/out/aligned_rev.fastq.gz {output.R2_rRNA}
-        mv {params.workdir}/out/other_fwd.fastq.gz {output.R1}
-        mv {params.workdir}/out/other_rev.fastq.gz {output.R2}
+        mv {params.workdir}/out/aligned_fwd.fq.gz {output.R1_rRNA}
+        mv {params.workdir}/out/aligned_rev.fq.gz {output.R2_rRNA}
+        mv {params.workdir}/out/other_fwd.fq.gz {output.R1}
+        mv {params.workdir}/out/other_rev.fq.gz {output.R2}
         mv {params.workdir}/out/aligned.log {log.stats}
+        rm -rf {params.workdir}
         """
 
 rule fastqc:
