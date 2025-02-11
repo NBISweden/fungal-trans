@@ -21,12 +21,12 @@ def parse_validation_error(e):
     instance = ""
     print("ERROR VALIDATING CONFIG FILE")
     for item in str(e).split("\n"):
-        item = item.replace('"','')
+        #item = item.replace('"','')
         if "ValidationError:" in item:
             print(item)
         if item[0:11] == "On instance":
             instance = item.replace("On instance['", "INCORRECT CONFIG AT: ")
-            instance = instance.replace("']:","")
+            #instance = instance.replace("']:","")
             print(instance)
     return
 
@@ -58,7 +58,7 @@ with open(config["jgi_account_info"], 'r') as fhin:
 # Parse samples and assemblies
 samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], config)
 # Parse JGI genomes from fungi info url, also save to file for quick re-use in future runs
-genomes = parse_genomes(config["fungi_info"], f="resources/JGI/genomes.tsv")
+genomes = parse_genomes(config["fungi_info"], f=config["fungi_genomes_file"])
 
 strobealign_chunks = {}
 
@@ -119,7 +119,7 @@ host_reads = expand("results/host/{sample_id}_R{i}.host.fastq.gz",
             sample_id = samples.keys(), i = [1,2])
 
 ## filter
-filtered_reads = expand("results/star/{sample_id}/{paired_strategy}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
+filtered_reads = expand("results/filtered/{sample_id}/{paired_strategy}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
             sample_id = samples.keys(), i = [1,2], paired_strategy = ["both_mapped","one_mapped"])
 
 ## Sourmash
@@ -281,5 +281,5 @@ rule sourmash:
 rule sourmash_assembly:
     input: sourmash_assembly
 
-rule kraken:
-    input: kraken_output
+#rule kraken:
+#    input: kraken_output
