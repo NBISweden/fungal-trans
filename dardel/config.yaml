@@ -53,49 +53,50 @@ set-resources:
     runtime: 240
     mem_mb: 35520
   # preprocess.smk
-  cutadapt:
+  fastq_replace_ids:
     runtime: 60
     mem_mb: 1776
-  trimmomatic:
+  fastp:
     runtime: 60
+    mem_mb: 1776
   sortmerna:
     runtime: 240
     mem_mb: 5328
   # filter.smk
-  strobealign_index:
-    runtime: 60
-    mem_mb: 227328
-    slurm_partition: main
   strobealign_map_fungi:
     runtime: 30
-    mem_mb: 14208
-  process_fungal_bam:
+    mem_mb: 17760
+  process_fungal_mappings:
     runtime: 60
     mem_mb: 1776
   star_build_host:
     runtime: 1440
   star_map_host:
-    slurm_partition: shared
+    runtime: 120
     mem_mb: 88800
   process_host_bam:
     runtime: 60
     mem_mb: 1776
   filter_fungal_reads:
-    runtime: 60
-    mem_mb: 1776
+    runtime: 30
+    mem_mb: 888
   fastq_stats:
+    runtime: 30
+  filter_with_kraken:
     runtime: 30
   # kraken.smk
   preload_kraken_db:
-    slurm_partition: main
+    #slurm_partition: main
     runtime: 10
-    mem_mb: 440000
+    #mem_mb: 400000
   run_kraken:
-    slurm_partition: main
-    runtime: 30
-  unload_kraken_db:
-    slurm_partition: main
+    #slurm_partition: main
+    runtime: 20
+  kraken:
+    #slurm_partition: main
     runtime: 10
+  filter_with_kraken:
+    runtime: 30
   # annotate.smk
   transdecoder_longorfs_co:
     runtime: 60
@@ -151,7 +152,6 @@ set-resources:
 # assembly.smk
   trinity_normalize:
     runtime: 1440
-    mem_mb: 128000
   trinity_co:
     runtime: 600
     mem_mb: 8880
