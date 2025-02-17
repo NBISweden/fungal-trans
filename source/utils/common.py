@@ -8,13 +8,29 @@ def parse_sample_list(f, config):
     """
     Parse the sample list and set up input file names for the assembly
     based on configuration
+
+    Parameters
+    ----------
+    f: str
+        Path to the sample list
+    config: dict
+        Configuration dictionary
+
+    Returns
+    -------
+    dict
+        Dictionary with sample names as keys and read files as values
+    dict
+        Dictionary with sample names as keys and read files as values
+    dict
+        Dictionary with assembly names as keys and read files as values
     """
     samples = {}
     map_dict = {}
-    if config['filter_reads']:
-        input_dir = 'filtered'
-    else:
-        input_dir = 'unfiltered'
+    paired_strategy=config["paired_strategy"]
+    k=config["strobealign_strobe_len"]
+    kraken_db=config["kraken_db"]
+        
     dir = config['datadir']
     # Read sample list
     df = pd.read_csv(f, comment='#', header=0, sep='\t', index_col=0, dtype=str)
@@ -41,8 +57,12 @@ def parse_sample_list(f, config):
             if df.loc[sample,'assembly'] != '':
                 assembly = df.loc[sample, 'assembly']
                 # Define reads for assembly
-                R1_f = f"results/{input_dir}/{sample}/{sample}_R1.fastq.gz"
-                R2_f = f"results/{input_dir}/{sample}/{sample}_R2.fastq.gz"
+                if config["filter_reads"]:
+                    R1_f = f"results/filtered/{sample}/{paired_strategy}/k{k}/{kraken_db}/{sample}_R1.fungi.nohost.kraken.fastq.gz"
+                    R2_f = f"results/filtered/{sample}/{paired_strategy}/k{k}/{kraken_db}/{sample}_R2.fungi.nohost.kraken.fastq.gz",
+                else:
+                    R1_f = f"results/preprocess/sortmerna/{sample}/{sample}_R1.mRNA.fastq.gz"
+                    R2_f = f"results/preprocess/sortmerna/{sample}/{sample}_R2.mRNA.fastq.gz" 
                 assemblies[assembly]['R1'].append(R1_f)
                 assemblies[assembly]['R2'].append(R2_f)
                 map_dict[sample] = {'R1': R1_f, 'R2': R2_f}
@@ -53,16 +73,44 @@ def parse_sample_list(f, config):
     return samples, map_dict, assemblies
 
 def fungi_input(wildcards):
+    """
+    Get the input files for the fungi pipeline
+
+    Parameters
+    ----------
+    wildcards: dict
+        Wildcards from snakemake
+
+    Returns
+    -------
+    list
+        List of input files
+    """
+    paired_strategy = config["paired_strategy"]
+    kraken_db = config["kraken_db"]
+    k = config["strobealign_strobe_len"]
     d = "unfiltered"
     if config["filter_reads"]:
-        d="filtered"
-    R1 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R1.fastq.gz"
-    R2 = f"results/{d}/{wildcards.sample_id}/{wildcards.sample_id}_R2.fastq.gz"
+        R1 = f"results/filtered/{wildcards.sample_id}/{paired_strategy}/k{k}/{kraken_db}/{wildcards.sample_id}_R1.fungi.nohost.kraken.fastq.gz"
+        R2 = f"results/filtered/{wildcards.sample_id}/{paired_strategy}/k{k}/{kraken_db}/{wildcards.sample_id}_R2.fungi.nohost.kraken.fastq.gz"
+    else:
+        R1 = f"results/unfiltered/{wildcards.sample_id}/{wildcards.sample_id}_R1.fastq.gz"
+        R2 = f"results/unfiltered/{wildcards.sample_id}/{wildcards.sample_id}_R2.fastq.gz"
     return [R1, R2]
 
 def parse_extra_genomes(f):
     """
     Parse the extra genomes file
+
+    Parameters
+    ----------
+    f: str
+        Path to the extra genomes file
+
+    Returns
+    -------
+    dict
+        Dictionary with portal names as keys and taxids as values
     """
     extra_genomes = {}
     with open(f, 'r') as f:
@@ -82,6 +130,18 @@ def get_mmseq_taxdb(wildcards):
     return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
 
 def write_fungal_proteins(parsed, indir, outdir):
+    """
+    Write fungal coding sequences and proteins to separate files
+
+    Parameters
+    ----------
+    parsed: str
+        Path to the parsed taxonomy file
+    indir: str
+        Path to the input directory
+    outdir: str
+        Path to the output directory
+    """
     import pandas as pd
     import os
     df = pd.read_csv(parsed, sep="\t", header=0, index_col=0)
@@ -108,3 +168,21 @@ def write_fungal_proteins(parsed, indir, outdir):
     shell("seqkit grep -f fungi.ids {indir}/final.fa.transdecoder.cds > {outdir}/fungal.cds")
     shell("seqkit grep -f fungi.ids {indir}/final.fa.transdecoder.pep > {outdir}/fungal.faa")
     df.loc[fungi].to_csv(f"{outdir}/fungal.taxonomy.tsv", sep="\t", index=True)
+
+def slurm_mem_partition(mb):
+    """
+    Determine the SLURM memory partition based on the memory
+
+    mb: int
+        Memory in MB of the input
+
+    Returns
+    -------
+    str
+        SLURM memory partition
+    """
+    if mb > 900000:
+        return config["slurm_partitions"]["large_memory"]
+    elif mb > 220000:
+        return config["slurm_partitions"]["medium_memory"]
+    return config["slurm_partitions"]["small_memory"]
