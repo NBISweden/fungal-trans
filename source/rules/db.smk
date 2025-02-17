@@ -1,5 +1,4 @@
 localrules:
-    ncbi_taxonomy,
     download_taxdump,
     download_taxmapper,
     download_eggnog,
@@ -13,66 +12,14 @@ localrules:
     concat_proteins,
     mmseqs_filter_fungalDB
 
-wildcard_constraints:
-    mmseqs_db = config["mmseqs_db"],
-
-## NCBI Taxonomy ##
-rule ncbi_taxonomy:
-    output:
-        "resources/taxonomy/taxonomy.sqlite"
-    run:
-        from ete3 import NCBITaxa
-        shell("touch {output[0]}")
-        ncbi_taxa = NCBITaxa(output[0])
-
-rule build_blobdb:
-    input:
-        names = "resources/taxonomy/names.dmp",
-        nodes = "resources/taxonomy/nodes.dmp"
-    output:
-        flag = "resources/taxonomy/blobdb.done"
-    conda: "../../envs/blobtools.yaml"
-    shell:
-        """
-        blobtools nodesdb --nodes {input.nodes} --names {input.names}
-        """
-
-## Taxmapper ##
-rule download_taxmapper:
-    output:
-        "resources/taxmapper/databases/taxonomy/meta_database.fasta",
-        "resources/taxmapper/databases/taxonomy/meta_database.fa.gz"
-    params:
-        dbdir = "resources/taxmapper",
-        tmpdir = "$TMPDIR/taxmapper"
-    shell:
-        """
-        mkdir -p {params.tmpdir} {params.dbdir}
-        wget -O {params.tmpdir}/supplement.zip https://bitbucket.org/dbeisser/taxmapper_supplement/get/supplement.zip
-        unzip -o -d {params.tmpdir} {params.tmpdir}/supplement.zip
-        rm -rf {params.dbdir}/*
-        mv -f {params.tmpdir}/dbeisser-taxmapper_supplement-854f5f60158a/* {params.dbdir}/
-        gunzip -c {output[1]} > {output[0]}
-        rm -r {params.tmpdir}
-        """
-
-rule format_taxmapper:
-    input:
-        "resources/taxmapper/databases/taxonomy/meta_database.fasta"
-    output:
-        "resources/taxmapper/databases/taxonomy/meta_database.db"
-    conda:
-        "../../envs/taxmapper.yaml"
-    resources:
-        mem_mb=4096
-    shell:
-        """
-        prerapsearch -d {input[0]} -n {output[0]}
-        """
+# eggnog
 
 rule download_eggnog:
+    """
+    Downloads the eggnog database and proteins
+    """
     output:
-        expand("resources/eggnog/{f}", f = ["eggnog.db","eggnog_proteins.dmnd"])
+        expand("{emapper_db_dir}/{f}", emapper_db_dir=config["emaper_db_dir"], f = ["eggnog.db","eggnog_proteins.dmnd"])
     params:
         data_dir = "resources/eggnog"
     conda: "../../envs/emapper.yaml"
@@ -81,26 +28,6 @@ rule download_eggnog:
         mkdir -p {params.data_dir}
         # Download eggnog.db
         download_eggnog_data.py --data_dir resources/eggnog -y
-        """
-
-## dbCAN ##
-rule download_dbCAN:
-    output:
-        "resources/dbCAN/dbCAN-fam-HMMs.txt"
-    shell:
-        """
-        curl -L -o {output[0]} http://bcb.unl.edu/dbCAN2/download/Databases/dbCAN-HMMdb-V6.txt
-        """
-
-rule press_dbCAN:
-    input:
-        "resources/dbCAN/dbCAN-fam-HMMs.txt"
-    output:
-        expand("resources/dbCAN/dbCAN-fam-HMMs.txt.h3{suffix}", suffix = ["f","i","m","p"])
-    conda: "../../envs/hmmer.yaml"
-    shell:
-        """
-        hmmpress {input[0]}
         """
 
 ## Fungal transcripts ##
@@ -161,10 +88,6 @@ rule filter_transcripts:
         fi
         """
 
-rule all_filtered_transcripts:
-    input:
-        expand(rules.filter_transcripts.output, portal=genomes.index)
-
 rule download_jgi_proteins:
     """
     For each 'portal', download the filtered proteins. Also output a mapping file
@@ -185,7 +108,6 @@ rule download_jgi_proteins:
         python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} \
             --protein_out {output.proteins} --taxidmap {output.mapping} --taxid {params.taxid} 2>{log}
         """
-        
 
 rule concat_proteins:
     """
@@ -223,10 +145,10 @@ rule mmseqs_extract_fungalDB:
     """
     Uses the filtertaxseqdb command to extract fungal sequences from the official mmseqs2 database
     """
-    input:
-        db=os.path.join(config["mmseqs_db_dir"],"{mmseqs_db}"),
     output:
         db="resources/mmseqs2/fungi-{mmseqs_db}"
+    input:
+        db=os.path.join(config["mmseqs_db_dir"],"{mmseqs_db}"),
     log:
         "resources/mmseqs2/extract_fungal_{mmseqs_db}_mmseqsDB.log"
     conda: "../../envs/mmseqs.yaml"
@@ -241,10 +163,10 @@ rule mmseqs_convert2fasta_fungalDB:
     """
     Converts the extracted mmseqs2 database to fasta format
     """
-    input:
-        db=rules.mmseqs_extract_fungalDB.output.db
     output:
         fasta="resources/mmseqs2/fungi-{mmseqs_db}.fasta"
+    input:
+        db=rules.mmseqs_extract_fungalDB.output.db
     conda: "../../envs/mmseqs.yaml"
     container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
     threads: 1
@@ -257,10 +179,10 @@ rule mmseqs_filter_fungalDB:
     """
     Filters the extracted fungal database to remove sequences shorter than a minimum length
     """
-    input:
-        rules.mmseqs_convert2fasta_fungalDB.output.fasta
     output:
         fasta="resources/mmseqs2/filtered-fungi-{mmseqs_db}.fasta"
+    input:
+        rules.mmseqs_convert2fasta_fungalDB.output.fasta
     log:
         "resources/mmseqs2/filter_fungi_{mmseqs_db}_mmseqsDB.log"
     params:
@@ -295,11 +217,11 @@ rule mmseqs_create_taxidmap:
     """
     Create taxid mapping file for the official mmseqs2 database
     """
+    output:
+        tsv="resources/mmseqs2/{mmseqs_db}.taxidmap.tsv"
     input:
         mapfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}_mapping"),
         lookupfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}.lookup"),
-    output:
-        tsv="resources/mmseqs2/{mmseqs_db}.taxidmap.tsv"
     threads: 1
     run:
         import pandas as pd
@@ -376,13 +298,16 @@ rule download_refseq_db:
 
 ## KEGG info ##
 rule get_kegg_files:
+    """
+    Downloads KEGG files
+    """
     output:
         expand("resources/kegg/{f}",
             f = ["kegg_ec2pathways.tsv","kegg_ko2ec.tsv",
                  "kegg_ko2pathways.tsv","kegg_kos.tsv","kegg_modules.tsv","kegg_pathways.tsv"])
     params:
         dldir = "resources/kegg",
-        src = "source/utils/eggnog-parser.py"
+        src = workflow.source_path("../utils/eggnog-parser.py"),
     shell:
         """
         python {params.src} download {params.dldir}
