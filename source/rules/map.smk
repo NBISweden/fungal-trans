@@ -8,10 +8,13 @@ localrules:
 ## Mapping for co-assemblies ##
 ###############################
 rule kallisto_index_co:
-    input:
-        "results/co-assembly/{assembler}/{assembly}/final.fa"
+    """
+    Build kallisto index for co-assemblies.
+    """
     output:
         "results/map/co-assembly/{assembler}/{assembly}/kallisto_index"
+    input:
+        "results/co-assembly/{assembler}/{assembly}/final.fa"
     log:
         "results/map/co-assembly/{assembler}/{assembly}/kallisto_index.log"
     container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
@@ -26,14 +29,14 @@ rule kallisto_quant_co:
     """
     Quantify reads with kallisto.
     """
-    input:
-        index = rules.kallisto_index_co.output,
-        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
-        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     output:
         h5 = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/abundance.h5",
         tsv = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/abundance.tsv",
         json = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/run_info.json",
+    input:
+        index = rules.kallisto_index_co.output,
+        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     log:
         "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto.log"
     container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
