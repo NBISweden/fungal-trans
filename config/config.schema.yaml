@@ -1,6 +1,21 @@
 $schema: "http://json-schema.org/draft-06/schema#"
 description: Configuration schema
 properties:
+  slurm_partitions:
+    type: object
+    properties:
+      large_memory: 
+        type: string
+        default: "memory"
+        description: "Partition for jobs requiring >900G RAM"
+      medium_memory: 
+        type: string
+        default: "main"
+        description: "Partition for jobs requiring >220G, <900G  RAM"
+      small_memory: 
+        type: string
+        default: "shared"
+        description: "Partition for jobs requiring <220G RAM"
   ## PATHS ##
   workdir:
     type: string
@@ -53,7 +68,7 @@ properties:
   jgi_account_info:
     type: string
     description: Path to JGI account file
-    default: config/jgi_account.yml
+    default: config/jgi_account_info.yml
   host_fna:
     type: string
     description: Path to host fasta file
@@ -62,6 +77,11 @@ properties:
     type: string
     description: Path to host GFF file
     default: ""
+  # Strobealign
+  strobealign_strobe_len:
+    type: integer
+    description: Strobe length for strobealign
+    default: 17
   # STAR parameters
   star_limitGenomeGenerateRAM:
     type: integer
@@ -105,9 +125,9 @@ properties:
     description: Target max coverage for insilico normalization
     default: 30
   insilico_norm_mem:
-    type: string
+    type: integer
     description: Maximum memory to use for insilico normalization
-    default: "100G"
+    default: 100
   ## ANNOTATION ##
   mmseqs_db_dir:
     type: string
@@ -159,7 +179,15 @@ properties:
   kraken_db:
     type: string
     description: Path to Kraken database
-    default: "/sw/data/Kraken2_data/prebuilt/k2_pluspfp_20240112"
+    default: "20240229-015730_nt"
+  kraken_db_dir:
+    type: string
+    description: Directory with Kraken database
+    default: "/sw/data/Kraken2_data"
+  kraken_confidence:
+    type: number
+    description: Confidence threshold for Kraken
+    default: 0.2
   taxmap:
     type: object
     description: Taxonomic mapping for partitioning
