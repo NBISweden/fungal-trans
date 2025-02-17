@@ -1,4 +1,4 @@
-localrules: download_kraken_db, extract_kraken_reads
+localrules: download_kraken_db, extract_kraken_reads, kraken_nohost
 
 rule download_kraken_db:
     output:
@@ -17,12 +17,21 @@ rule download_kraken_db:
         """
 
 def kraken_partition(wildcards):
+    """
+    Get the partition for Kraken
+
+    Parameters
+    ----------
+    wildcards : Wildcards
+        Wildcards from Snakemake
+
+    Returns
+    -------
+    str
+        Partition for Kraken
+    """
     size_mb = int(os.stat(f"{config['kraken_db_dir']}/{config['kraken_db']}/hash.k2d").st_size / 1024**2)
-    if size_mb > 900000:
-        return "memory"
-    elif size_mb > 220000:
-        return "main"
-    return "shared"
+    return slurm_mem_partition(size_mb)
 
 rule preload_kraken_db:
     """
@@ -45,15 +54,18 @@ rule preload_kraken_db:
         """
 
 rule run_kraken:
-    input:
-        R1 = rules.sortmerna.output.R1,
-        R2 = rules.sortmerna.output.R2,
-        db=rules.preload_kraken_db.output
+    """
+    Run Kraken2 on the preprocessed reads
+    """
     output:
         "results/kraken/{kraken_db}/{sample_id}/{sample_id}.out.gz",
         "results/kraken/{kraken_db}/{sample_id}/{sample_id}.kreport",
         "results/kraken/{kraken_db}/{sample_id}/{sample_id}.unclassified_1.fastq.gz",
         "results/kraken/{kraken_db}/{sample_id}/{sample_id}.unclassified_2.fastq.gz",
+    input:
+        R1 = rules.sortmerna.output.R1,
+        R2 = rules.sortmerna.output.R2,
+        db=rules.preload_kraken_db.output
     log:
         "results/kraken/{kraken_db}/{sample_id}/{sample_id}.log"
     threads: 16
@@ -75,10 +87,10 @@ rule run_kraken:
         """
     
 rule kraken:
-    input:
-        expand("results/kraken/{kraken_db}/{sample_id}/{sample_id}.out.gz", sample_id=samples.keys(), kraken_db=config["kraken_db"])
     output:
         temp(touch(expand("results/kraken/{kraken_db}.done", kraken_db=config["kraken_db"])))
+    input:
+        expand("results/kraken/{kraken_db}/{sample_id}/{sample_id}.out.gz", sample_id=samples.keys(), kraken_db=config["kraken_db"])
     params:
         kraken_db=config["kraken_db"]
     group: "kraken"
@@ -122,31 +134,23 @@ rule extract_kraken_reads:
         rm -rf {params.tmpdir}
         """
 
-rule filter_kraken_reads:
+rule kraken_nohost:
     """
-
+    Remove host reads from Kraken taxbins
     """
-    input:
-        R1_kraken=expand("results/taxbins/{taxname}/{{sample_id}}_R1.fastq.gz", taxname=["Bacteria","Archaea"]),
-        R2_kraken=expand("results/taxbins/{taxname}/{{sample_id}}_R2.fastq.gz", taxname=["Bacteria","Archaea"]),
-        R1_host="results/star/{sample_id}/{sample_id}_R1.host.fastq.gz",
-        R2_host="results/star/{sample_id}/{sample_id}_R2.host.fastq.gz",
     output:
-        R1="results/taxbins/Prokaryota/{filter_source}/{sample_id}_R1.fastq.gz",
-        R2="results/taxbins/Prokaryota/{filter_source}/{sample_id}_R2.fastq.gz",
+        R1="results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}_R1.nohost.fastq.gz",
+        R2="results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}_R2.nohost.fastq.gz",
+    input:
+        R1=rules.extract_kraken_reads.output.R1,
+        R2=rules.extract_kraken_reads.output.R2,
+        R1nohost="results/star/{sample_id}/{sample_id}_R1.nohost.fastq.gz",
+        R2nohost="results/star/{sample_id}/{sample_id}_R2.nohost.fastq.gz",
     log:
-        "results/taxbins/Prokaryota/{filter_source}/{sample_id}.gather_prokaryota.log"
-    params:
-        tmpdir="$TMPDIR/gather_prokaryotes.{sample_id}"
+        "results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}.extract_reads.log"
     shell:
         """
-        exec 2>{log}
-        mkdir -p {params.tmpdir}
-        # Remove host reads
-        seqkit seq -n -i {input.R1_host} {input.R2_host} | sort -u > {params.tmpdir}/host_ids
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R1} | pigz -c > {params.tmpdir}/R1
-        seqkit grep -v -f {params.tmpdir}/host_fungi_ids {input.R2} | pigz -c > {params.tmpdir}/R2
-        mv {params.tmpdir}/R1 {output.R1}
-        mv {params.tmpdir}/R2 {output.R2}
-        rm -rf {params.tmpdir}
+        exec &> {log}
+        seqkit grep -f <(seqkit seq -n -i {input.R1nohost}) {input.R1} -o {output.R1}
+        seqkit grep -f <(seqkit seq -n -i {input.R2nohost}) {input.R2} -o {output.R2}
         """
