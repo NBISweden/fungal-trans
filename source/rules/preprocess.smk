@@ -232,6 +232,6 @@ rule multiqc:
         config = workflow.source_path("../../config/multiqc_config.yaml")
     shell:
         """
-        multiqc -f -o {params.outdir} -c {params.config} -n preprocess_report {input.cutlogs} \
-            {input.trimlogs} {input.sortmernalogs} {input.qclogs} >{log} 2>&1
+        multiqc -f -o {params.outdir} -c {params.config} -n preprocess_report {input.fastplogs} \
+            {input.sortmernalogs} {input.qclogs} >{log} 2>&1
         """
