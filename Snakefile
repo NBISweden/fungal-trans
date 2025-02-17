@@ -10,26 +10,6 @@ from source.utils.list_jgi_genomes import parse_genomes
 
 include: "source/utils/common.py"
 
-def parse_validation_error(e):
-    """
-    Catches errors thrown when validating the config file and attempts to
-    print more meaningful messages.
-
-    :param e: Error
-    :return:
-    """
-    instance = ""
-    print("ERROR VALIDATING CONFIG FILE")
-    for item in str(e).split("\n"):
-        #item = item.replace('"','')
-        if "ValidationError:" in item:
-            print(item)
-        if item[0:11] == "On instance":
-            instance = item.replace("On instance['", "INCORRECT CONFIG AT: ")
-            #instance = instance.replace("']:","")
-            print(instance)
-    return
-
 # Set temporary dir
 if not os.getenv("TMPDIR"):
     os.environ["TMPDIR"] = "tmp"
@@ -38,11 +18,9 @@ if not os.getenv("TMPDIR"):
 # Set default config and validate against schema
 if os.path.exists("config.yml"):
     configfile: "config.yml"
-try:
-    validate(config, "config/config.schema.yaml")
-except WorkflowError as e:
-    parse_validation_error(e)
-    sys.exit()
+
+validate(config, "config/config.schema.yaml")
+
 
 workdir: config["workdir"]
 
@@ -83,7 +61,6 @@ else:
     config["mmseqs_refine_db"] = ""
     config["refine_taxonomy"] = False
     
-
 wildcard_constraints:
     sample_id = f"({'|'.join(list(samples.keys()))})",
     assembler = "megahit|trinity|transabyss",
@@ -91,13 +68,16 @@ wildcard_constraints:
     portals = f"({'|'.join(list(genomes.index.tolist()))})",
     taxname = f"({'|'.join(list(config['taxmap'].keys()))})",
     i = "1|2",
+    kraken_db = config["kraken_db"],
+    k = config["strobealign_strobe_len"],
+    fc = "raw|tpm",
+    mmseqs_db = config["mmseqs_db"]
 
 # Get environment info
 pythonpath = sys.executable
 envdir = '/'.join(pythonpath.split("/")[0:-2])
 system = platform.system()
 config["system"] = system
-
 
 # Include rules
 include: "source/rules/db.smk"
@@ -110,176 +90,210 @@ include: "source/rules/annotate_single.smk"
 include: "source/rules/annotate_co.smk"
 include: "source/rules/kraken.smk"
 
-# Define targets
-## Preprocessing
-preprocess = expand("results/preprocess/sortmerna/{sample_id}/{sample_id}_R{i}.cut.trim.mRNA.fastq.gz", sample_id = samples.keys(), i = [1,2])
-preprocess += ["results/report/preprocess/preprocess_report.html"]
-## Host reads
-host_reads = expand("results/host/{sample_id}_R{i}.host.fastq.gz",
-            sample_id = samples.keys(), i = [1,2])
+def all_input(wildcards):
+    """
+    Defines all inputs for the workflow
+    """
+    inputs = []
+    
+    # Preprocessing
+    inputs.extend(
+        expand(
+            "results/preprocess/sortmerna/{sample_id}/{sample_id}_R{i}.mRNA.fastq.gz", 
+            sample_id=samples.keys(), 
+            i=[1,2]
+        )
+    )
+    inputs.append(
+        "results/report/preprocess/preprocess_report.html"
+    )
+    # Host reads
+    inputs.extend(
+        expand(
+            "results/star/{sample_id}/{sample_id}_R{i}.host.fastq.gz",
+            sample_id = samples.keys(), 
+            i=[1,2]
+        )
+    )
+    if config["filter_reads"]:
+        # Filtered reads
+        inputs.extend(
+            expand(
+                "results/filtered/{sample_id}/{paired_strategy}/k{k}/{kraken_db}/{sample_id}_R{i}.fungi.nohost.kraken.fastq.gz",
+                sample_id=samples.keys(), 
+                i=[1,2], 
+                paired_strategy=["both_mapped","one_mapped"], 
+                k=config["strobealign_strobe_len"],
+                kraken_db=config["kraken_db"]
+            )
+        )
+    
+    # Single-assemblies
+    if config["single_assembly"]:
+        # assembly fasta
+        inputs.extend(
+            expand(
+                "results/assembly/{assembler}/{filter_source}/{sample_id}/final.fa",
+                assembler=config["assembler"],
+                filter_source=config["filter_source"],
+                sample_id=samples.keys()
+            )
+        )
+        # stats
+        inputs.extend(
+            expand(
+                "results/report/assembly/{filter_source}_{assembler}_stats.tsv",
+                filter_source=config["filter_source"], 
+                assembler=config["assembler"]
+            )
+        )
+        # taxonomy
+        inputs.extend(
+            expand(
+                "results/annotation/{assembler}/{filter_source}/{sample_id}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv",
+                assembler=config["assembler"],
+                filter_source=config["filter_source"],
+                sample_id=samples.keys(),
+                mmseqs_db=config["mmseqs_db"]
+            )
+        )
+        # taxonomic counts
+        inputs.extend(
+            expand(
+                "results/annotation/{assembler}/{filter_source}/{sample_id}/taxonomy/taxonomy.{fc}.tsv",
+                assembler=config["assembler"],
+                filter_source=config["filter_source"],
+                sample_id=samples.keys(),
+                fc=["tpm","raw"],                
+            )
+        )
+        # collated taxonomy counts
+        inputs.extend(
+            expand(
+                "results/collated/{assembler}/{filter_source}/taxonomy/taxonomy.tpm.tsv",
+                assembler=config["assembler"],
+                filter_source=config["filter_source"]
+            )
+        )
+        # eggnog
+        inputs.extend(
+            expand(
+                "results/collated/{assembler}/{filter_source}/eggNOG/{db}.{fc}.tsv",
+                db=["enzymes","pathways","pathways.norm","modules","kos","tc","cazy"],
+                assembler=config["assembler"],
+                fc=["tpm","raw"],
+                filter_source=config["filter_source"]
+            )
+        )
+        # count tables
+        inputs.extend(
+            expand(
+                "results/annotation/{assembler}/{filter_source}/{sample_id}/featureCounts/fc.{fc}.tsv",
+                assembler=config["assembler"],
+                filter_source=config["filter_source"], 
+                sample_id=samples.keys(),
+                fc=["tpm","raw"]
+            )
+        )
+        # map report
+        inputs.extend(
+            expand(
+                "results/report/map/{assembler}_{filter_source}_map_report.html",
+                assembler=config["assembler"], 
+                filter_source=config["filter_source"]
+            )
+        )
+    
+    # Kraken
+    inputs.extend(
+        expand(
+            "results/kraken/{kraken_db}/{sample_id}/{sample_id}.{suffix}",
+            kraken_db=config["kraken_db"],
+            sample_id=samples.keys(),
+            suffix=["out.gz","kreport"]
+        )
+    )
+    # kraken taxbins
+    inputs.extend(
+        expand(
+            "results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}_R{i}.nohost.fastq.gz",
+            kraken_db=config["kraken_db"],
+            sample_id=samples.keys(),
+            taxname=config["taxmap"].keys(),
+            i=[1,2]
+        )
+    )
 
-## filter
-filtered_reads = expand("results/filtered/{sample_id}/{paired_strategy}/{sample_id}_R{i}.fungi.nohost.fastq.gz",
-            sample_id = samples.keys(), i = [1,2], paired_strategy = ["both_mapped","one_mapped"])
+    # Co-assemblies
+    if config["co_assembly"]:
+        # assembly fasta
+        inputs.extend(
+            expand(
+                "results/co-assembly/{assembler}/{assembly}/final.fa", 
+                assembly=assemblies.keys(), 
+                assembler=config["assembler"]
+            )
+        )
+        # stats
+        inputs.extend(
+            expand(
+                "results/report/co-assembly/{assembler}.{assembly}_assembly_stats.tsv", 
+                assembly=assemblies.keys(), 
+                assembler=config["assembler"]
+            )
+        )
+        # eggnog
+        inputs.extend(
+            expand(
+                "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{fc}.tsv",
+                db=["enzymes","pathways","pathways.norm","modules","kos","tc","cazy"],
+                fc=["raw","tpm"],
+                assembly=assemblies.keys(), 
+                assembler=config["assembler"]
+            )
+        )
+        # eggnog taxonomy
+        inputs.extend(
+            expand(
+                "results/collated/co-assembly/{assembler}/{assembly}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{db}.{fc}.tsv",
+                assembly=assemblies.keys(), 
+                assembler=config["assembler"],
+                fc=["raw","tpm"],
+                db=["kos","enzymes","modules","pathways","tc","cazy"],
+                tax_rank=config["tax_rank"],
+                tax_name=config["tax_name"]
+            )
+        )
+        # count tables
+        inputs.extend(
+            expand(
+                "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
+                assembly=assemblies.keys(), 
+                assembler=config["assembler"],
+                fc = ["raw","tpm"]
+            )
+        )
+        # taxonomy counts
+        inputs.extend(
+            expand(
+                "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{fc}.tsv",
+                assembly=assemblies.keys(), 
+                assembler=config["assembler"],
+                fc=["raw","tpm"]
+            )
+        )
+        # mapping report
+        inputs.extend(
+            expand(
+                "results/report/map/{assembler}_{assembly}_map_report.html", 
+                assembly=assemblies.keys(),
+                assembler=config["assembler"]
+            )
+        )
+    
+    return inputs
 
-## Sourmash
-sourmash = expand("results/sourmash/{sample_id}/{sample_id}.{source}.sig",
-            sample_id = samples.keys(), source = config["filter_source"])
-sourmash += expand("results/report/sourmash/{source}_sample.dist.labels.txt", source = config["filter_source"])
-sourmash_assembly = expand("results/assembly/{assembler}/{source}/{sample_id}/final.sig",
-            assembler = config["assembler"], source = config["filter_source"], sample_id=samples.keys())
-sourmash_assembly += expand("results/report/sourmash/{source}_assembly_{assembler}.dist.labels.txt",
-            source = config["filter_source"], assembler = config["assembler"])
 
-## Single-assemblies
-assembly = expand("results/report/assembly/{source}_{assembler}_stats.tsv",
-            source = config["filter_source"], assembler = config["assembler"])
-assembly += expand("results/assembly/{assembler}/{source}/{sample_id}/final.fa",
-                assembler = config["assembler"], source = config["filter_source"], sample_id = samples.keys())
-## Annotations
-taxonomy = expand("results/collated/{assembler}/{source}/taxonomy/taxonomy.{fc}.tsv",
-            assembler = config["assembler"],
-            fc = ["tpm","raw"],
-            source = config["filter_source"])
-dbCAN = expand("results/collated/{assembler}/{source}/dbCAN/dbCAN.{fc}.tsv",
-            assembler = config["assembler"],
-            fc = ["tpm","raw"],
-            source = config["filter_source"])
-eggnog = expand("results/collated/{assembler}/{source}/eggNOG/{db}.{fc}.tsv",
-            db = ["enzymes","pathways","pathways.norm","modules","kos","tc","cazy"],
-            assembler = config["assembler"],
-            fc = ["tpm","raw"],
-            source = config["filter_source"])
-mapres = expand("results/report/map/{assembler}_{source}_map_report.html",
-            assembler = config["assembler"], source = config["filter_source"])
-normalize = expand("results/annotation/{assembler}/{source}/{sample_id}/featureCounts/fc.{fc}.tab",
-            assembler = config["assembler"], source = config["filter_source"], sample_id = samples.keys(), fc=["tpm","raw"])
-
-### Optional blobtools output
-blobtools = expand("results/annotation/{assembler}/{source}/{sample_id}/taxonomy/{sample_id}.bestsum.phylum.p5.span.100.exclude_other.blobplot.bam0.png",
-            assembler = config["assembler"], sample_id = samples.keys(), source = config["filter_source"])
-blobtools += expand("results/annotation/{assembler}/{source}/{sample_id}/taxonomy/{sample_id}.bestsum.order.p6.span.100.exclude_other.blobplot.bam0.png",
-            assembler = config["assembler"], sample_id = samples.keys(), source = config["filter_source"])
-
-### Optional kraken output
-kraken_output = expand("results/kraken/{sample_id}.{suffix}", sample_id = samples.keys(), suffix = ["out.gz","kreport"])
-
-## Co-assemblies
-co_assembly = expand("results/co-assembly/{assembler}/{assembly}/final.fa", assembly = assemblies.keys(), assembler = config["assembler"])
-co_assembly_stats = expand("results/report/co-assembly/{assembler}.{assembly}_assembly_stats.tsv", assembly = assemblies.keys(), assembler = config["assembler"])
-co_assembly.append(co_assembly_stats)
-
-## Annotations
-eggnog_co = expand("results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{fc}.tsv",
-            db = ["enzymes","pathways","pathways.norm","modules","kos","tc","cazy"],
-            fc = ["raw","tpm"],
-            assembly = assemblies.keys(), assembler = config["assembler"])
-eggnog_co_tax = expand("results/collated/co-assembly/{assembler}/{assembly}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{db}.{fc}.tsv",
-            assembly = assemblies.keys(), assembler = config["assembler"],
-            fc = ["raw","tpm"],
-            db = ["kos","enzymes","modules","pathways","tc","cazy"],
-            tax_rank = config["tax_rank"],
-            tax_name = config["tax_name"])
-abundance_co = expand("results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
-            assembly = assemblies.keys(), assembler = config["assembler"],
-            fc = ["raw","tpm"])
-dbCAN_co = expand("results/collated/co-assembly/{assembler}/{assembly}/dbCAN/dbCAN.{fc}.tsv",
-            assembly = assemblies.keys(), assembler = config["assembler"],
-            fc = ["raw","tpm"])
-dbCAN_co_tax = expand("results/collated/co-assembly/{assembler}/{assembly}/dbCAN_taxonomy/{tax_rank}.{tax_name}.dbCAN.{fc}.tsv",
-            assembly = assemblies.keys(), assembler = config["assembler"],
-            fc = ["raw","tpm"],
-            tax_rank = config["tax_rank"],
-            tax_name = config["tax_name"])
-taxonomy_co = expand("results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{fc}.tsv",
-            assembly = assemblies.keys(), assembler = config["assembler"],
-            fc = ["raw","tpm"])
-# Map and normalize
-map_co = expand("results/report/map/{assembler}_{assembly}_map_report.html", assembly = assemblies.keys(), assembler=config["assembler"])
-normalize_co = expand("results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv",
-                assembly = assemblies.keys(), assembler = config["assembler"], fc = ["tpm","raw"])
-### Optional blobtools output
-blobtools_co = expand("results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/{sample_id}.bestsum.phylum.p5.span.100.exclude_other.blobplot.bam0.png",
-                 assembly = assemblies.keys(), sample_id = samples.keys(), assembler = config["assembler"])
-blobtools_co += expand("results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/blobtools/{sample_id}.bestsum.phylum.p5.span.100.exclude_other.blobplot.read_cov.bam0.png",
-                assembly = assemblies.keys(), sample_id = samples.keys(), assembler = config["assembler"])
-
-inputs = []
-inputs += preprocess
-
-if config["co_assembly"]:
-    inputs += [eggnog_co, map_co, co_assembly_stats, abundance_co, dbCAN_co, taxonomy_co, dbCAN_co_tax, eggnog_co_tax]
-if config["single_assembly"]:
-    inputs += [eggnog, dbCAN, taxonomy]
 
 rule all:
-    input: inputs
-
-## Preprocess master rule ##
-rule preprocess:
-    input: preprocess
-
-## Filter master rule ##
-rule filter:
-    input: filtered_reads
-
-## Assembly master rules ##
-rule assemble:
-    input: assembly
-
-rule co_assemble:
-    input: co_assembly
-
-## Map reads to contigs master rule
-rule map:
-    input: mapres
-
-rule normalize:
-    input: normalize
-
-rule map_co:
-    input: map_co
-
-rule normalize_co:
-    input: normalize_co
-
-## Annotation master rules
-rule annotate:
-    input: eggnog, dbCAN, taxonomy
-
-rule annotate_co:
-    input: eggnog_co, dbCAN_co, taxonomy_co
-
-rule eggnog:
-    input: eggnog
-
-rule eggnog_co:
-    input: eggnog_co
-
-rule dbcan:
-    input: dbCAN
-
-rule dbcan_co:
-    input: dbCAN_co
-
-rule taxonomy:
-    input: taxonomy
-
-rule taxonomy_co:
-    input: taxonomy_co
-
-rule blobtools:
-    input: blobtools
-
-rule blobtools_co:
-    input: blobtools_co
-
-## Additional utility rules
-rule sourmash:
-    input: sourmash
-
-rule sourmash_assembly:
-    input: sourmash_assembly
-
-#rule kraken:
-#    input: kraken_output
+    input: all_input
