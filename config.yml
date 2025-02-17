@@ -1,6 +1,16 @@
 # Download parameters for fastq-dump (leave empty unless testing)
 dlparams: ""
 
+# SLURM partitions to use for jobs depending on memory requirements
+# adjust these to match the available partitions on your cluster
+# the 'large_memory' partition is used for jobs that require >900G RAM
+# the 'medium_memory' partition is used for jobs that require >220G, <900G  RAM
+# the 'small_memory' partition is used for jobs that require <220G RAM
+slurm_partitions:
+    large_memory: "memory"
+    medium_memory: "main"
+    small_memory: "shared"
+
 ## PATHS ##
 # Set work directory
 workdir: "."
@@ -41,6 +51,9 @@ filter_reads: True
 paired_strategy: "one_mapped"
 # URL to file listing JGI genomes for which to download transcript files
 fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
+# Path to file listing JGI genomes for which to download transcript files
+# if this file does not exist with will be generated from the URL above
+fungi_genomes_file: "resources/JGI/genomes.tsv"
 # In order to download from JGI, you need to provide your JGI username and password
 # in a file that you point to with 'jgi_account_info'
 # this file should contain
@@ -51,6 +64,8 @@ jgi_account_info: "config/jgi_account_info.yml"
 # Host files (fna and gff)
 host_fna: "data/Picab02_chromosomes_and_unplaced.fa.gz"
 host_gff: "data/Picab02_230926_at01_longest_no_TE_sorted.gff3.gz"
+# Strobealign parameters
+strobealign_strobe_len: 17
 # STAR parameters
 # star_limitGenomeGenerateRAM sets the maximum allowed RAM usage (in GB)
 # when generating the genome index
@@ -63,19 +78,6 @@ star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAi
 # increase the number of false positive host reads meaning that fungal reads
 # may end up in the 'host' bin
 star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
-
-
-## READ ASSIGNMENT ##
-# feature counts parameters
-# the -s parameter sets strandedness that featureCounts expects
-# for IlluminaTruSeq Stranded libraries, set this to 2
-# for Standard Illumina, set this to 0
-fc_params: "-s 2 -p -t exon -g Parent -Q 10 --countReadPairs"
-## kallisto parameters
-# Use the settings below for strandedness
-# if using IlluminaTruSeq Stranded libraries this should be '–rf-stranded'
-# for Standard Illumina, this should be an empty string ("")'
-kallisto_params: "–rf-stranded"
 
 ## ASSEMBLY ##
 # should a co-assembly be generated?
@@ -94,8 +96,20 @@ min_contig_len: 200
 # set the target max coverage for insilico normalization
 # this is used to normalize the reads for co-assemblies
 insilico_norm_max_cov: 30
-# set the maximum memory to use for insilico normalization
-insilico_norm_mem: "100G"
+# set the maximum memory (in GB) to use for insilico normalization
+insilico_norm_mem: 100
+
+## READ ASSIGNMENT ##
+# feature counts parameters
+# the -s parameter sets strandedness that featureCounts expects
+# for IlluminaTruSeq Stranded libraries, set this to 2
+# for Standard Illumina, set this to 0
+fc_params: "-s 2 -p -t exon -g Parent -Q 10 --countReadPairs"
+## kallisto parameters
+# Use the settings below for strandedness
+# if using IlluminaTruSeq Stranded libraries this should be '–rf-stranded'
+# for Standard Illumina, this should be an empty string ("")'
+kallisto_params: "–rf-stranded"
 
 ## ANNOTATION ##
 ## MMseqs2 paths ##
@@ -129,9 +143,11 @@ tax_name: Fungi
 
 ## READ PARTITIONING ##
 # kraken database path
-kraken_db: "/sw/data/Kraken2_data/prebuilt/k2_pluspfp_20240112"
+kraken_db: "20240229-015730_nt"
+kraken_db_dir: "/sw/data/Kraken2_data"
+kraken_confidence: 0.2
 # partition reads into taxonomic bins
 taxmap:
-    Bacteria: 2
-    Archaea: 2157
-    EuKaryota: 2759
+    Prokaryota: [2, 2157]
+    Fungi: [4751]
+    Eukaryota: [2759]
