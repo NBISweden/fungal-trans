@@ -30,6 +30,13 @@ def parse_sample_list(f, config):
     paired_strategy=config["paired_strategy"]
     k=config["strobealign_strobe_len"]
     kraken_db=config["kraken_db"]
+    sample_string = ""
+    if config["fungi_filter"]:
+        sample_string = f"fungi.{paired_strategy}."
+    if config["host_filter"]:
+        sample_string += "nohost."
+    if config["kraken_filter"]:
+        sample_string += "kraken."
         
     dir = config['datadir']
     # Read sample list
@@ -57,12 +64,15 @@ def parse_sample_list(f, config):
             if df.loc[sample,'assembly'] != '':
                 assembly = df.loc[sample, 'assembly']
                 # Define reads for assembly
-                if config["filter_reads"]:
-                    R1_f = f"results/filtered/{sample}/{paired_strategy}/k{k}/{kraken_db}/{sample}_R1.fungi.nohost.kraken.fastq.gz"
-                    R2_f = f"results/filtered/{sample}/{paired_strategy}/k{k}/{kraken_db}/{sample}_R2.fungi.nohost.kraken.fastq.gz",
-                else:
+                if sample_string=="":
                     R1_f = f"results/preprocess/sortmerna/{sample}/{sample}_R1.mRNA.fastq.gz"
                     R2_f = f"results/preprocess/sortmerna/{sample}/{sample}_R2.mRNA.fastq.gz" 
+                elif sample_string=="nohost.":
+                    R1_f = f"results/filtered/{sample}/{sample}_R1.nohost.fastq.gz"
+                    R1_f = f"results/filtered/{sample}/{sample}_R2.nohost.fastq.gz"
+                else:
+                    R1_f = f"results/filtered/{sample}/{sample}_R1.{sample_string}fastq.gz"
+                    R2_f = f"results/filtered/{sample}/{sample}_R2.{sample_string}fastq.gz"
                 assemblies[assembly]['R1'].append(R1_f)
                 assemblies[assembly]['R2'].append(R2_f)
                 map_dict[sample] = {'R1': R1_f, 'R2': R2_f}
