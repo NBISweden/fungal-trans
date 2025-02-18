@@ -117,7 +117,7 @@ rule multiqc_map_report_co:
             sample_id = samples.keys()),
         kallisto = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/abundance.h5",
             sample_id = samples.keys()),
-        fc_logs = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tab.summary",
+        fc_logs = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tsv.summary",
             sample_id = samples.keys())
     output:
         "results/report/map/{assembler}_{assembly}_map_report.html"
@@ -139,12 +139,12 @@ rule kallisto_index:
     """
     Build kallisto index for individual assemblies.
     """
-    input:
-        "results/assembly/{assembler}/{filter_source}/{sample_id}/final.fa"
     output:
-        "results/map/{assembler}/{filter_source}/{sample_id}/kallisto_index"
+        "results/map/{assembler}/{sample_id}/kallisto_index"
+    input:
+        "results/assembly/{assembler}/{sample_id}/final.fa"
     log:
-        "results/map/{assembler}/{filter_source}/{sample_id}/kallisto_index.log"
+        "results/map/{assembler}/{sample_id}/kallisto_index.log"
     container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
     conda: "../../envs/kallisto.yaml"
     threads: 2
@@ -159,13 +159,14 @@ rule kallisto_quant:
     """
     input:
         index = rules.kallisto_index.output,
-        fq = fungi_input
+        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     output:
-        h5 = "results/map/{assembler}/{filter_source}/{sample_id}/abundance.h5",
-        tsv = "results/map/{assembler}/{filter_source}/{sample_id}/abundance.tsv",
-        json = "results/map/{assembler}/{filter_source}/{sample_id}/run_info.json",
+        h5 = "results/map/{assembler}/{sample_id}/abundance.h5",
+        tsv = "results/map/{assembler}/{sample_id}/abundance.tsv",
+        json = "results/map/{assembler}/{sample_id}/run_info.json",
     log:
-        "results/map/{assembler}/{filter_source}/{sample_id}/kallisto.log"
+        "results/map/{assembler}/{sample_id}/kallisto.log"
     container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
     conda: "../../envs/kallisto.yaml"
     params:
@@ -175,7 +176,7 @@ rule kallisto_quant:
     threads: 2
     shell:
         """
-        kallisto quant {params.settings} -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.fq[0]} {input.fq[1]} > {log} 2>&1
+        kallisto quant {params.settings} -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.R1} {input.R2} > {log} 2>&1
         """
 
 rule wrap_assembly:
@@ -183,11 +184,11 @@ rule wrap_assembly:
     Subread has a line length limit on fasta files, to be sure we are under this limit we wrap the sequences.
     """
     input:
-        "results/assembly/{assembler}/{filter_source}/{sample_id}/final.fa"
+        "results/assembly/{assembler}/{sample_id}/final.fa"
     output:
-        temp("results/assembly/{assembler}/{filter_source}/{sample_id}/final.wrap.fa")
+        temp("results/assembly/{assembler}/{sample_id}/final.wrap.fa")
     log:
-        "results/assembly/{assembler}/{filter_source}/{sample_id}/wrap_assembly.log"
+        "results/assembly/{assembler}/{sample_id}/wrap_assembly.log"
     shell:
         """
         seqkit seq -w 60 {input} > {output} 2> {log}
@@ -200,10 +201,10 @@ rule subread_index:
     input:
         rules.wrap_assembly.output
     output:
-        expand("results/map/{{assembler}}/{{filter_source}}/{{sample_id}}/subread_index.{suff}",
+        expand("results/map/{{assembler}}/{{sample_id}}/subread_index.{suff}",
                 suff = ["00.b.array", "00.b.tab", "files", "lowinf", "reads"])
     log:
-        "results/map/{assembler}/{filter_source}/{sample_id}/subread_index.log"
+        "results/map/{assembler}/{sample_id}/subread_index.log"
     container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
     conda: "../../envs/featurecount.yaml"
     params:
@@ -221,9 +222,9 @@ rule subread_align:
         index = rules.subread_index.output,
         fq = fungi_input
     output:
-        "results/map/{assembler}/{filter_source}/{sample_id}/{sample_id}.bam"
+        "results/map/{assembler}/{sample_id}/{sample_id}.bam"
     log:
-        "results/map/{assembler}/{filter_source}/{sample_id}/subread_align.log"
+        "results/map/{assembler}/{sample_id}/subread_align.log"
     container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
     conda: "../../envs/featurecount.yaml"
     params:
@@ -239,21 +240,21 @@ rule multiqc_map_report:
     Generate a multiqc report for individual assemblies.
     """
     input:
-        kallisto_logs = expand("results/map/{{assembler}}/{{filter_source}}/{sample_id}/kallisto.log",
+        kallisto_logs = expand("results/map/{{assembler}}/{sample_id}/kallisto.log",
             sample_id = samples.keys()),
-        kallisto = expand("results/map/{{assembler}}/{{filter_source}}/{sample_id}/abundance.h5",
+        kallisto = expand("results/map/{{assembler}}/{sample_id}/abundance.h5",
             sample_id = samples.keys()),
-        fc_logs = expand("results/annotation/{{assembler}}/{{filter_source}}/{sample_id}/featureCounts/fc.tab.summary",
+        fc_logs = expand("results/annotation/{{assembler}}/{sample_id}/featureCounts/fc.tab.summary",
             sample_id = samples.keys()),
     output:
-        "results/report/map/{assembler}_{filter_source}_map_report.html",
+        "results/report/map/{assembler}_map_report.html",
     log:
-        "results/report/map/{assembler}_{filter_source}_map_report.log"
+        "results/report/map/{assembler}_map_report.log"
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
         config = workflow.source_path("../../config/multiqc_map_config.yaml")
     shell:
         """
-        multiqc -f -c {params.config} -n {wildcards.assembler}_{wildcards.filter_source}_map_report \
+        multiqc -f -c {params.config} -n {wildcards.assembler}_map_report \
             -o {params.outdir} {input.kallisto_logs} {input.kallisto} {input.fc_logs} >{log} 2>&1
         """
