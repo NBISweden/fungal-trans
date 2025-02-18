@@ -1,9 +1,6 @@
 localrules:
     download_taxdump,
-    download_taxmapper,
     download_eggnog,
-    download_dbCAN,
-    press_dbCAN,
     get_kegg_files,
     download_refseq_db,
     init_jgi,
@@ -19,7 +16,7 @@ rule download_eggnog:
     Downloads the eggnog database and proteins
     """
     output:
-        expand("{emapper_db_dir}/{f}", emapper_db_dir=config["emaper_db_dir"], f = ["eggnog.db","eggnog_proteins.dmnd"])
+        expand("{emapper_db_dir}/{f}", emapper_db_dir=config["emapper_db_dir"], f = ["eggnog.db","eggnog_proteins.dmnd"])
     params:
         data_dir = "resources/eggnog"
     conda: "../../envs/emapper.yaml"
