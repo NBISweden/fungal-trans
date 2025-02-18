@@ -5,7 +5,7 @@ localrules:
     firstpass_fungal_proteins_co,
     secondpass_fungal_proteins_co,
     collate_featurecount_co,
-    normalize_featurecount_co,
+    parse_featurecounts_co,
     parse_eggnog_co,
     quantify_eggnog_co,
     quantify_eggnog_normalized_co,
@@ -290,33 +290,27 @@ rule featurecount_co:
         featureCounts -T {threads} {params.setting} -a {input.gff} -o {output.cnt} {input.bam} > {log} 2>&1
         """
 
-rule normalize_featurecount_co:
+rule parse_featurecounts_co:
     """
-    Parses featureCounts output and outputs raw and TPM normalized counts
+    Parses featureCounts output
     """
     input:
         fc="results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tsv",
-        stats=expand("results/{source}/{{sample_id}}/{{sample_id}}.stats.tsv", source="filtered" if config["filter_reads"] else "unfiltered")
     output:
-        "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.tpm.tsv",
         "results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.raw.tsv"
-    params:
-        s="{sample_id}",
-        script="source/utils/featureCountsTPM.py"
     run:
-        df=pd.read_csv(input.stats[0], sep="\t")
-        rl=df.avg_len.mean()
-        shell("python {params.script} --rl {rl} -i {input.fc} -o {output[0]} --rc {output[1]} --sampleName {params.s}")
+        df = pd.read_csv(input.fc, sep="\t", index_col=0, header=0, comment="#", usecols=[0,6], names=["gene_id", wildcards.sample_id])
+        df.to_csv(output[0], sep="\t")
 
 rule collate_featurecount_co:
     """
     Collate featureCounts output for all samples
     """
     input:
-        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.{{fc}}.tsv",
+        expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.raw.tsv",
             sample_id=samples.keys())
     output:
-        "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv"
+        "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.raw.tsv"
     run:
         df=pd.DataFrame()
         for f in input:
@@ -426,16 +420,15 @@ rule parse_eggnog_co:
 
 rule quantify_eggnog_co:
     """
-    Sums up read counts and TPM values for each feature in the eggNOG database
-    Note that since ORFs can be annotated to multiple features, the same ORF can be counted multiple times
-    This will cause normalized TPM values to be higher than the 1M factor
+    Sums up read counts for each feature in the eggNOG database
+    Note that since ORFs can be annotated to multiple features, the same ORF can be counted multiple times.
     """
     input:
-        abundance=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.{{fc}}.tsv",
+        abundance=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.raw.tsv",
             sample_id=samples.keys()),
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
     output:
-        "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{fc}.tsv"
+        "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.raw.tsv"
     params:
         src=workflow.source_path("../utils/eggnog-parser.py"),
         tmpdir=os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "{db}")
@@ -445,7 +438,7 @@ rule quantify_eggnog_co:
         for f in {input.abundance};
         do
             base=$(basename $f)
-            sample=$(echo -e $base | sed "s/.{wildcards.fc}.tsv//g")
+            sample=$(echo -e $base | sed "s/.raw.tsv//g")
             python {params.src} quantify $f {input.parsed} {params.tmpdir}/$sample.tsv
         done
         python {params.src} merge --sum {params.tmpdir}/*.tsv {output[0]}
@@ -457,12 +450,12 @@ rule quantify_eggnog_normalized_co:
     Normalize modules/pathways further by the number of KEGG orthologs belonging to each module/pathway
     """
     input:
-        abundance=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.{{fc}}.tsv",
+        abundance=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.raw.tsv",
             sample_id=samples.keys()),
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
         norm="resources/kegg/kegg_ko2{db}.tsv"
     output:
-        "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.norm.{fc}.tsv"
+        "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.norm.raw.tsv"
     params:
         src=workflow.source_path("../utils/eggnog-parser.py"),
         tmpdir=os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "norm", "{db}")
@@ -472,7 +465,7 @@ rule quantify_eggnog_normalized_co:
         for f in {input.abundance};
         do
             base=$(basename $f)
-            sample=$(echo -e $base | sed "s/.{wildcards.fc}.tsv//g")
+            sample=$(echo -e $base | sed "s/.raw.tsv//g")
             python {params.src} quantify --normalize {input.norm} $f {input.parsed} {params.tmpdir}/$sample.tsv
         done
         python {params.src} merge --sum {params.tmpdir}/*.tsv {output[0]}
@@ -484,9 +477,9 @@ rule eggnog_tax_annotations:
     input:
         gene_tax="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
-        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv"
+        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.raw.tsv"
     output:
-        expand("results/collated/co-assembly/{{assembler}}/{{assembly}}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{{db}}.{{fc}}.tsv",
+        expand("results/collated/co-assembly/{{assembler}}/{{assembly}}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{{db}}.raw.tsv",
                tax_rank=config["tax_rank"], tax_name=config["tax_name"])
     run:
         import pandas as pd
@@ -517,9 +510,9 @@ rule eggnog_tax_annotations:
 rule sum_taxonomy_co:
     input:
         gene_tax="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
-        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{fc}.tsv"
+        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.raw.tsv"
     output:
-        "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{fc}.tsv"
+        "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.raw.tsv"
     run:
         ranks=["superkingdom", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
         gene_tax=pd.read_csv(input.gene_tax, header=0, sep="\t", index_col=0)
