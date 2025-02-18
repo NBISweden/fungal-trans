@@ -1,57 +1,5 @@
 localrules:
     strobealign_collect_chunks,
-    link_unfiltered,
-    link_filtered,
-    fastq_stats,
-
-################
-## Link fastq ##
-################
-rule link_unfiltered:
-    """
-    This rule creates symlinks to the unfiltered fastq files.
-    """
-    output:
-        "results/unfiltered/{sample_id}/{sample_id}_R{i}.fastq.gz"
-    input:
-        "results/preprocess/{sample_id}_R{i}.mRNA.fastq.gz"
-    shell:
-        """
-        ln -s $(pwd)/{input} $(pwd)/{output}
-        """
-
-rule link_filtered:
-    """
-    This rule creates symlinks to the filtered fastq files.
-    """
-    output:
-        "results/filtered/{sample_id}/{sample_id}_R{i}.fastq.gz"
-    input:
-        expand("results/filtered/{{sample_id}}/{paired_strategy}/k{k}/{kraken_db}/{{sample_id}}_R{{i}}.fungi.nohost.kraken.fastq.gz",
-                paired_strategy=config["paired_strategy"], kraken_db=config["kraken_db"], k=config["strobealign_strobe_len"])
-    params:
-        abs_in = lambda wildcards, input: os.path.abspath(input[0]),
-        abs_out = lambda wildcards, output: os.path.abspath(output[0])
-    shell:
-        """
-        ln -s {params.abs_in} {params.abs_out}
-        """
-
-rule fastq_stats:
-    """
-    This rule calculates statistics for the fastq files.
-    """
-    output:
-        "results/{source}/{sample_id}/{sample_id}.stats.tsv"
-    input:
-        R1="results/{source}/{sample_id}/{sample_id}_R1.fastq.gz",
-        R2="results/{source}/{sample_id}/{sample_id}_R2.fastq.gz"
-    wildcard_constraints:
-        source="unfiltered|filtered"
-    shell:
-        """
-        seqkit stats -T {input.R1} {input.R2} > {output}
-        """
 
 #############
 ## MAPPING ##
@@ -66,23 +14,24 @@ rule strobealign_map_fungi:
     file for each chunk.
     """
     output:
-        paf="results/strobealign/{sample_id}/{chunk}/{sample_id}.k{k}.fungi.paf.gz",
-        both="results/strobealign/{sample_id}/{chunk}/{sample_id}.k{k}.fungi.both_mapped.gz",
+        paf="results/strobealign/{sample_id}/{chunk}/{sample_id}.fungi.paf.gz",
+        both="results/strobealign/{sample_id}/{chunk}/{sample_id}.fungi.both_mapped.gz",
     input:    
         R1=rules.sortmerna.output.R1,
         R2=rules.sortmerna.output.R2,
         fna=lambda wildcards: strobealign_chunks[wildcards.chunk]
     log:
-        "results/strobealign/{sample_id}/{chunk}/{sample_id}.k{k}.strobealign.log"
+        "results/strobealign/{sample_id}/{chunk}/{sample_id}.strobealign.log"
     params:
-        tmpdir = "$TMPDIR/{sample_id}.{chunk}.k{k}",
+        tmpdir = "$TMPDIR/{sample_id}.{chunk}",
+        k = config["strobealign_strobe_len"]
     container: "docker://quay.io/biocontainers/strobealign:0.15.0--h5ca1c30_1"
     threads: 6
     shell:
         """
         mkdir -p {params.tmpdir}
         gunzip -c {input.fna} > {params.tmpdir}/ref.fna
-        strobealign -v --mcs -k {wildcards.k} -x -t {threads} {params.tmpdir}/ref.fna {input.R1} {input.R2} 2>{log} | awk '$11>{wildcards.k}' | igzip > {output.paf}
+        strobealign -v --mcs -k {params.k} -x -t {threads} {params.tmpdir}/ref.fna {input.R1} {input.R2} 2>{log} | awk '$11>{wildcards.k}' | igzip > {output.paf}
         igzip -c -d {output.paf} | cut -f1 | sort | uniq -d | igzip > {output.both}
         rm -r {params.tmpdir}
         """
@@ -92,11 +41,11 @@ rule strobealign_collect_chunks:
     This rule collects the PAF output from the different chunks and concatenates them.
     """
     output:
-        paf="results/strobealign/{sample_id}/{sample_id}.k{k}.fungi.paf.gz",
-        both="results/strobealign/{sample_id}/{sample_id}.k{k}.fungi.both_mapped.gz",
+        paf="results/strobealign/{sample_id}/{sample_id}.fungi.paf.gz",
+        both="results/strobealign/{sample_id}/{sample_id}.fungi.both_mapped.gz",
     input:
-        paf=expand("results/strobealign/{{sample_id}}/{chunk}/{{sample_id}}.k{{k}}.fungi.paf.gz", chunk=strobealign_chunks.keys()),
-        both=expand("results/strobealign/{{sample_id}}/{chunk}/{{sample_id}}.k{{k}}.fungi.both_mapped.gz", chunk=strobealign_chunks.keys())
+        paf=expand("results/strobealign/{{sample_id}}/{chunk}/{{sample_id}}.fungi.paf.gz", chunk=strobealign_chunks.keys()),
+        both=expand("results/strobealign/{{sample_id}}/{chunk}/{{sample_id}}.fungi.both_mapped.gz", chunk=strobealign_chunks.keys())
     shell:
         """
         cat {input.paf} > {output.paf}
@@ -109,15 +58,15 @@ rule process_fungal_mappings:
     Reads with both ends and one or both ends mapped are extracted separately.
     """
     output:
-        R1one="results/strobealign/{sample_id}/k{k}/{sample_id}_R1.fungi.one_mapped.fastq.gz",
-        R2one="results/strobealign/{sample_id}/k{k}/{sample_id}_R2.fungi.one_mapped.fastq.gz",
-        R1both="results/strobealign/{sample_id}/k{k}/{sample_id}_R1.fungi.both_mapped.fastq.gz",
-        R2both="results/strobealign/{sample_id}/k{k}/{sample_id}_R2.fungi.both_mapped.fastq.gz",
+        R1one="results/filtered/{sample_id}/{sample_id}_R1.fungi.one_mapped.fastq.gz",
+        R2one="results/filtered/{sample_id}/{sample_id}_R2.fungi.one_mapped.fastq.gz",
+        R1both="results/filtered/{sample_id}/{sample_id}_R1.fungi.both_mapped.fastq.gz",
+        R2both="results/filtered/{sample_id}/{sample_id}_R2.fungi.both_mapped.fastq.gz",
     input:
         R1=rules.sortmerna.output.R1,
         R2=rules.sortmerna.output.R2,
-        paf="results/strobealign/{sample_id}/{sample_id}.k{k}.fungi.paf.gz",
-        both="results/strobealign/{sample_id}/{sample_id}.k{k}.fungi.both_mapped.gz",
+        paf="results/strobealign/{sample_id}/{sample_id}.fungi.paf.gz",
+        both="results/strobealign/{sample_id}/{sample_id}.fungi.both_mapped.gz",
     shell:
         """
         # Output reads that map with one or two ends to fungi
@@ -211,10 +160,10 @@ rule process_host_bam:
     This rule extracts reads from the host bam file that did not map to the host genome.
     """
     output:
-        R1_nohost="results/star/{sample_id}/{sample_id}_R1.nohost.fastq.gz",
-        R2_nohost="results/star/{sample_id}/{sample_id}_R2.nohost.fastq.gz",
-        R1_host="results/star/{sample_id}/{sample_id}_R1.host.fastq.gz",
-        R2_host="results/star/{sample_id}/{sample_id}_R2.host.fastq.gz"
+        R1_nohost="results/filtered/{sample_id}/{sample_id}_R1.nohost.fastq.gz",
+        R2_nohost="results/filtered/{sample_id}/{sample_id}_R2.nohost.fastq.gz",
+        R1_host="results/filtered/{sample_id}/{sample_id}_R1.host.fastq.gz",
+        R2_host="results/filtered/{sample_id}/{sample_id}_R2.host.fastq.gz"
     input:
         bam=rules.star_map_host.output[0],
     log:
@@ -232,13 +181,13 @@ rule filter_fungal_reads:
     This rule intersects the reads that mapped to fungi with the reads that did not map to the host.
     """
     output:
-        R1="results/filtered/{sample_id}/{paired_strategy}/k{k}/{sample_id}_R1.fungi.nohost.fastq.gz",
-        R2="results/filtered/{sample_id}/{paired_strategy}/k{k}/{sample_id}_R2.fungi.nohost.fastq.gz"
+        R1="results/filtered/{sample_id}/{sample_id}_R1.fungi.{paired_strategy}.nohost.fastq.gz",
+        R2="results/filtered/{sample_id}/{sample_id}_R2.fungi.{paired_strategy}.nohost.fastq.gz"
     input:
         R1_nohost=rules.process_host_bam.output.R1_nohost,
         R2_nohost=rules.process_host_bam.output.R2_nohost,
-        R1_fungi="results/strobealign/{sample_id}/k{k}/{sample_id}_R1.fungi.{paired_strategy}.fastq.gz",
-        R2_fungi="results/strobealign/{sample_id}/k{k}/{sample_id}_R2.fungi.{paired_strategy}.fastq.gz",
+        R1_fungi="results/filtered/{sample_id}/{sample_id}_R1.fungi.{paired_strategy}.fastq.gz",
+        R2_fungi="results/filtered/{sample_id}/{sample_id}_R2.fungi.{paired_strategy}.fastq.gz",
     shell:
         """
         seqkit grep -f <(seqkit seq -n -i {input.R1_nohost}) {input.R1_fungi} -o {output.R1}
@@ -253,26 +202,30 @@ rule filter_with_kraken:
     3. Add reads classified as 'Fungi' by Kraken2 that are also in the 'nohost' bin from the 'process_host_bam' rule.
     """
     output:
-        R1="results/filtered/{sample_id}/{paired_strategy}/k{k}/{kraken_db}/{sample_id}_R1.fungi.nohost.kraken.fastq.gz",
-        R2="results/filtered/{sample_id}/{paired_strategy}/k{k}/{kraken_db}/{sample_id}_R2.fungi.nohost.kraken.fastq.gz",
+        R1="results/filtered/{sample_id}/{sample_id}_R1.fungi.{paired_strategy}.nohost.kraken.fastq.gz",
+        R2="results/filtered/{sample_id}/{sample_id}_R2.fungi.{paired_strategy}.nohost.kraken.fastq.gz",
     input:
         R1_pre=rules.sortmerna.output.R1,
         R2_pre=rules.sortmerna.output.R2,
-        R1fungi_mapped="results/filtered/{sample_id}/{paired_strategy}/k{k}/{sample_id}_R1.fungi.nohost.fastq.gz",
-        R2fungi_mapped="results/filtered/{sample_id}/{paired_strategy}/k{k}/{sample_id}_R2.fungi.nohost.fastq.gz",
-        R1_prok="results/kraken/{kraken_db}/{sample_id}/taxbins/Prokaryota_R1.fastq.gz",
-        R2_prok="results/kraken/{kraken_db}/{sample_id}/taxbins/Prokaryota_R2.fastq.gz",
-        R1_fungi="results/kraken/{kraken_db}/{sample_id}/taxbins/Fungi_R1.nohost.fastq.gz",
-        R2_fungi="results/kraken/{kraken_db}/{sample_id}/taxbins/Fungi_R2.nohost.fastq.gz",
+        #R1fungi_mapped="results/filtered/{sample_id}/{sample_id}_R1.fungi.{paired_strategy}.nohost.fastq.gz",
+        #R2fungi_mapped="results/filtered/{sample_id}/{sample_id}_R2.fungi.{paired_strategy}.nohost.fastq.gz",
+        R1fungi_mapped=rules.filter_fungal_reads.output.R1,
+        R2fungi_mapped=rules.filter_fungal_reads.output.R2,
+        R1_prok=expand("results/kraken/{kraken_db}/{{sample_id}}/taxbins/Prokaryota_R1.fastq.gz", kraken_db=config["kraken_db"]),
+        R2_prok=expand("results/kraken/{kraken_db}/{{sample_id}}/taxbins/Prokaryota_R2.fastq.gz", kraken_db=config["kraken_db"]),
+        R1_fungi=expand("results/kraken/{kraken_db}/{{sample_id}}/taxbins/Fungi_R1.nohost.fastq.gz", kraken_db=config["kraken_db"]),
+        R2_fungi=expand("results/kraken/{kraken_db}/{{sample_id}}/taxbins/Fungi_R2.nohost.fastq.gz", kraken_db=config["kraken_db"]),
     log:
-        "results/filtered/{sample_id}/{paired_strategy}/k{k}/{kraken_db}/{sample_id}.filter_with_kraken.log"
+        "results/filtered/{sample_id}/{sample_id}.{paired_strategy}.filter_with_kraken.log"
     params:
-        tmpdir = "$TMPDIR/{sample_id}.{paired_strategy}.k{k}.{kraken_db}",
+        tmpdir = "$TMPDIR/{sample_id}.{paired_strategy}",
+        kraken_db=config["kraken_db"]
     shell:
         """
         exec &> {log}
+        echo "Filtering with Kraken2 db: {params.kraken_db}"
         mkdir -p {params.tmpdir}
-        # Remove prokaryota reads from nohost-filtered reads
+        # Remove prokaryota reads from fungi mapped reads
         seqkit grep -v -f <(seqkit seq -n -i {input.R1_prok}) {input.R1fungi_mapped} -o {params.tmpdir}/R1_nohost_noprok.fastq
         seqkit grep -v -f <(seqkit seq -n -i {input.R2_prok}) {input.R2fungi_mapped} -o {params.tmpdir}/R2_nohost_noprok.fastq
         # Take the union of the prokaryota-removed reads and the fungi reads from Kraken2
