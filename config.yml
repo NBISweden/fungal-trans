@@ -38,11 +38,13 @@ fastp_adapter_sequence_r2: "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
 fastp_length_required: 50
 
 ## FILTERING ##
-# Should reads be filtered?
-# If set to True reads will be mapped against JGI fungal transcriptomes,
-# then against the host genome. Reads mapped to fungi but not to host will be
-# kept for assembly and annotation
-filter_reads: True
+# How should reads be filtered?
+# Remove reads that map to the host genome?
+host_filter: True
+# Retain reads that map to JGI mycocosm?
+fungi_filter: True
+# Use kraken2 to add fungal reads and remove prokaryutic reads?
+kraken_filter: True
 # The paired strategy sets how to handle read-pair mapping during filtering
 # if 'both_mapped', then both reads in a pair have to map to fungal transcriptomes
 # and neither read can map to the host genome
