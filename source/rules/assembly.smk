@@ -11,15 +11,16 @@ rule transabyss:
     Assemble fungal reads with transabyss at a certain k-mer size.
     """
     output:
-        fa = "results/assembly/transabyss/{filter_source}/{sample_id}/{k}/{sample_id}.{k}-final.fa",
+        fa = "results/assembly/transabyss/{sample_id}/{k}/{sample_id}.{k}-final.fa",
     input:
-        fungi_input
-    log: "results/assembly/transabyss/{filter_source}/{sample_id}/{k}/log"
+        R1=lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2=lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    log: "results/assembly/transabyss/{sample_id}/{k}/log"
     conda: "../../envs/transabyss.yaml"
     container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        tmpdir = "$TMPDIR/{filter_source}.{sample_id}.{k}.transabyss",
+        tmpdir = "$TMPDIR/{sample_id}.{k}.transabyss",
         R1 = "$TMPDIR/{sample_id}.{k}.transabyss/R1.fastq",
         R2 = "$TMPDIR/{sample_id}.{k}.transabyss/R2.fastq",
         min_contig_len = config["min_contig_len"]
@@ -29,8 +30,8 @@ rule transabyss:
     shell:
         """
         mkdir -p {params.tmpdir}
-        gunzip -c {input[0]} > {params.R1}
-        gunzip -c {input[1]} > {params.R2}
+        gunzip -c {input.R1} > {params.R1}
+        gunzip -c {input.R2} > {params.R2}
         transabyss --pe {params.R1} {params.R2} -k {wildcards.k} --length {params.min_contig_len} \
             --outdir {params.tmpdir} --name {wildcards.sample_id}.{wildcards.k} \
             --threads {threads} >{log} 2>&1
@@ -43,13 +44,13 @@ rule transabyss_merge:
     Merge transabyss assemblies from different k-mer sizes.
     """
     output:
-        fa = "results/assembly/transabyss/{filter_source}/{sample_id}/final.fa",
+        fa = "results/assembly/transabyss/{sample_id}/final.fa",
     input:
         fungi_input,
-        expand("results/assembly/transabyss/{{filter_source}}/{{sample_id}}/{k}/{{sample_id}}.{k}-final.fa",
+        expand("results/assembly/transabyss/{{sample_id}}/{k}/{{sample_id}}.{k}-final.fa",
             k = config["transabyss_kmers"])
     log:
-        "results/logs/transabyss/{sample_id}.{filter_source}.merge.log"
+        "results/logs/transabyss/{sample_id}.merge.log"
     conda: "../../envs/transabyss.yaml"
     container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
@@ -74,13 +75,14 @@ rule trinity:
     Assemble fungal reads with Trinity.
     """
     output:
-        fa="results/assembly/trinity/{filter_source}/{sample_id}/final.fa",
+        fa="results/assembly/trinity/{sample_id}/final.fa",
     input:
-        fungi_input
-    log: "results/assembly/trinity/{filter_source}/{sample_id}/log"
+        R1=lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2=lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    log: "results/assembly/trinity/{sample_id}/log"
     params:
         min_contig_len = config["min_contig_len"],
-        tmpdir="$TMPDIR/{filter_source}.{sample_id}.trinity",
+        tmpdir="$TMPDIR/{sample_id}.trinity",
         outdir=lambda wildcards, output: os.path.dirname(output.fa),
         out_base = lambda wildcards, output: os.path.basename(output.fa),
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
@@ -96,7 +98,7 @@ rule trinity:
         rm -rf {params.tmpdir}
         mkdir -p {params.tmpdir}
         Trinity --CPU {threads} --min_contig_length {params.min_contig_len} \
-            --output {params.tmpdir} --left {input[0]} --right {input[1]} \
+            --output {params.tmpdir} --left {input.R1} --right {input.R2} \
             --seqType fq --max_memory {params.max_mem}G > {log} 2>&1
         mv {params.tmpdir}/* {params.outdir}/
         mv {params.tmpdir}.Trinity.fasta {output.fa}
@@ -108,13 +110,13 @@ rule megahit:
     Assemble fungal reads with Megahit.
     """
     output:
-        fa = "results/assembly/megahit/{filter_source}/{sample_id}/final.fa"
+        fa = "results/assembly/megahit/{sample_id}/final.fa"
     input:
         fungi_input
-    log: "results/assembly/megahit/{filter_source}/{sample_id}/log"
+    log: "results/assembly/megahit/{sample_id}/log"
     params:
         min_contig_len = config["min_contig_len"],
-        out_dir = "results/assembly/megahit/{filter_source}/{sample_id}",
+        out_dir = "results/assembly/megahit/{sample_id}",
         tmp_dir = "$TMPDIR/megahit/{sample_id}",
         tmp_dir_base = "$TMPDIR/megahit"
     conda: "../../envs/megahit.yaml"
@@ -328,10 +330,10 @@ rule assembly_stats:
     Calculate assembly statistics.
     """
     output:
-        "results/report/assembly/{filter_source}_{assembler}_stats.tsv",
-        "results/report/assembly/{filter_source}_{assembler}_size_dist.tsv"
+        "results/report/assembly/{assembler}_stats.tsv",
+        "results/report/assembly/{assembler}_size_dist.tsv"
     input:
-        expand("results/assembly/{{assembler}}/{{filter_source}}/{sample_id}/final.fa",
+        expand("results/assembly/{{assembler}}/{sample_id}/final.fa",
             sample_id = samples.keys())
     run:
         names = [x.split("/")[-2] for x in input]
