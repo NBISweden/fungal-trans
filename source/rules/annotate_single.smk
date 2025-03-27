@@ -295,7 +295,8 @@ rule emapper_search:
     output:
         "results/annotation/{assembler}/{sample_id}/eggNOG/annotation_results.emapper.seed_orthologs",
     input:
-        faa="results/annotation/{assembler}/{sample_id}/genecall/fungal.faa",
+        #faa="results/annotation/{assembler}/{sample_id}/genecall/fungal.faa",
+        faa=rules.transdecoder_predict.output[0],
         db=f"{config['emapper_db_dir']}/eggnog.db",
         mmseqs_db=f"{config['emapper_db_dir']}/mmseqs/mmseqs.db"
     params:
