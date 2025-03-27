@@ -42,9 +42,9 @@ fastp_length_required: 50
 # Remove reads that map to the host genome?
 host_filter: True
 # Retain reads that map to JGI mycocosm?
-fungi_filter: True
+fungi_filter: False
 # Use kraken2 to add fungal reads and remove prokaryutic reads?
-kraken_filter: True
+kraken_filter: False
 # The paired strategy sets how to handle read-pair mapping during filtering
 # if 'both_mapped', then both reads in a pair have to map to fungal transcriptomes
 # and neither read can map to the host genome
@@ -54,7 +54,7 @@ paired_strategy: "one_mapped"
 # URL to file listing JGI genomes for which to download transcript files
 fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
 # Path to file listing JGI genomes for which to download transcript files
-# if this file does not exist with will be generated from the URL above
+# if this file does not exist it will be generated from the URL above
 fungi_genomes_file: "resources/JGI/genomes.tsv"
 # In order to download from JGI, you need to provide your JGI username and password
 # in a file that you point to with 'jgi_account_info'
@@ -98,7 +98,7 @@ min_contig_len: 200
 # set the target max coverage for insilico normalization
 # this is used to normalize the reads for co-assemblies
 insilico_norm_max_cov: 30
-# set the maximum memory (in GB) to use for insilico normalization
+# set the maximum memory (in GB) to use for insilico normalization (in GB)
 insilico_norm_mem: 100
 
 ## READ ASSIGNMENT ##
@@ -135,9 +135,6 @@ extra_genomes: "extra_JGI_genomes.tsv"
 # this path must contain the 'eggnog.db', 'eggnog_proteins.dmnd', 'eggnog.taxa.db' files
 # and 'mmseqs/' directory
 emapper_db_dir: "/sw/data/eggNOG_data/5.0.0/rackham"
-# dbCAN settings (Suggested thresholds for fungi, see: http://csbl.bmb.uga.edu/dbCAN/download/readme.txt)
-dbCAN_eval: 0.00000000000000001
-dbCAN_cov: 0.45
 
 ## TAXONOMIC SUMMARY ##
 tax_rank: kingdom

@@ -29,6 +29,7 @@ properties:
     type: string
     description: Directory with raw sequence files
     default: "data/raw"
+  ## READ LENGTH ##
   read_length:
     type: integer
     description: Read length of samples
@@ -56,6 +57,18 @@ properties:
     type: boolean
     description: Whether to filter reads
     default: true
+  host_filter:
+    type: boolean
+    description: Whether to filter host reads
+    default: true
+  fungi_filter:
+    type: boolean
+    description: Whether to retain reads that map to JGI mycocosm
+    default: false
+  kraken_filter:
+    type: boolean
+    description: Whether to run kraken2 to remove prokaryotes/retain fungal reads
+    default: false
   paired_strategy:
     type: string
     description: Strategy for handling read pairs. If 'both_mapped', both reads in a pair must map to fungi and neither to host. If 'one_mapped', only one read in a pair must map to fungi and pairs with at least one read mapping to host will be discarded.
@@ -126,8 +139,17 @@ properties:
     default: 30
   insilico_norm_mem:
     type: integer
-    description: Maximum memory to use for insilico normalization
+    description: Maximum memory to use for insilico normalization (in GB)
     default: 100
+  ## READ ASSIGNMENT ##
+  fc_params:
+    type: string
+    description: Parameters for featureCounts
+    default: "-s 2 --countReadPairs -p -B -t CDS -g gene_id -Q 10"
+  kallisto_params:
+    type: string
+    description: Parameters for kallisto
+    default: "--rf-stranded"
   ## ANNOTATION ##
   mmseqs_db_dir:
     type: string
@@ -149,14 +171,6 @@ properties:
     type: string
     description: Path to eggNOG database
     default: "/sw/data/eggnog/5.0/rackham"
-  dbCAN_eval:
-    type: number
-    description: E-value to use for dbCAN parsing
-    default: 0.00000000000000001
-  dbCAN_cov:
-    type: number
-    description: Coverage threshold for dbCAN parsing
-    default: 0.45
   tax_rank:
     type: string
     description: Taxonomic rank to summarize eggNOG annotations for
@@ -166,15 +180,6 @@ properties:
     type: string
     description: Taxonomic name at which to summarize eggNOG annotations for
     default: "Fungi"
-  ## READ ASSIGNMENT ##
-  fc_params:
-    type: string
-    description: Parameters for featureCounts
-    default: "-s 2 -p -B -t CDS -g gene_id -Q 10"
-  kallisto_params:
-    type: string
-    description: Parameters for kallisto
-    default: "--rf-stranded"
   ## READ PARTITIONING ##
   kraken_db:
     type: string
