@@ -177,7 +177,7 @@ rule trinity_normalize:
         tmpdir="$TMPDIR/{assembly}.norm",
         mem=config["insilico_norm_mem"],
     resources:
-        mem_mb = config["insilico_norm_mem"] * 1.28 * 1000
+        mem_mb = int(config["insilico_norm_mem"] * 1.28 * 1000)
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     threads: 10
