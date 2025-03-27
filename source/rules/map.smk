@@ -2,7 +2,9 @@ localrules:
     multiqc_map_report, 
     multiqc_map_report_co, 
     wrap_assembly,
-    wrap_assembly_co
+    wrap_assembly_co,
+    parse_kallisto_co,
+    collate_kallisto_co
 
 ###############################
 ## Mapping for co-assemblies ##
@@ -50,6 +52,48 @@ rule kallisto_quant_co:
         """
         kallisto quant {params.settings} -b {params.bootstrap} -t {threads} -i {input.index} -o {params.outdir} {input.R1} {input.R2} > {log} 2>&1
         """
+
+rule parse_kallisto_co:
+    """
+    Parses Kallisto output
+    """
+    output:
+        est="results/annotation/co-assembly/{assembler}/{assembly}/kallisto/{sample_id}.est_counts.tsv",
+        tpm="results/annotation/co-assembly/{assembler}/{assembly}/kallisto/{sample_id}.tpm.tsv",
+    input:
+        tsv=rules.kallisto_quant_co.output.tsv
+    run:
+        df = pd.read_csv(input.tsv, sep="\t", index_col=0, header=0, comment="#", usecols=[0,3,4], names=["gene_id", "est_counts", "tpm"])
+        est = df.loc[:, ["gene_id", "est_counts"]]
+        est.columns=[wildcards.sample_id]
+        tpm = df.loc[:, ["gene_id", "tpm"]]
+        tpm.columns=[wildcards.sample_id]
+        est.to_csv(output.est, sep="\t")
+        tpm.to_csv(output.tpm, sep="\t")
+
+rule collate_kallisto_co:
+    """
+    Collate Kallisto output
+    """
+    output:
+        est="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.est_counts.tsv",
+        tpm="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.tpm.tsv",
+    input:
+        est=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/kallisto/{sample_id}.est_counts.tsv",
+            sample_id = samples.keys()),
+        tpm=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/kallisto/{sample_id}.tpm.tsv",
+            sample_id = samples.keys())
+    run:
+        df = pd.DataFrame()
+        for f in input.est:
+            _df=pd.read_csv(f, sep="\t", index_col=0, header=0)
+            df = pd.merge(df, _df, how="outer", left_index=True, right_index=True)
+        df.to_csv(output.est, sep="\t")
+        df = pd.DataFrame()
+        for f in input.tpm:
+            _df=pd.read_csv(f, sep="\t", index_col=0, header=0)
+            df = pd.merge(df, _df, how="outer", left_index=True, right_index=True)
+        df.to_csv(output.tpm, sep="\t")
 
 rule wrap_assembly_co:
     """
@@ -220,7 +264,8 @@ rule subread_align:
     """
     input:
         index = rules.subread_index.output,
-        fq = fungi_input
+        R1=lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2=lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     output:
         "results/map/{assembler}/{sample_id}/{sample_id}.bam"
     log:
@@ -232,7 +277,7 @@ rule subread_align:
     threads: 4
     shell:
         """
-        subread-align -T {threads} -sortReadsByCoordinates -r {input.fq[0]} -R {input.fq[1]} -i {params.index} -o {output} -t 0 > {log} 2>&1
+        subread-align -T {threads} -sortReadsByCoordinates -r {input.R1} -R {input.R2} -i {params.index} -o {output} -t 0 > {log} 2>&1
         """
 
 rule multiqc_map_report:
@@ -244,7 +289,7 @@ rule multiqc_map_report:
             sample_id = samples.keys()),
         kallisto = expand("results/map/{{assembler}}/{sample_id}/abundance.h5",
             sample_id = samples.keys()),
-        fc_logs = expand("results/annotation/{{assembler}}/{sample_id}/featureCounts/fc.tab.summary",
+        fc_logs = expand("results/annotation/{{assembler}}/{sample_id}/featureCounts/fc.tsv.summary",
             sample_id = samples.keys()),
     output:
         "results/report/map/{assembler}_map_report.html",
