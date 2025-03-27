@@ -30,8 +30,14 @@ rule strobealign_map_fungi:
     shell:
         """
         mkdir -p {params.tmpdir}
-        gunzip -c {input.fna} > {params.tmpdir}/ref.fna
-        strobealign -v --mcs -k {params.k} -x -t {threads} {params.tmpdir}/ref.fna {input.R1} {input.R2} 2>{log} | awk '$11>{wildcards.k}' | igzip > {output.paf}
+        rm -f {params.tmpdir}/ref.fna
+        for f in {input.fna} ; 
+        do
+            if [ -s $f ]; then
+                gunzip -c $f >> {params.tmpdir}/ref.fna
+            fi
+        done
+        strobealign -v --mcs -k {params.k} -x -t {threads} {params.tmpdir}/ref.fna {input.R1} {input.R2} 2>{log} | awk '$11>{params.k}' | igzip > {output.paf}
         igzip -c -d {output.paf} | cut -f1 | sort | uniq -d | igzip > {output.both}
         rm -r {params.tmpdir}
         """
