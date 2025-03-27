@@ -176,6 +176,8 @@ rule trinity_normalize:
         R2 = lambda wildcards: ",".join(sorted(assemblies[wildcards.assembly]["R2"])),
         tmpdir="$TMPDIR/{assembly}.norm",
         mem=config["insilico_norm_mem"],
+    resources:
+        mem_mb = config["insilico_norm_mem"] * 1.28 * 1000
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     threads: 10
