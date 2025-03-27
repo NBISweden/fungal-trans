@@ -137,7 +137,6 @@ def all_input(wildcards):
             expand(
                 "results/assembly/{assembler}/{sample_id}/final.fa",
                 assembler=config["assembler"],
-                filter_source=config["filter_source"],
                 sample_id=samples.keys()
             )
         )
@@ -145,7 +144,6 @@ def all_input(wildcards):
         inputs.extend(
             expand(
                 "results/report/assembly/{assembler}_stats.tsv",
-                filter_source=config["filter_source"], 
                 assembler=config["assembler"]
             )
         )
@@ -154,7 +152,6 @@ def all_input(wildcards):
             expand(
                 "results/annotation/{assembler}/{sample_id}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv",
                 assembler=config["assembler"],
-                filter_source=config["filter_source"],
                 sample_id=samples.keys(),
                 mmseqs_db=config["mmseqs_db"]
             )
@@ -170,7 +167,7 @@ def all_input(wildcards):
         # collated taxonomy counts
         inputs.extend(
             expand(
-                "results/collated/{assembler}/taxonomy/taxonomy.tpm.tsv",
+                "results/collated/{assembler}/taxonomy/taxonomy.raw.tsv",
                 assembler=config["assembler"],
             )
         )
@@ -271,6 +268,14 @@ def all_input(wildcards):
                 "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.raw.tsv",
                 assembly=assemblies.keys(), 
                 assembler=config["assembler"],
+            )
+        )
+        inputs.extend(
+            expand(
+                "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{c}.tsv",
+                assembly=assemblies.keys(),
+                assembler=config["assembler"],
+                c=["est_counts", "tpm"]
             )
         )
         # taxonomy counts
