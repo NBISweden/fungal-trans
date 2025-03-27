@@ -326,7 +326,8 @@ rule emapper_search_co:
     Run eggNOG-mapper on fungal proteins from co-assembly
     """
     input:
-        faa="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.faa",
+        #faa="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.faa",
+        faa=rules.transdecoder_predict_co.output[0],
         db=f"{config['emapper_db_dir']}/eggnog.db",
         mmseqs_db=f"{config['emapper_db_dir']}/mmseqs/mmseqs.db"
     output:
