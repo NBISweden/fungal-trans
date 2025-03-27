@@ -144,8 +144,8 @@ rule kraken_nohost:
     input:
         R1=rules.extract_kraken_reads.output.R1,
         R2=rules.extract_kraken_reads.output.R2,
-        R1nohost="results/star/{sample_id}/{sample_id}_R1.nohost.fastq.gz",
-        R2nohost="results/star/{sample_id}/{sample_id}_R2.nohost.fastq.gz",
+        R1nohost="results/filtered/{sample_id}/{sample_id}_R1.nohost.fastq.gz",
+        R2nohost="results/filtered/{sample_id}/{sample_id}_R2.nohost.fastq.gz",
     log:
         "results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}.extract_reads.log"
     shell:
