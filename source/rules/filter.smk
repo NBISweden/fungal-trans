@@ -90,7 +90,7 @@ rule star_build_host:
     output:
         expand("resources/host/{f}",
             f = ["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
-                 "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"])
+                 "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt", "Log.out"])
     input:
         fna=config["host_fna"],
         gff=config["host_gff"]
@@ -108,17 +108,14 @@ rule star_build_host:
         mem_mb = config["star_limitGenomeGenerateRAM"]*1000, # converts ram in GB to MB
     conda: "../../envs/star.yaml"
     container: "docker://quay.io/biocontainers/star:2.7.11b--h5ca1c30_5"
+    shadow: "full"
     shell:
         """
-        exec &>{log}
-        mkdir -p {params.tmpdir}
-        gunzip -c {input.fna} > {params.tmpdir}/host.fna
-        gunzip -c {input.gff} > {params.tmpdir}/host.gff
-        STAR --runMode genomeGenerate --genomeDir {params.tmpdir} --genomeFastaFiles {params.tmpdir}/host.fna \
-            --sjdbGTFfile {params.tmpdir}/host.gff --sjdbOverhang {params.sjdbOverhang} --runThreadN {threads} --limitGenomeGenerateRAM {params.limitGenomeGenerateRAM} \
-            {params.extra_params}
-        mv {params.tmpdir}/* {params.outdir}/
-        rm -rf {params.tmpdir}
+        gunzip -c {input.fna} > host.fna
+        gunzip -c {input.gff} > host.gff
+        STAR --runMode genomeGenerate --genomeDir {params.outdir} --genomeFastaFiles host.fna \
+            --sjdbGTFfile host.gff --sjdbOverhang {params.sjdbOverhang} --runThreadN {threads} --limitGenomeGenerateRAM {params.limitGenomeGenerateRAM} \
+            {params.extra_params} > {log} 2>&1
         """
 
 rule star_map_host:
@@ -128,9 +125,7 @@ rule star_map_host:
     output:
         "results/star/{sample_id}/{sample_id}.host.bam"
     input:
-        db=expand("resources/host/{f}",
-            f=["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
-               "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt"]),
+        db=rules.star_build_host.output,
         R1=rules.sortmerna.output.R1,
         R2=rules.sortmerna.output.R2,
     log:
