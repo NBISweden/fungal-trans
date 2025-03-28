@@ -10,11 +10,6 @@ from source.utils.list_jgi_genomes import parse_genomes
 
 include: "source/utils/common.py"
 
-# Set temporary dir
-if not os.getenv("TMPDIR"):
-    os.environ["TMPDIR"] = "tmp"
-    os.makedirs(os.environ["TMPDIR"],exist_ok=True)
-
 # Set default config and validate against schema
 if os.path.exists("config.yml"):
     configfile: "config.yml"
