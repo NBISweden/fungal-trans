@@ -125,7 +125,9 @@ def parse_extra_genomes(f):
     """
     extra_genomes = {}
     with open(f, "r") as f:
-        for line in f:
+        for i, line in enumerate(f):
+            if i == 0:
+                continue
             line = line.strip()
             portal, taxid = line.rsplit()[0:2]
             try:
