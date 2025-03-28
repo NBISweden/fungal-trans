@@ -87,7 +87,8 @@ rule fastp:
         R2 = rules.fastq_replace_ids.output.R2
     output:
         R1 = "results/preprocess/fastp/{sample_id}_R1.fastp.fastq.gz",
-        R2 = "results/preprocess/fastp/{sample_id}_R2.fastp.fastq.gz"
+        R2 = "results/preprocess/fastp/{sample_id}_R2.fastp.fastq.gz",
+        html = temp("results/preprocess/fastp/{sample_id}/fastp.html")
     log:
         log="results/preprocess/fastp/{sample_id}.fastp.log",
         json="results/preprocess/fastp/{sample_id}.fastp.json"
@@ -102,7 +103,7 @@ rule fastp:
         """
         fastp --thread {threads} -i {input.R1} -I {input.R2} -o {output.R1} -O {output.R2} \
             --adapter_sequence {params.adapter_sequence} --adapter_sequence_r2 {params.adapter_sequence_r2} \
-            --length_required {params.length_required} --json {log.json} > {log.log} 2>{log.log}
+            --length_required {params.length_required} -h {output.html} --json {log.json} > {log.log} 2>{log.log}
         """
 
 ####################
@@ -118,10 +119,13 @@ rule download_rRNA_database:
         fast="resources/sortmerna/rRNA_databases_v4/smr_v4.3_fast_db.fasta",
         sensitive="resources/sortmerna/rRNA_databases_v4/smr_v4.3_sensitive_db.fasta",
         sensitive_rfam="resources/sortmerna/rRNA_databases_v4/smr_v4.3_sensitive_db_rfam_seeds.fasta"
+    log:
+        "resources/sortmerna/download_rRNA_database.log"
     params:
         outdir=lambda wildcards, output: os.path.dirname(output[0])
     shell:
         """
+        exec &>{log}
         wget -O {params.outdir}/database.tar.gz https://github.com/biocore/sortmerna/releases/download/v4.3.4/database.tar.gz
         tar -xvf {params.outdir}/database.tar.gz -C {params.outdir}
         rm {params.outdir}/database.tar.gz
