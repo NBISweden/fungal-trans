@@ -1,4 +1,0 @@
-Sample	assembly	Read_file	Pair_file
-fungi_large	fungi	data/host.prok.fungi_large_R1.fastq.gz	data/host.prok.fungi_large_R2.fastq.gz
-fungi_small	fungi	data/host.prok.fungi_small_R1.fastq.gz	data/host.prok.fungi_small_R2.fastq.gz
-fungi_representative	fungi	data/host.prok.fungi_representative_R1.fastq.gz	data/host.prok.fungi_representative_R2.fastq.gz
