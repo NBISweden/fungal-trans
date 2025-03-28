@@ -20,7 +20,7 @@
 # the resource definitions below specify the default used by all rules unless overridden by 
 # the set-resources section
 default-resources: 
-  slurm_account: <your-slurm-account>
+  slurm_account: naiss2024-22-1346
   slurm_partition: shared
   runtime: 120
 
@@ -218,6 +218,7 @@ rerun-incomplete: True
 jobs: 200
 latency-wait: 5
 executor: slurm
+shadow-prefix: "$PDC_TMP"
 software-deployment-method: "apptainer"
 use-conda: False
-apptainer-args: "--bind $PDC_TMP,$PWD,/sw/data --env TMPDIR=$PDC_TMP"
+apptainer-args: "--bind /cfs/klemming,$PDC_TMP,/sw/data --env TMPDIR=$PDC_TMP"

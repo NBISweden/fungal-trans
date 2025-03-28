@@ -13,37 +13,53 @@ To install this workflow:
 git clone https://github.com/NBISweden/fungal-trans.git
 ```
 
-2. Install the necessary dependencies with [conda](https://docs.conda.io/en/latest/miniconda.html).
-
-```
-conda env create -f environment.yml
-```
-
-**Remember to activate the environment**
-
-3. Install GeneMarkS-T gene caller
-
-The [GeneMarkS-T](http://exon.gatech.edu/GeneMark/) gene caller software used in this workflow can be 
-downloaded for Linux from [this download page](http://topaz.gatech.edu/GeneMark/license_download.cgi).
-Activate the workflow environment created in the step above, then you can install 
-GeneMarkS-T by extracting the archive directly into the environment path:
+2. Install [pixi](https://pixi.sh/latest).
 
 ```bash
-tar -C $CONDA_PREFIX/bin/ -xvf gmst_linux_64.tar.gz
+curl -fsSL https://pixi.sh/install.sh | bash
 ```
 
-**IMPORTANT**: Because the workflow relies on conda to handle dependencies for
-most steps it is important to always add the `--use-conda` flag to snakemake. 
-Even better is actually to install `mamba` (a more efficient replacement for
-conda) and have snakemake use that instead by adding `--conda-frontend mamba`
-to the command line.
+3. Install base environment with pixi:
 
-## Sample data
-The workflow requires a list of samples to use as input. By default the 
-workflow looks for a file called `sample_list.tsv` in the working directory
- but you can name it whatever you like and specify the path with 
- `snakemake --config sample_file_list=<path-to-your-samplefile>`. Data for these
-samples can either be present on disk or in a remote sequence read archive.
+```
+pixi shell
+```
+
+## Configuration
+
+The workflow can be configured using a configuration file in YAML format. The
+default configuration file is included in this repo as `config.yml` in the
+repository root. The best practice is to make a copy of this file and apply any
+changes needed in the copy, _e.g._:
+
+```bash
+cp config.yml myconfig.yml
+```
+
+### Sample data
+The workflow requires a list of samples to use as input. By default the workflow
+looks for a file called `sample_list.tsv` in the working directory but this can
+be configured using the `sample_file_list` parameter in the configuration file.
+
+The sample list should be tab-separated and contain a header as the first line.
+An example sample list is shown below:
+
+| Sample | R1 | R2 | assembly |
+| ------ | -- | -- | -------- |
+| sample1 | data/sample1_R1.fastq.gz | data/sample1_R2.fastq.gz | co-assembly |
+| sample2 | data/sample2_R1.fastq.gz | data/sample2_R2.fastq.gz | co-assembly |
+
+In this example there are two samples `sample1` and `sample2`. The `Sample`
+column (required) specifies the name of the samples which will be used in the
+workflow output. The `R1` and `R2` columns specify the path (absolute or
+relative) to the R1 and R2 fastq files, respectively. The `assembly` column
+(optional) specifies the co-assemblies to generate. If this column is omitted
+then no co-assemblies will be generated, even if you've set `co_assembly: True`
+in the configuration file (see below). You can exclude the `assembly` column and
+set `single_assembly: True` in the configuration file which will generate one
+individual assembly per sample.
+
+If you have data in a public sequencing archive, such as SRA, then you can exclude the `R1` and `R2` columns and instead add a column called `accession` which lists the archive accession (one per sample). The workflow will then download the R1 and R2 files and store them under 
 
 ### Option1: Raw data on disk
 Let's say you have your raw data downloaded and stored in a directory
