@@ -89,8 +89,25 @@ rule star_build_host:
     """
     output:
         expand("resources/host/{f}",
-            f = ["Genome", "SA", "SAindex", "chrLength.txt", "chrName.txt",
-                 "chrNameLength.txt", "chrStart.txt", "genomeParameters.txt", "Log.out"])
+            f = [
+                "Genome", 
+                 "SA", 
+                 "SAindex", 
+                 "chrLength.txt", 
+                 "chrName.txt",
+                 "chrNameLength.txt", 
+                 "chrStart.txt", 
+                 "exonGeTrInfo.tab",
+                 "exonInfo.tab",
+                 "geneInfo.tab",
+                 "genomeParameters.txt",
+                 "sjdbInfo.txt", 
+                 "sjdbList.fromGTF.out.tab",
+                 "sjdbList.out.tab",
+                 "transcriptInfo.tab",
+                 "Log.out"
+                 ]
+        )
     input:
         fna=config["host_fna"],
         gff=config["host_gff"]
