@@ -19,11 +19,14 @@ git clone https://github.com/NBISweden/fungal-trans.git
 curl -fsSL https://pixi.sh/install.sh | bash
 ```
 
-3. Install base environment with pixi:
+3. Install and activate the environment with pixi:
 
 ```
 pixi shell
 ```
+
+The `pixi shell` command needs to be run first any time you want to run the
+workflow.
 
 ## Configuration
 
@@ -36,7 +39,8 @@ changes needed in the copy, _e.g._:
 cp config.yml myconfig.yml
 ```
 
-### Sample data
+### Sample list
+
 The workflow requires a list of samples to use as input. By default the workflow
 looks for a file called `sample_list.tsv` in the working directory but this can
 be configured using the `sample_file_list` parameter in the configuration file.
@@ -59,42 +63,57 @@ in the configuration file (see below). You can exclude the `assembly` column and
 set `single_assembly: True` in the configuration file which will generate one
 individual assembly per sample.
 
-If you have data in a public sequencing archive, such as SRA, then you can exclude the `R1` and `R2` columns and instead add a column called `accession` which lists the archive accession (one per sample). The workflow will then download the R1 and R2 files and store them under 
+If you have data in a public sequencing archive, such as SRA, then you can
+exclude the `R1` and `R2` columns and instead add a column called `accession`
+which lists the archive accession (one per sample). The workflow will then
+download the R1 and R2 files and store them in the directory specified by the
+`datadir` config parameter.
 
-### Option1: Raw data on disk
-Let's say you have your raw data downloaded and stored in a directory
-called `/home/data/raw` and your study contains 3 samples called 
-sample1, sample2 and sample3. Let's also say you want to make a co-assembly
-of samples 2 and 3 and assemble sample 1 separately. Then your **tab-separated**
- sample file list should look like this:  
+### JGI login info
 
-| sample | Read_file | Pair_file | assembly |
-|--------|-----------|-----------|----------|
-|sample1|sample1_1.fastq.gz|sample1_2.fastq.gz|assembly1|
-|sample2|sample2_1.fastq.gz|sample2_2.fastq.gz|assembly2|
-|sample3|sample3_1.fastq.gz|sample3_2.fastq.gz|assembly2|
+Some steps of the workflow require that files are downloaded from [JGI
+Mycocosm](https://mycocosm.jgi.doe.gov/mycocosm/home). To make this work you
+need to have login credentials which you can obtain by registering
+[here](https://contacts.jgi.doe.gov/registration/new). Once you have your
+password, add your email adress and password to a YAML file like in the example
+below:
 
-In this example, we'll name sample file list `sample_list.tsv`. You can
-then run the workflow for these samples with:
+```yaml
+jgi_user: "your.email@adress.com"
+jgi_password: "your-password"
 ```
-snakemake -p --use-conda -n
-```
 
-See below for more information on how to **configure** and **run** the
-workflow.
+then modify your configuration file so that the `jgi_account_info` parameter
+points to the file with your credentials.
 
-### Option2: Data in a sequence read archive
+Information about genomes found in the JGI Mycocosm database will be stored in `resources/JGI/genomes.tsv`. This file will be available after a dry-run of the workflow so you may inspect it before running the workflow. The file should look like this:
 
-If you have data in a public data repository such as the [SRA](https://www.ncbi.nlm.nih.gov/sra)
-then you can add the accession numbers directly to the sample list:
+| portal | Name | bp | genes |
+|--------|------|----|------|
+| Aaoar1 | Aaosphaeria arxii CBS 175.79 v1.0 | 38901049 | 14203 |
+| Abobi1 | Abortiporus biennis CCBS 521 v1.0 | 45165060 | 11987 |
+| Abobie1 | Abortiporus biennis ​CIRM-BRFM 1778 v1.0 | 33118568 | 11767 |
 
-| Sample  |  accession  | assembly  |
-| ------- | ----------- | --------- |
-| needle | ERX3761257  | needle_asm |
-| root | ERX3761470  | root_asm |
+The `portal` column contains the JGI portal name, `Name` is the name of the genome, `bp` is the size of the genome in base pairs and `genes` is the number of genes in the genome. You may filter this file to your liking to only download transcripts for the genomes you are interested in. Remember to save it as `resources/JGI/genomes.tsv` before running the workflow.
 
-This will make the workflow download the fastq data using `sra-tools` prior
-to starting.
+### Host filtering
+
+In order to filter host reads from your input a host genome fasta file and GFF
+file needs to be specified in your configuration file with the `host_fna` and
+`host_gff` parameters, respectively. Both these files should be gzipped.
+
+### Generating a custom taxonomy database
+
+Assembled transcripts are annotated taxonomically using MMSeqs2 using one of the
+official databases with taxonomy support (see configuration parameters
+`mmseqs_db_dir` and `mmseqs_db`). However, if you want to supplement the
+taxonomy database with additional reference proteins from JGI Mycocosm you need
+to supply a list of these genomes in JGI Mycocosm. The file should be
+tab-separated and have a header as the first row. The first column should
+contain the portal name in JGI Mycocosm and the second column should have the
+NCBI taxonomy id of the genome. An example file is included in the workflow as
+`extra_JGI_genomes.tsv` in the root of the repository. The file of extra genomes
+to use can be specified with the `extra_genomes` config parameter.
 
 ## Running the workflow
 
