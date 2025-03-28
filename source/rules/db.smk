@@ -7,7 +7,8 @@ localrules:
     download_jgi_transcripts,
     download_jgi_proteins,
     concat_proteins,
-    mmseqs_filter_fungalDB
+    mmseqs_filter_fungalDB,
+    mmseqs_create_taxidmap
 
 # eggnog
 
@@ -221,20 +222,18 @@ rule mmseqs_create_taxidmap:
         lookupfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}.lookup"),
     threads: 1
     run:
-        import pandas as pd
-        protmap = pd.read_csv(input.lookupfile, 
-                                sep="\t", 
-                                index_col=0, 
-                                header=None, 
-                                usecols=[0,1], 
-                                names=["id","accession"])
-        taxmap = pd.read_csv(input.mapfile,
-                                sep="\t", 
-                                index_col=0, 
-                                header=None, 
-                                usecols=[0,1], 
-                                names=["id", "taxid"])
-        pd.merge(protmap, taxmap, left_index=True, right_index=True).to_csv(output.tsv, sep="\t", header = False, index=False)
+        import polars as pl
+        protmap = pl.scan_csv(
+            input.lookupfile, 
+            separator="\t", 
+            has_header=False, 
+            with_column_names=lambda cols: [{"column_1": "id", "column_2": "accession", "column_3": "column_3"}[col] for col in cols]).select(["id","accession"])
+        taxmap = pl.scan_csv(
+            input.mapfile, 
+            separator="\t", 
+            has_header=False, 
+            with_column_names=lambda cols: [{"column_1": "id", "column_2": "taxid", "column_3": "column_3"}[col] for col in cols]).select(["id","taxid"])
+        protmap.join(taxmap, on="id").sink_csv(output.tsv, separator="\t")
 
 
 rule download_taxdump:
@@ -302,10 +301,12 @@ rule get_kegg_files:
         expand("resources/kegg/{f}",
             f = ["kegg_ec2pathways.tsv","kegg_ko2ec.tsv",
                  "kegg_ko2pathways.tsv","kegg_kos.tsv","kegg_modules.tsv","kegg_pathways.tsv"])
+    log:
+        "resources/kegg/get_kegg_files.log"
     params:
         dldir = "resources/kegg",
         src = workflow.source_path("../utils/eggnog-parser.py"),
     shell:
         """
-        python {params.src} download {params.dldir}
+        python {params.src} download {params.dldir} > {log} 2>&1
         """
