@@ -28,6 +28,7 @@ def parse_sample_list(f, config):
     """
     samples = {}
     map_dict = {}
+    kraken_db = config["kraken_db"]
     paired_strategy = config["paired_strategy"]
     k = config["strobealign_strobe_len"]
     kraken_db = config["kraken_db"]
@@ -68,6 +69,9 @@ def parse_sample_list(f, config):
         elif sample_string == "nohost.":
             R1_f = f"results/filtered/{sample}/{sample}_R1.nohost.fastq.gz"
             R2_f = f"results/filtered/{sample}/{sample}_R2.nohost.fastq.gz"
+        elif sample_string == "kraken.":
+            R1_f = f"results/kraken/{kraken_db}/{sample}/taxbins/Fungi_R1.fastq.gz"
+            R2_f = f"results/kraken/{kraken_db}/{sample}/taxbins/Fungi_R2.fastq.gz"
         else:
             R1_f = f"results/filtered/{sample}/{sample}_R1.{sample_string}fastq.gz"
             R2_f = f"results/filtered/{sample}/{sample}_R2.{sample_string}fastq.gz"
