@@ -174,26 +174,23 @@ rule trinity_normalize:
         max_cov = config["insilico_norm_max_cov"],
         R1 = lambda wildcards: ",".join(sorted(assemblies[wildcards.assembly]["R1"])),
         R2 = lambda wildcards: ",".join(sorted(assemblies[wildcards.assembly]["R2"])),
-        tmpdir="$TMPDIR/{assembly}.norm",
+        outdir=lambda wildcards, output: os.path.dirname(output.R1),
         mem=config["insilico_norm_mem"],
     resources:
         mem_mb = int(config["insilico_norm_mem"] * 1.28 * 1000)
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
+    shadow: "minimal"
     threads: 10
     shell:
         """
-        mkdir -p {params.tmpdir}
-        echo -e {params.R1} | tr "," "\n" > {params.tmpdir}/R1.list
-        echo -e {params.R2} | tr "," "\n" > {params.tmpdir}/R2.list
+        echo -e {params.R1} | tr "," "\n" > R1.list
+        echo -e {params.R2} | tr "," "\n" > R2.list
         $TRINITY_HOME/util/insilico_read_normalization.pl --seqType fq --JM {params.mem}G --max_cov {params.max_cov} \
-            --left_list {params.tmpdir}/R1.list --right_list {params.tmpdir}/R2.list \
-            --pairs_together --PARALLEL_STATS --CPU {threads} --output {params.tmpdir} --tmp_dir_name out > {log} 2>&1
-        gzip -c {params.tmpdir}/left.norm.fq > {params.tmpdir}/left.norm.fq.gz
-        gzip -c {params.tmpdir}/right.norm.fq > {params.tmpdir}/right.norm.fq.gz
-        mv {params.tmpdir}/left.norm.fq.gz {output.R1}
-        mv {params.tmpdir}/right.norm.fq.gz {output.R2}
-        rm -r {params.tmpdir}
+            --left_list R1.list --right_list R2.list \
+            --pairs_together --PARALLEL_STATS --CPU {threads} --output . --tmp_dir_name out > {log} 2>&1
+        gzip -c left.norm.fq > {output.R1}
+        gzip -c right.norm.fq > {output.R2}
         """
 
 rule transabyss_co:
