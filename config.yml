@@ -111,7 +111,7 @@ fc_params: "-s 2 -p -t exon -g Parent -Q 10 --countReadPairs"
 # Use the settings below for strandedness
 # if using IlluminaTruSeq Stranded libraries this should be '–rf-stranded'
 # for Standard Illumina, this should be an empty string ("")'
-kallisto_params: "–rf-stranded"
+kallisto_params: "--rf-stranded"
 
 ## ANNOTATION ##
 ## MMseqs2 paths ##
