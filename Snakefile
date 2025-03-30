@@ -200,24 +200,20 @@ def all_input(wildcards):
         )
     )
     # kraken taxbins
+    if config["host_filter"]:
+        host_string = ".nohost"
+    else:
+        host_string = ""
     inputs.extend(
         expand(
-            "results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}_R{i}.nohost.fastq.gz",
+            "results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}_R{i}{host_string}.fastq.gz",
             kraken_db=config["kraken_db"],
             sample_id=samples.keys(),
             taxname=config["taxmap"].keys(),
-            i=[1,2]
+            i=[1,2],
+            host_string=host_string
         )
     )
-    if config["kraken_filter"]:
-        inputs.extend(
-            expand(
-                "results/filtered/{sample_id}/{sample_id}_R{i}.fungi.{paired_strategy}.nohost.kraken.fastq.gz",
-                sample_id=samples.keys(),
-                i=[1,2],
-                paired_strategy=config["paired_strategy"],
-            )
-        )
 
     # Co-assemblies
     if config["co_assembly"]:
