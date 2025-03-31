@@ -64,9 +64,9 @@ rule parse_kallisto_co:
         tsv=rules.kallisto_quant_co.output.tsv
     run:
         df = pd.read_csv(input.tsv, sep="\t", index_col=0, header=0, comment="#", usecols=[0,3,4], names=["gene_id", "est_counts", "tpm"])
-        est = df.loc[:, ["gene_id", "est_counts"]]
+        est = df.loc[:, ["est_counts"]]
         est.columns=[wildcards.sample_id]
-        tpm = df.loc[:, ["gene_id", "tpm"]]
+        tpm = df.loc[:, ["tpm"]]
         tpm.columns=[wildcards.sample_id]
         est.to_csv(output.est, sep="\t")
         tpm.to_csv(output.tpm, sep="\t")
