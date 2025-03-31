@@ -2,4 +2,5 @@ rerun-triggers: "mtime"
 keep-going: True
 printshellcmds: True
 cores: 1
-software-deployment-method: "conda"
+software-deployment-method: "apptainer"
+use-conda: False
