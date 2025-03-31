@@ -4,6 +4,20 @@ This is a snakemake workflow originally developed for the N_Street_1801
 (Functional insights into the impacts of nitrogen fertilisation on forest
 belowground fungal metacommunities) project.
 
+## Table of contents
+
+- [Installation](#installation)
+- [Command line interface](#command-line-interface)
+  - [Running on the Dardel HPC system](#running-on-the-dardel-hpc-system)
+- [Configuration](#configuration)
+  - [Essential parameters](#essential-parameters)
+    - [Sample list](#sample-list)
+    - [JGI login info](#jgi-login-info)
+    - [Host filtering](#host-filtering)
+    - [Generating a custom taxonomy database](#generating-a-custom-taxonomy-database)
+  - [Additional parameters](#additional-parameters)
+    - [Data paths and sample info](#data-paths-and-sample-info)
+
 ## Installation
 To install this workflow do the following:
 
