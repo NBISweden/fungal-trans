@@ -1,11 +1,11 @@
 # Fungal metatranscriptomics workflow
 
-This is a snakemake workflow originally developed for the N_Street_1801 (Functional 
-insights into the impacts of nitrogen fertilisation on forest belowground
- fungal metacommunities) project.
+This is a snakemake workflow originally developed for the N_Street_1801
+(Functional insights into the impacts of nitrogen fertilisation on forest
+belowground fungal metacommunities) project.
 
 ## Installation
-To install this workflow:
+To install this workflow do the following:
 
 1. Clone the repository
 
@@ -27,6 +27,42 @@ pixi shell
 
 The `pixi shell` command needs to be run first any time you want to run the
 workflow.
+
+## Command line interface
+
+The workflow is executed using the `snakemake` command with the following syntax:
+
+```bash
+snakemake --configfile <your-configfile> --profile <profile>
+```
+
+Here, `--configfile` specifies a configuration file to use which contains parameters that modify the behaviour of the workflow (*e.g.* what input files to use, see below under [Configuration](#configuration)). The `--profile` flag specifies a configuration profile which modifies the behaviour of snakemake itself (*e.g.* number of cores and how to handle software requirements). There are two profiles included in this repository: 
+
+- The `dardel` profile is tailored for running on the [Dardel](https://www.pdc.kth.se/hpc-services/computing-systems/dardel-hpc-system) HPC system.
+- The `local` profile is more general and can be used to test the workflow on your local computer.
+
+Each profile has a subdirectory in the repository root containing a `config.yaml` file in YAML format:
+
+```bash
+./
+├── dardel
+│   └── config.yaml
+└── local
+    └── config.yaml
+```
+
+For both these profiles, the first section of `config.yaml` specifies several command line flags for Snakemake, *e.g.*:
+
+```yaml
+rerun-triggers: "mtime" # use modification time of files as a trigger for rerunning jobs
+keep-going: True # keep the workflow running as long as possible even if one job fails
+printshellcmds: True # print shell commands to stdout
+cores: 1 # cores to use
+software-deployment-method: "apptainer" # manage software requirements with apptainer
+use-conda: False # do not use conda
+```
+
+### Running on the Dardel HPC system
 
 ## Configuration
 
@@ -116,161 +152,3 @@ NCBI taxonomy id of the genome. An example file is included in the workflow as
 to use can be specified with the `extra_genomes` config parameter.
 
 ## Running the workflow
-
-### Configuration
-By default the workflow uses the configuration file `config.yml`.
-You can either make changes in that config file or copy the file and make
-your changes in the copy (_e.g._ `cp config.yml myconfig.yml`). To run the 
-workflow with another config file, lets say `myconfig.yml`, specify 
-`--configfile myconfig.yml` on the snakemake command line.
-
-### Running the full workflow
-To get an overview of the jobs that will be executed do:
-```
-snakemake --use-conda -j 4 -np
-```
-`-n` executes a 'dry-run' that doesn't actually do anything and instead
-the jobs to be run are printed to stdout (`-p` also prints the bash commands). 
-The `-j 4` parameter tells snakemake to run with 4 cores.
-
-### Running parts of the workflow
-The workflow is divided into steps that you can run separately. Below
-are descriptions of these targets, their output and how to run them.
-
-#### Preprocessing
-
-The preprocessing part will download fastq files for your samples, unless you
-start with files locally on disk as described above. Adapter trimming is 
-performed using cutadapt followed by quality trimming with trimmomatic. FastQC
-is then run on the trimmed sequences and summarized into a report using MultiQC.
-
-Here's an example of running the preprocessing part of the workflow: 
-```
-snakemake --use-conda -j 10 -p preprocess
-```
-
-#### Filter
-
-Preprocessed reads are filtered to separate fungal and host reads. This is done
-by first mapping reads to fungal transcripts, thus generating files with 
-putative fungi and non-fungi reads. The putative fungal reads are then mapped
-to a host database of choice, _e.g._ spruce, either using `bowtie2` or `STAR`. 
-Reads mapping to the host are combined with the non-fungal reads from the first
-filtering step and put into a 'host' sequence file under 
-`results/host/{sample_id}_R{1,2}.fastq.gz`. Reads that do not map to the host db
-at this stage are used for downstream assembly and annotation.
-
-The type of filtering performed is determined by the `read_source` config parameter.
-
-- With `read_source: bowtie2` filtering is done as described as above.
-- With `read_source: taxmapper` fungal reads are identified using [Taxmapper](https://bitbucket.org/dbeisser/taxmapper/src/master/).
-- With `read_source: filtered` both bowtie2 and taxmapper are used to identify 
-fungal reads and the union of reads identified by these methods are used for 
-downstream analyses.
-- With `read_source: unfiltered` no filtering is performed and preprocessed reads 
-  are directly used for downstream analyses.
-
-Here's an example of running up to and including the filtering part of the workflow: 
-```
-snakemake --use-conda -j 10 -p filter
-```
-
-##### Configuring login to JGI server
-
-The workflow automatically downloads transcript data from the [JGI Mycocosm](https://mycocosm.jgi.doe.gov/fungi/fungi.info.html) database. For this to work you must have [registered an account](https://contacts.jgi.doe.gov/registration/new). After registering, create a file in YAML format containing your login credentials:
-
-```yaml
-jgi_password: <your_password>
-jgi_user: <your_username/email>
-```
-
-Save this file as `jgi_login.yml` and pass it to the workflow with the `--configfile` flag:
-
-```bash
-snakemake --configfile jgi_login.yml <other flags>
-```
-
-Information about genomes found in the JGI Mycocosm database will be stored in `resources/JGI/genomes.tsv`. This file will be available after a dry-run of the workflow so you may inspect it before running the workflow. The file should look like this:
-
-| portal | Name | bp | genes |
-|--------|------|----|------|
-| Aaoar1 | Aaosphaeria arxii CBS 175.79 v1.0 | 38901049 | 14203 |
-| Abobi1 | Abortiporus biennis CCBS 521 v1.0 | 45165060 | 11987 |
-| Abobie1 | Abortiporus biennis ​CIRM-BRFM 1778 v1.0 | 33118568 | 11767 |
-
-The `portal` column contains the JGI portal name, `Name` is the name of the genome, `bp` is the size of the genome in base pairs and `genes` is the number of genes in the genome. You may filter this file to your liking to only download transcripts for the genomes you are interested in. Remember to save it as `resources/JGI/genomes.tsv` before running the workflow.
-
-
-#### Assembly
-
-Assemblies can be generated for single samples or by combining multiple samples
-into co-assemblies. You can choose to assemble with either [Trinity](https://github.com/trinityrnaseq/trinityrnaseq),
-[Trans-ABySS](https://github.com/bcgsc/transabyss) or [Megahit](https://github.com/voutcn/megahit)
-assemblers, configurable via the `assembler` config parameter. 
-
-When `single-assembly` is set to `True` in the config, preprocessed and filtered 
-reads from each sample are individually assembled using the configured assembler.
-
-When `co-assembly` is set to `True`, the `sample_file_list` must contain an 
-'assembly' column that groups samples into co-assembly groups, _e.g._:
-
-| sample | Read_file | Pair_file | assembly |
-|--------|-----------|-----------|----------|
-|sample1|sample1_1.fastq.gz|sample1_2.fastq.gz|assembly1|
-|sample2|sample2_1.fastq.gz|sample2_2.fastq.gz|assembly2|
-|sample3|sample3_1.fastq.gz|sample3_2.fastq.gz|assembly2|
-
-In this example, preprocessed and filtered reads from sample2 and sample3 will be
-combined into a co-assembly named `assembly2`. Note that prior to generating 
-co-assemblies, reads are deduplicated using `fastuniq`.
- 
-Here's an example of running up to and including the assembly part of the workflow: 
-```
-snakemake --use-conda -j 10 -p assemble
-```
-
-To generate co-assemblies:
-
-```
-snakemake --use-conda -j 10 -p co_assemble
-```
-
-#### Annotation
-
-Gene calling is done on assemblies using [GeneMarkS-T](http://topaz.gatech.edu/GeneMark/license_download.cgi).
-Translated amino acid sequences are then annotated functionally using [eggnog-mapper](https://github.com/eggnogdb/eggnog-mapper) and 
-the [dbCAN database](https://bcb.unl.edu/dbCAN/), and taxonomically using 
-[contigtax](https://github.com/NBISweden/contigtax).
-
-Here's an example of running up to and including the annotation part of the workflow: 
-```
-snakemake --use-conda -j 10 -p annotate
-```
-
-And to annotate co-assemblies:
-
-```
-snakemake --use-conda -j 10 -p annotate_co
-```
-
-### Running the workflow on a compute cluster
-
-The workflow comes with support for job-handling on compute clusters with the
-SLURM workload manager. Simply set your SLURM account id in the `config/cluster.yaml`
-file:
-
-````yaml
-__default__:
-  account: staff # <- REPLACE 'staff' with your account id
-````
-
-Then you can run the workflow as:
-
-```
-snakemake --use-conda --profile slurm -j 10 -p
-```
-
-Another option is to simply submit the entire workflow (in whole or in part) as
-one big SLURM job. The benefit of using `--profile slurm` is that resources are
-handled in a more fine grained way and that failed jobs can be resubmitted 
-automatically with longer run times.
