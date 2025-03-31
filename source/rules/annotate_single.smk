@@ -47,7 +47,7 @@ rule mmseqs_createquerydb_longorfs:
         query = rules.transdecoder_longorfs.output[0],
     log:
         "results/annotation/{assembler}/{sample_id}/transdecoder/longorfs-queryDB.log"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     shell:
         """
@@ -68,10 +68,11 @@ rule mmseqs_firstpass_taxonomy:
     log:
         "results/annotation/{assembler}/{sample_id}/transdecoder/mmseqs_firstpass_taxonomy.{td_db}.log"
     threads: 4
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
+    shadow: "minimal"
     params:
-        tmp = lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_firstpass_taxonomy.{wildcards.assembler}.{wildcards.sample_id}.{wildcards.td_db}", 
+        tmp = lambda wildcards: f"mmseqs_firstpass_taxonomy.{wildcards.assembler}.{wildcards.sample_id}.{wildcards.td_db}", 
         split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
         output = lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
         ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
@@ -98,7 +99,7 @@ rule mmseqs_convertali:
         query = rules.mmseqs_createquerydb_longorfs.output,
     log:
         "results/annotation/{assembler}/{sample_id}/transdecoder/{td_db}.convertali.log"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     params:
         alignment = lambda wildcards, input: os.path.splitext(input.alignment[0])[0]
@@ -138,7 +139,7 @@ rule mmseqs_createtsv_first:
         result = rules.mmseqs_firstpass_taxonomy.output.tax
     log:
         "results/annotation/{assembler}/{sample_id}/taxonomy/{td_db}/mmseqs_createtsv_first.log"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     params:
         result = lambda wildcards, input: f"{os.path.dirname(input.result[0])}/{wildcards.td_db}-taxaDB",
@@ -200,16 +201,16 @@ rule mmseqs_secondpass_taxonomy:
         expand("results/annotation/{{assembler}}/{{sample_id}}/taxonomy/{mmseqs_db}/mmseqs_secondpass_taxonomy.log", mmseqs_db = config["mmseqs_db"])
     params:
         output = lambda wildcards, output: f"{os.path.dirname(output[0])}/secondpass-taxresult",
-        tmp = lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.sample_id}", 
+        tmp = lambda wildcards: f"mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.sample_id}", 
         ranks = "superkingdom,kingdom,phylum,class,order,family,genus,species",
         split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
-        target = lambda wildcards, input: (input.target).replace("_taxonomy", "")
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+        target=lambda wildcards, input: (input.target[0])
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
+    shadow: "copy-minimal"
     threads: 10
     shell:
         """
-        mkdir -p {params.tmp}
         mmseqs easy-taxonomy {input.query} {params.target} {params.output} {params.tmp} \
             --lca-ranks {params.ranks} --lca-mode 3 --tax-lineage 1 --split-memory-limit {params.split_memory_limit}M \
             --threads {threads} > {log} 2>&1
@@ -302,12 +303,12 @@ rule emapper_search:
     params:
         data_dir = lambda wc, input: os.path.dirname(input.db),
         out = "annotation_results",
-        tmpdir = "$TMPDIR/eggnog/{assembler}/{sample_id}",
-        tmp_out = "$TMPDIR/eggnog/{assembler}/{sample_id}/annotation_results",
+        tmpdir = "{assembler}/{sample_id}",
+        tmp_out = "{assembler}/{sample_id}/annotation_results",
         outdir = lambda wc, output: os.path.dirname(output[0]),
     log: "results/annotation/{assembler}/{sample_id}/eggNOG/emapper.log"
     threads: 10
-    #shadow: "shallow"
+    shadow: "minimal"
     conda: "../../envs/emapper.yaml"
     container: "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
     shell:
@@ -332,7 +333,6 @@ rule emapper_annotate_hits:
         mmseqs_db=f"{config['emapper_db_dir']}/mmseqs/mmseqs.db"
     params:
         data_dir = lambda wc, input: os.path.dirname(input.db),
-        tmpdir = "$TMPDIR/eggnog/{assembler}/{sample_id}",
         out = "results/annotation/{assembler}/{sample_id}/eggNOG/annotation_results",
     log: "results/annotation/{assembler}/{sample_id}/eggNOG/emapper.annotate.log"
     threads: 10

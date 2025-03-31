@@ -51,7 +51,7 @@ rule mmseqs_createquerydb_longorfs_co:
         query=rules.transdecoder_longorfs_co.output[0],
     log:
         "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/longorfs-queryDB.log"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     shell:
         """
@@ -72,14 +72,15 @@ rule mmseqs_firstpass_taxonomy_co:
     log:
         "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/mmseqs_firstpass_taxonomy_co.{td_db}.log"
     threads: 10
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     params:
-        tmp=lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_firstpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}.{wildcards.td_db}", 
+        tmp=lambda wildcards: f"mmseqs_firstpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}.{wildcards.td_db}", 
         split_memory_limit=lambda wildcards, resources: int(resources.mem_mb*.8),
         output=lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
         ranks="superkingdom,kingdom,phylum,class,order,family,genus,species",
         aln_dir=lambda wildcards, output: os.path.dirname(output.aln[0])
+    shadow: "minimal"
     resources:
         mem_mb=3600,
     shell:
@@ -89,7 +90,6 @@ rule mmseqs_firstpass_taxonomy_co:
             --lca-mode 3 --tax-output-mode 0 --lca-ranks {params.ranks} --tax-lineage 1 \
             --split-memory-limit {params.split_memory_limit}M --threads {threads} > {log} 2>&1
         mv {params.tmp}/latest/first.* {params.aln_dir}
-        rm -r {params.tmp}
         """
 
 rule mmseqs_convertali_co:
@@ -104,7 +104,7 @@ rule mmseqs_convertali_co:
         query=rules.mmseqs_createquerydb_longorfs_co.output
     log:
         "results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/{td_db}.convertali.log"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     params:
         alignment=lambda wildcards, input: os.path.splitext(input.alignment[0])[0]
@@ -145,7 +145,7 @@ rule mmseqs_createtsv_first_co:
         result=rules.mmseqs_firstpass_taxonomy_co.output.tax
     log:
         "results/annotation/co-assembly/{assembler}/{assembly}/taxonomy/{td_db}/mmseqs_createtsv_first_co.log"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     params:
         result=lambda wildcards, input: f"{os.path.dirname(input.result[0])}/{wildcards.td_db}-taxaDB",
@@ -209,18 +209,18 @@ rule mmseqs_secondpass_taxonomy_co:
         expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/mmseqs_secondpass_taxonomy_co.log", mmseqs_db=config["mmseqs_db"])
     params:
         output=lambda wildcards, output: f"{os.path.dirname(output[0])}/secondpass-taxresult",
-        tmp=lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}", 
+        tmp=lambda wildcards: f"{wildcards.assembler}.{wildcards.assembly}", 
         ranks="superkingdom,kingdom,phylum,class,order,family,genus,species",
         split_memory_limit=lambda wildcards, resources: int(resources.mem_mb*.8),
-        target=lambda wildcards, input: (input.target).replace("_taxonomy", "")
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+        target=lambda wildcards, input: (input.target[0])
+    shadow: "copy-minimal"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     threads: 10
     resources:
         mem_mb=8000
     shell:
         """
-        mkdir -p {params.tmp}
         mmseqs easy-taxonomy {input.query} {params.target} {params.output} {params.tmp} \
             --lca-ranks {params.ranks} --lca-mode 3 --tax-lineage 1 --split-memory-limit {params.split_memory_limit}M \
             --threads {threads} > {log} 2>&1
@@ -335,8 +335,8 @@ rule emapper_search_co:
     params:
         data_dir=lambda wc, input: os.path.dirname(input.db),
         out="annotation_results",
-        tmpdir="$TMPDIR/eggnog/{assembly}",
-        tmp_out="$TMPDIR/eggnog/{assembly}/annotation_results",
+        tmpdir="{assembly}",
+        tmp_out="{assembly}/annotation_results",
         outdir=lambda wc, output: os.path.dirname(output[0]),
     log: "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/emapper.log"
     threads: 10
@@ -348,8 +348,7 @@ rule emapper_search_co:
         mkdir -p {params.outdir}
         emapper.py -m mmseqs --mmseqs_db {input.mmseqs_db} --no_annot --no_file_comments --itype proteins --cpu {threads} \
             -i {input[0]} -o {params.out} --temp_dir {params.tmpdir} \
-            --output_dir {params.tmpdir} --data_dir {params.data_dir} 2>{log}
-        mv {params.tmp_out}.emapper.seed_orthologs {output[0]}
+            --output_dir {params.outdir} --data_dir {params.data_dir} 2>{log}
         """
 
 rule emapper_annotate_hits_co:
@@ -418,7 +417,7 @@ rule parse_eggnog_co:
         """
         python {params.src} parse {params.dldir} {input.f} {params.outdir} 2>{log}
         """
-
+#TODO: Fix quantifying
 rule quantify_eggnog_co:
     """
     Sums up read counts for each feature in the eggNOG database
@@ -432,10 +431,11 @@ rule quantify_eggnog_co:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.raw.tsv"
     params:
         src=workflow.source_path("../utils/eggnog-parser.py"),
-        tmpdir=os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "{db}")
+        tmpdir=os.path.join("{assembly}", "{db}")
+    shadow: "minimal"
     shell:
         """
-        mkdir -p {params.tmpdir}
+        mkdir {params.tmpdir}
         for f in {input.abundance};
         do
             base=$(basename $f)
@@ -443,7 +443,6 @@ rule quantify_eggnog_co:
             python {params.src} quantify $f {input.parsed} {params.tmpdir}/$sample.tsv
         done
         python {params.src} merge --sum {params.tmpdir}/*.tsv {output[0]}
-        rm -rf {params.tmpdir}
         """
 
 rule quantify_eggnog_normalized_co:
@@ -459,7 +458,8 @@ rule quantify_eggnog_normalized_co:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.norm.raw.tsv"
     params:
         src=workflow.source_path("../utils/eggnog-parser.py"),
-        tmpdir=os.path.join(os.path.expandvars("$TMPDIR"), "{assembly}", "norm", "{db}")
+        tmpdir=os.path.join("{assembly}", "norm", "{db}")
+    shadow: "minimal"
     shell:
         """
         mkdir -p {params.tmpdir}
@@ -470,7 +470,6 @@ rule quantify_eggnog_normalized_co:
             python {params.src} quantify --normalize {input.norm} $f {input.parsed} {params.tmpdir}/$sample.tsv
         done
         python {params.src} merge --sum {params.tmpdir}/*.tsv {output[0]}
-        rm -rf {params.tmpdir}
         """
 
 rule eggnog_tax_annotations:
@@ -496,8 +495,8 @@ rule eggnog_tax_annotations:
         if len(orfs) == 0:
             shell("touch {output}")
         else:
-            abundance=abundance.loc[set(orfs).intersection(set(abundance.index))]
-            parsed=parsed.loc[set(orfs).intersection(set(parsed.index))]
+            abundance=abundance.loc[list(set(orfs).intersection(set(abundance.index)))]
+            parsed=parsed.loc[list(set(orfs).intersection(set(parsed.index)))]
             tax_features=len(set(parsed.loc[:,parsed.columns[0]]))
             print("{}/{} features, {}/{} orfs matched".format(tax_features, features, len(orfs), orig_orfs))
             df=pd.merge(parsed, abundance, left_index=True, right_index=True)
