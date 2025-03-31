@@ -1,26 +1,23 @@
-# This is the configuration profile for the Dardel HPC system Read more about
-# the available partitions at https://support.pdc.kth.se/doc/support/
+# This is the configuration profile for the Dardel HPC system. Read more about
+# this system at https://support.pdc.kth.se/doc/.
 
-# There are 128 physical cores per node on Dardel, with 2 threads per core, and
-# each node has 256 GB of memory of which a certain amount is reserved for the
-# system, depending on the type of node.
+# Snakemake command line options
+keep-going: True
+printshellcmds: True
+rerun-triggers: mtime
+rerun-incomplete: True
+jobs: 200
+latency-wait: 5
+executor: slurm
+shadow-prefix: "$PDC_TMP"
+software-deployment-method: "apptainer"
+use-conda: False
+apptainer-args: "--bind /cfs/klemming,$PDC_TMP,/sw/data --env TMPDIR=$PDC_TMP"
 
-# Thin nodes: 227.328 GB available for jobs. This means that there is 227328 /
-# 256 = 888 MB of memory available per thread.
-
-# Large nodes: 456.704 GB available for jobs. This means that there is 456704 / 256
-# = 1784 MB of memory available per thread.
-
-# Huge nodes: 915.456 GB available for jobs. This means that there is 915456 / 128
-# = 3576 MB of memory available per thread.
-
-# Giant nodes: 1.832.960 GB available for jobs. This means that there is 1832960
-# / 128 = 7160 MB of memory available per thread.
-
-# the resource definitions below specify the default used by all rules unless overridden by 
+# The resource definitions below specify the default used by all rules unless overridden by 
 # the set-resources section
 default-resources: 
-  slurm_account: naiss2024-22-1346
+  slurm_account: <your-slurm-account>
   slurm_partition: shared
   runtime: 120
 
@@ -45,7 +42,8 @@ set-resources:
     runtime: 60
   mmseqs_createtaxdb:
     runtime: 60
-    mem_mb: 3552
+    slurm_partition: main
+    mem_mb: 250000
   mmseqs_secondpass_taxonomy_co:
     runtime: 240
     mem_mb: 35520
@@ -138,12 +136,12 @@ set-resources:
     mem_mb: 88800
   featurecount:
     runtime: 60
+  emapper_search:
+    runtime: 300
+    mem_mb: 88800
   emapper_search_co:
     runtime: 300
-    mem_mb: 71040
-  contigtax_search_co:
-    runtime: 2880
-    mem_mb: 128000
+    mem_mb: 88800
   assign_taxonomy_co:
     mem_mb: 64000
   emapper_annotate_hits_co:
@@ -210,15 +208,9 @@ set-resources:
     runtime: 180
     mem_mb: 7104
 
-# Snakemake command line options
-keep-going: True
-printshellcmds: True
-rerun-triggers: mtime
-rerun-incomplete: True
-jobs: 200
-latency-wait: 5
-executor: slurm
-shadow-prefix: "$PDC_TMP"
-software-deployment-method: "apptainer"
-use-conda: False
-apptainer-args: "--bind /cfs/klemming,$PDC_TMP,/sw/data --env TMPDIR=$PDC_TMP"
+set-threads:
+  emapper_search_co: 50
+  emapper_search: 50
+  mmseqs_createtaxdb: 20
+  mmseqs_secondpass_taxonomy_co: 20
+  mmseqs_secondpass_taxonomy: 20
