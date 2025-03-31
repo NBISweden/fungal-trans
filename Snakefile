@@ -46,7 +46,6 @@ config["mmseqs_db_path"] = os.path.join(config["mmseqs_db_dir"], config["mmseqs_
 if config["extra_genomes"] != "":
     extra_genomes = parse_extra_genomes(config["extra_genomes"])
     config["refine_taxonomy"] = True
-    config["mmseqs_refine_db"] = f"resources/mmseqs2/combined-fungi-{config['mmseqs_db']}_taxonomy"
 else:
     config["mmseqs_refine_db"] = ""
     config["refine_taxonomy"] = False
