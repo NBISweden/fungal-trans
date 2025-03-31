@@ -144,8 +144,24 @@ def parse_extra_genomes(f):
 
 def get_mmseq_taxdb(wildcards):
     if config["refine_taxonomy"]:
-        return config["mmseqs_refine_db"]
-    return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
+        db = f"resources/mmseqs2/combined-fungi-{config['mmseqs_db']}"
+    else:
+        db = os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"])
+    return [db] + expand(
+        "{db}{ext}",
+        db=db,
+        ext=[
+            ".dbtype",
+            "_h",
+            "_h.dbtype",
+            "_h.index",
+            ".index",
+            ".lookup",
+            ".source",
+            "_taxonomy",
+            "_mapping",
+        ],
+    )
 
 
 def write_fungal_proteins(parsed, indir, outdir):
