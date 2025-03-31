@@ -150,7 +150,7 @@ rule mmseqs_extract_fungalDB:
     log:
         "resources/mmseqs2/extract_fungal_{mmseqs_db}_mmseqsDB.log"
     conda: "../../envs/mmseqs.yaml"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     threads: 1
     shell:
         """
@@ -166,7 +166,7 @@ rule mmseqs_convert2fasta_fungalDB:
     input:
         db=rules.mmseqs_extract_fungalDB.output.db
     conda: "../../envs/mmseqs.yaml"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     threads: 1
     shell:
         """
@@ -204,7 +204,7 @@ rule mmseqs_createseqdb:
     log:
         "resources/mmseqs2/create-fungi-{mmseqs_db}-seqdb.log"
     conda: "../../envs/mmseqs.yaml"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     threads: 1
     shell:
         """
@@ -256,24 +256,25 @@ rule mmseqs_createtaxdb:
     Creates a taxonomy database for the concatenated protein database
     """
     output:
-        db_files=expand("resources/mmseqs2/combined-fungi-{{mmseqs_db}}{ext}",  ext=["_taxonomy","_mapping"])
+        taxonomy="resources/mmseqs2/combined-fungi-{mmseqs_db}_taxonomy",
+        mapping="resources/mmseqs2/combined-fungi-{mmseqs_db}_mapping"
     input:
         db=rules.mmseqs_createseqdb.output.db,
+        db_files=rules.mmseqs_createseqdb.output.db_files,
         mapfiles=[rules.mmseqs_create_taxidmap.output.tsv, rules.concat_proteins.output.mapping],
         taxdump=rules.download_taxdump.output
     log:
         "resources/mmseqs2/createtaxdb-combined-fungi-{mmseqs_db}.log"
     conda: "../../envs/mmseqs.yaml"
-    container: "docker://quay.io/biocontainers/mmseqs2:16.747c6--pl5321h6a68c12_0"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
+    shadow: "copy-minimal"
     params:
         taxdump = lambda wc, input: os.path.dirname(input.taxdump[0]),
-        tmpdir = os.environ.get("TMPDIR", "scratch"),
-        mapfile = lambda wc: f"resources/mmseqs2/combined-fungi-{wc.mmseqs_db}.mapping.tsv"
     threads: 1
     shell:
         """
-        cat {input.mapfiles} > {params.mapfile}
-        mmseqs createtaxdb {input.db} {params.tmpdir} --ncbi-tax-dump {params.taxdump} --tax-mapping-file {params.mapfile} --threads {threads} > {log} 2>&1
+        cat {input.mapfiles} > mapfile.tsv
+        mmseqs createtaxdb {input.db} tmp --ncbi-tax-dump {params.taxdump} --tax-mapping-file mapfile.tsv --threads {threads} > {log} 2>&1
         """
 
 ## Protein databases ##
