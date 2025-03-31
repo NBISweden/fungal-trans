@@ -43,7 +43,7 @@ Here, `--configfile` specifies a configuration file to use which contains parame
 
 Each profile has a subdirectory in the repository root containing a `config.yaml` file in YAML format:
 
-```bash
+```
 ./
 ├── dardel
 │   └── config.yaml
@@ -51,7 +51,7 @@ Each profile has a subdirectory in the repository root containing a `config.yaml
     └── config.yaml
 ```
 
-For both these profiles, the first section of `config.yaml` specifies several command line flags for Snakemake, *e.g.*:
+For both these profiles, the first section of the `config.yaml` file specifies several command line flags for Snakemake, *e.g.*:
 
 ```yaml
 rerun-triggers: "mtime" # use modification time of files as a trigger for rerunning jobs
@@ -59,10 +59,49 @@ keep-going: True # keep the workflow running as long as possible even if one job
 printshellcmds: True # print shell commands to stdout
 cores: 1 # cores to use
 software-deployment-method: "apptainer" # manage software requirements with apptainer
-use-conda: False # do not use conda
+```
+
+These options can be overridden by flags you specify on the command line, so for
+example to run with the `local` profile but give Snakemake more cores you can
+run:
+
+```bash
+snakemake --configfile <your-config-file> --profile local --cores 4
+```
+
+or to use Conda instead of Apptainer to handle software dependencies:
+
+```bash
+snakemake --configfile <your-config-file> --profile local --cores 4 --software-deployment-method conda
 ```
 
 ### Running on the Dardel HPC system
+
+1. Specify compute account
+
+The `dardel/config.yaml` file contains rule-specific resource settings tailored
+for the Dardel HPC system. The most important thing you will have to modify in
+this file is the `slum_account:` setting under the `default-resources:` section.
+By default this section looks like this:
+
+```yaml
+default-resources: 
+  slurm_account: <your-slurm-account>
+  slurm_partition: shared
+  runtime: 120
+```
+
+You will have to change the `<your-slurm-account>` part to match the compute
+account you want to use. This is typically in the form of `naissYYY-NN-NNNN`.
+
+2. Make sure `apptainer` is in your path
+
+By default the `dardel` profile is set up to use
+[Apptainer](https://apptainer.org/) to run most rules in isolated containers. For this to work you must either have installed `apptainer` somewhere on the Dardel system and added it to your `$PATH`, or you can simply run the following after you activate the pixi shell (see point 3 under [Installation](#installation) above):
+
+```bash
+module load PDC apptainer
+```
 
 ## Configuration
 
@@ -75,7 +114,9 @@ changes needed in the copy, _e.g._:
 cp config.yml myconfig.yml
 ```
 
-### Sample list
+### Essential parameters
+
+#### Sample list
 
 The workflow requires a list of samples to use as input. By default the workflow
 looks for a file called `sample_list.tsv` in the working directory but this can
@@ -105,14 +146,18 @@ which lists the archive accession (one per sample). The workflow will then
 download the R1 and R2 files and store them in the directory specified by the
 `datadir` config parameter.
 
-### JGI login info
+#### JGI login info
 
-Some steps of the workflow require that files are downloaded from [JGI
-Mycocosm](https://mycocosm.jgi.doe.gov/mycocosm/home). To make this work you
-need to have login credentials which you can obtain by registering
-[here](https://contacts.jgi.doe.gov/registration/new). Once you have your
-password, add your email adress and password to a YAML file like in the example
-below:
+If your config file has `fungi_filter: True` (to filter reads by mapping against
+JGI Mycocosm transcripts) or if the `extra_genomes:` is set to a non-empty
+string (pointing to a list of genomes to use for generating a custom taxonomy
+database, see below under [Generating a custom taxonomy
+database](#generating-a-custom-taxonomy-database)) this requires that files are
+downloaded from [JGI Mycocosm](https://mycocosm.jgi.doe.gov/mycocosm/home). To
+make this work you need to have login credentials which you can obtain by
+registering [here](https://contacts.jgi.doe.gov/registration/new). Once you have
+your password, add your email adress and password to a YAML file like in the
+example below:
 
 ```yaml
 jgi_user: "your.email@adress.com"
@@ -132,13 +177,13 @@ Information about genomes found in the JGI Mycocosm database will be stored in `
 
 The `portal` column contains the JGI portal name, `Name` is the name of the genome, `bp` is the size of the genome in base pairs and `genes` is the number of genes in the genome. You may filter this file to your liking to only download transcripts for the genomes you are interested in. Remember to save it as `resources/JGI/genomes.tsv` before running the workflow.
 
-### Host filtering
+#### Host filtering
 
 In order to filter host reads from your input a host genome fasta file and GFF
 file needs to be specified in your configuration file with the `host_fna` and
 `host_gff` parameters, respectively. Both these files should be gzipped.
 
-### Generating a custom taxonomy database
+#### Generating a custom taxonomy database
 
 Assembled transcripts are annotated taxonomically using MMSeqs2 using one of the
 official databases with taxonomy support (see configuration parameters
@@ -151,4 +196,18 @@ NCBI taxonomy id of the genome. An example file is included in the workflow as
 `extra_JGI_genomes.tsv` in the root of the repository. The file of extra genomes
 to use can be specified with the `extra_genomes` config parameter.
 
-## Running the workflow
+### Additional parameters
+
+Below are additional parameters which do not *require* modification to be able
+to run the workflow on your data.
+
+#### Data paths and sample info
+
+```yaml
+datadir: "data/raw"
+read_length: 150
+```
+
+When the `sample_file_list` contains accession ids for downloading directly from a public read archive, the `datadir` parameter sets the directory where fastq files are stored.
+
+The `read_length` parameter is used by the STAR aligner when generating the host genome index. If your samples have different read lengths, set this to the maximum among the samples.
