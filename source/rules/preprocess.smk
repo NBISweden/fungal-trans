@@ -22,11 +22,12 @@ rule download_fastq:
     log:
         os.path.join(config["datadir"], "{sample_id}.log")
     params:
-        tmpdir = "$TMPDIR/{sample_id}",
+        tmpdir = "{sample_id}",
         outdir = config["datadir"],
         dlparams = config["dlparams"],
         acc=lambda wildcards: generate_sra_acc(wildcards)
     conda: "../../envs/sratools.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/sra-tools:3.1.1--h4304569_2"
     shell:
         """
@@ -37,7 +38,6 @@ rule download_fastq:
         pigz {params.tmpdir}/*_2.fastq > {output.R2}
         mv {params.tmpdir}/*_1.fastq.gz {output.R1}
         mv {params.tmpdir}/*_2.fastq.gz {output.R2}
-        rm -rf {params.tmpdir}
         """
 
 ##############
@@ -62,10 +62,11 @@ rule fastq_replace_ids:
         R2="results/preprocess/replace_ids/{sample_id}_R2.fastq.gz",
         mapfile="results/preprocess/replace_ids/{sample_id}.map",
     params:
-        R1sort = "$TMPDIR/{sample_id}_R1.sort.fastq",
-        R2sort = "$TMPDIR/{sample_id}_R2.sort.fastq",
+        R1sort = "{sample_id}_R1.sort.fastq",
+        R2sort = "{sample_id}_R2.sort.fastq",
         orig = "results/preprocess/replace_ids/{sample_id}.orig",
         renamed = "results/preprocess/replace_ids/{sample_id}.renamed"
+    shadow: "minimal"
     shell:
         """
         gunzip -c {input.R1} | paste - - - - | sort -k1,1 -t " " | tr "\t" "\n" > {params.R1sort}
@@ -75,7 +76,6 @@ rule fastq_replace_ids:
         seqkit seq -n -i {params.R1sort} > {params.orig}
         seqkit seq -n -i {output.R1} > {params.renamed}
         paste {params.orig} {params.renamed} > {output.mapfile}
-        rm {params.R1sort} {params.R2sort} {params.orig} {params.renamed}
         """
 
 rule fastp:
@@ -142,12 +142,13 @@ rule sortmerna_index:
     log:
         "resources/sortmerna/rRNA_databases_v4/index.log"
     params:
-        tmpdir="$TMPDIR/sortmerna_index",
+        tmpdir="sortmerna_index",
         outdir=lambda wildcards, output: os.path.dirname(output[0]),
     resources:
         runtime = 60
     threads: 2
     conda: "../../envs/sortmerna.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/sortmerna:4.3.6--h9ee0642_0"
     shell:
         """
@@ -156,7 +157,6 @@ rule sortmerna_index:
         sortmerna --workdir {params.tmpdir}/ --threads {threads} \
             --idx-dir {params.outdir} --reads {params.tmpdir}/tmp.fasta \
             --ref {input[0]} --task 1 --blast 1 --num_alignments 1 > {log} 2>&1
-        rm -r {params.tmpdir}
         """
 
 rule sortmerna:
@@ -176,15 +176,15 @@ rule sortmerna:
         run="results/preprocess/sortmerna/{sample_id}/run.log",
         stats="results/preprocess/sortmerna/{sample_id}/{sample_id}.aligned.log",
     params:
-        workdir="$TMPDIR/{sample_id}.sortmerna",
+        workdir="{sample_id}.sortmerna",
         idx_dir=lambda wildcards, input: os.path.dirname(input.ref)
     threads: 4
     conda:
         "../../envs/sortmerna.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/sortmerna:4.3.6--h9ee0642_0"
     shell:
         """
-        rm -rf {params.workdir}
         sortmerna --workdir {params.workdir}/ --threads {threads} --idx-dir {params.idx_dir} \
             --ref {input.ref} --reads {input.R1} --reads {input.R2} \
             --paired_in --out2 --fastx --blast 1 --num_alignments 1 --aligned --other -v >{log.run} 2>&1
@@ -193,7 +193,6 @@ rule sortmerna:
         mv {params.workdir}/out/other_fwd.fq.gz {output.R1}
         mv {params.workdir}/out/other_rev.fq.gz {output.R2}
         mv {params.workdir}/out/aligned.log {log.stats}
-        rm -rf {params.workdir}
         """
 
 rule fastqc:

@@ -17,12 +17,13 @@ rule transabyss:
         R2=lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     log: "results/assembly/transabyss/{sample_id}/{k}/log"
     conda: "../../envs/transabyss.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        tmpdir = "$TMPDIR/{sample_id}.{k}.transabyss",
-        R1 = "$TMPDIR/{sample_id}.{k}.transabyss/R1.fastq",
-        R2 = "$TMPDIR/{sample_id}.{k}.transabyss/R2.fastq",
+        tmpdir = "{sample_id}.{k}.transabyss",
+        R1 = "{sample_id}.{k}.transabyss/R1.fastq",
+        R2 = "{sample_id}.{k}.transabyss/R2.fastq",
         min_contig_len = config["min_contig_len"]
     threads: 16
     resources:
@@ -36,7 +37,6 @@ rule transabyss:
             --outdir {params.tmpdir} --name {wildcards.sample_id}.{wildcards.k} \
             --threads {threads} >{log} 2>&1
         mv {params.tmpdir}/* {params.outdir}
-        rm -rf {params.tmpdir}
         """
 
 rule transabyss_merge:
@@ -52,19 +52,19 @@ rule transabyss_merge:
     log:
         "results/logs/transabyss/{sample_id}.merge.log"
     conda: "../../envs/transabyss.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         mink = min(config["transabyss_kmers"]),
         maxk = max(config["transabyss_kmers"]),
         i = lambda wildcards, input: sorted(input[2:]),
         prefix = ["k{x}.".format(x=x) for x in sorted(config["transabyss_kmers"])],
-        tmpout = "$TMPDIR/{sample_id}.ta.merged.fa"
+        tmpout = "{sample_id}.ta.merged.fa"
     threads: 16
     resources:
         runtime = 60 * 24
     shell:
         """
-        rm -rf {params.tmpout}
         transabyss-merge {params.i} --mink {params.mink} --maxk {params.maxk} \
             --out {params.tmpout} --threads {threads} --force --prefixes {params.prefix} > {log} 2>&1
         mv {params.tmpout} {output.fa}
@@ -82,7 +82,7 @@ rule trinity:
     log: "results/assembly/trinity/{sample_id}/log"
     params:
         min_contig_len = config["min_contig_len"],
-        tmpdir="$TMPDIR/{sample_id}.trinity",
+        tmpdir="{sample_id}.trinity",
         outdir=lambda wildcards, output: os.path.dirname(output.fa),
         out_base = lambda wildcards, output: os.path.basename(output.fa),
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
@@ -91,6 +91,7 @@ rule trinity:
         runtime = 24 * 60,
         mem_mb = 5000
     conda: "../../envs/trinity.yaml"
+    shadow: "minimal"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
@@ -102,7 +103,6 @@ rule trinity:
             --seqType fq --max_memory {params.max_mem}G > {log} 2>&1
         mv {params.tmpdir}/* {params.outdir}/
         mv {params.tmpdir}.Trinity.fasta {output.fa}
-        rm -rf {params.tmpdir}
         """
 
 rule megahit:
@@ -117,9 +117,10 @@ rule megahit:
     params:
         min_contig_len = config["min_contig_len"],
         out_dir = "results/assembly/megahit/{sample_id}",
-        tmp_dir = "$TMPDIR/megahit/{sample_id}",
-        tmp_dir_base = "$TMPDIR/megahit"
+        tmp_dir = "megahit/{sample_id}",
+        tmp_dir_base = "megahit"
     conda: "../../envs/megahit.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/megahit:1.2.9--h43eeafb_5"
     threads: 10
     resources:
@@ -132,7 +133,6 @@ rule megahit:
             -t {threads} > {log} 2>&1
         mv {params.tmp_dir}/final.contigs.fa {output.fa}
         mv {params.tmp_dir}/opt* {params.out_dir}
-        rm -rf {params.tmp_dir}
         """
 
 #################
@@ -207,11 +207,12 @@ rule transabyss_co:
     container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         outdir=lambda wildcards, output: os.path.dirname(output[0]),
-        tmpdir="$TMPDIR/{assembly}.{k}.transabyss",
+        tmpdir="{assembly}.{k}.transabyss",
         min_contig_len=config["min_contig_len"],
-        R1="$TMPDIR/{assembly}.{k}.transabyss/R1.fastq",
-        R2="$TMPDIR/{assembly}.{k}.transabyss/R2.fastq"
+        R1="{assembly}.{k}.transabyss/R1.fastq",
+        R2="{assembly}.{k}.transabyss/R2.fastq"
     threads: 16
+    shadow: "minimal"
     resources:
         runtime = 60 * 24
     shell:
@@ -223,7 +224,6 @@ rule transabyss_co:
             --outdir {params.tmpdir} --name {wildcards.assembly} \
             --threads {threads} >{log} 2>&1
         mv {params.tmpdir}/* {params.outdir}
-        rm -rf {params.tmpdir}
         """
 
 rule transabyss_merge_co:
@@ -237,6 +237,7 @@ rule transabyss_merge_co:
             k = config["transabyss_kmers"])
     log: "results/co-assembly/transabyss/{assembly}/merge.log"
     conda: "../../envs/transabyss.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/transabyss:2.0.1--pyh864c0ab_7"
     params:
         mink = min(config["transabyss_kmers"]),
@@ -244,13 +245,12 @@ rule transabyss_merge_co:
         i=lambda wildcards, input: sorted(input),
         prefix=["k{x}.".format(x=x) for x in
                 sorted(config["transabyss_kmers"])],
-        tmpout="$TMPDIR/{assembly}.ta.merged.fa"
+        tmpout="{assembly}.ta.merged.fa"
     threads: 16
     resources:
         runtime = 60 * 10
     shell:
         """
-        rm -rf {params.tmpout}
         wd=$(pwd)
         transabyss-merge {params.i} --mink {params.mink} --maxk {params.maxk} \
             --out {params.tmpout} --threads {threads} --force --prefixes {params.prefix} > {log} 2>&1
@@ -269,7 +269,7 @@ rule trinity_co:
     log: "results/co-assembly/trinity/{assembly}/log"
     params:
         min_contig_len = config["min_contig_len"],
-        tmpdir="$TMPDIR/{assembly}.co.trinity",
+        tmpdir="{assembly}.co.trinity",
         outdir = lambda wildcards, output: os.path.dirname(output.fa),
         out_base = lambda wildcards, output: os.path.basename(output.fa),
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
@@ -278,6 +278,7 @@ rule trinity_co:
         runtime = 24 * 60,
         mem_mb = 5000
     conda: "../../envs/trinity.yaml"
+    shadow: "minimal"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
@@ -289,7 +290,6 @@ rule trinity_co:
             --seqType fq --max_memory {params.max_mem}G > {log} 2>&1
         mv {params.tmpdir}/* {params.outdir}/
         mv {params.tmpdir}.Trinity.fasta {params.outdir}/{params.out_base}
-        rm -rf {params.tmpdir}
         """
 
 rule megahit_co:
@@ -305,9 +305,10 @@ rule megahit_co:
     params:
         min_contig_len = config["min_contig_len"],
         out_dir = "results/co-assembly/megahit/{assembly}",
-        tmp_dir = "$TMPDIR/megahit/{assembly}",
-        tmp_dir_base = "$TMPDIR/megahit"
+        tmp_dir = "megahit/{assembly}",
+        tmp_dir_base = "megahit"
     conda: "../../envs/megahit.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/megahit:1.2.9--h43eeafb_5"
     threads: 20
     resources:
@@ -321,7 +322,6 @@ rule megahit_co:
             -t {threads} > {log} 2>&1
         mv {params.tmp_dir}/final.contigs.fa {output.fa}
         mv {params.tmp_dir}/* {params.out_dir}
-        rm -r {params.tmp_dir}
         """
 
 rule assembly_stats:

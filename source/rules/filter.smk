@@ -23,8 +23,9 @@ rule strobealign_map_fungi:
     log:
         "results/strobealign/{sample_id}/{chunk}/{sample_id}.strobealign.log"
     params:
-        tmpdir = "$TMPDIR/{sample_id}.{chunk}",
+        tmpdir = "{sample_id}.{chunk}",
         k = config["strobealign_strobe_len"]
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/strobealign:0.15.0--h5ca1c30_1"
     threads: 6
     shell:
@@ -114,7 +115,7 @@ rule star_build_host:
     log:
         "resources/host/star_build_host.log"
     params:
-        tmpdir="$TMPDIR/host",
+        tmpdir="host",
         limitGenomeGenerateRAM = config["star_limitGenomeGenerateRAM"]*1000000000,
         sjdbOverhang=config["read_length"] - 1,
         extra_params = config["star_extra_build_params"],
@@ -150,14 +151,15 @@ rule star_map_host:
         all="results/star/{sample_id}/map.log",
         stat="results/star/{sample_id}/{sample_id}.Log.final.out"
     params:
-        tmpdir = "$TMPDIR/{sample_id}",
-        prefix = "$TMPDIR/{sample_id}/{sample_id}.",
+        tmpdir = "{sample_id}",
+        prefix = "{sample_id}/{sample_id}.",
         genomedir = lambda wildcards, input: os.path.dirname(input.db[0]),
-        temp_bam = "$TMPDIR/{sample_id}/{sample_id}.Aligned.out.bam",
-        temp_log = "$TMPDIR/{sample_id}/{sample_id}.Log.out",
-        temp_stat = "$TMPDIR/{sample_id}/{sample_id}.Log.final.out",
+        temp_bam = "{sample_id}/{sample_id}.Aligned.out.bam",
+        temp_log = "{sample_id}/{sample_id}.Log.out",
+        temp_stat = "{sample_id}/{sample_id}.Log.final.out",
         setting = config["star_extra_params"]
     conda: "../../envs/star.yaml"
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/star:2.7.11b--h5ca1c30_5"
     threads: 10
     shell:
@@ -236,8 +238,9 @@ rule filter_with_kraken:
     log:
         "results/filtered/{sample_id}/{sample_id}.{paired_strategy}.filter_with_kraken.log"
     params:
-        tmpdir = "$TMPDIR/{sample_id}.{paired_strategy}",
+        tmpdir = "{sample_id}.{paired_strategy}",
         kraken_db=config["kraken_db"]
+    shadow: "minimal"
     shell:
         """
         exec &> {log}
@@ -249,5 +252,4 @@ rule filter_with_kraken:
         # Take the union of the prokaryota-removed reads and the fungi reads from Kraken2
         seqkit grep -f <(seqkit seq -n -i {input.R1_fungi} {params.tmpdir}/R1_nohost_noprok.fastq) {input.R1_pre} -o {output.R1}
         seqkit grep -f <(seqkit seq -n -i {input.R2_fungi} {params.tmpdir}/R2_nohost_noprok.fastq) {input.R2_pre} -o {output.R2}
-        rm -rf {params.tmpdir}
         """

@@ -71,11 +71,12 @@ rule run_kraken:
     threads: 16
     params:
         db = lambda wildcards: wildcards.kraken_db,
-        tmp = "$TMPDIR/{sample_id}.out",
+        tmp = "{sample_id}.out",
         unc_out = lambda wildcards, output: os.path.join(os.path.dirname(output[0]), wildcards.sample_id+ ".unclassified#.fastq.gz"),
     conda: "../../envs/kraken.yaml"
     container: "docker://quay.io/biocontainers/kraken2:2.1.3--pl5321h077b44d_4"
     group: "kraken"
+    shadow: "minimal"
     resources:
         slurm_partition=lambda wildcards: kraken_partition(wildcards)
     shell:
@@ -116,11 +117,12 @@ rule extract_kraken_reads:
     log:
         "results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}.extract_reads.log"
     params:
-        tmpdir="$TMPDIR/{taxname}.{sample_id}",
+        tmpdir="{taxname}.{sample_id}",
         taxids=lambda wildcards: " ".join([str(x) for x in config["taxmap"][wildcards.taxname]]),
-        R1="$TMPDIR/{taxname}.{sample_id}_R1.fastq",
-        R2="$TMPDIR/{taxname}.{sample_id}_R2.fastq",
+        R1="{taxname}.{sample_id}_R1.fastq",
+        R2="{taxname}.{sample_id}_R2.fastq",
     conda: "../../envs/kraken-tools.yaml" 
+    shadow: "minimal"
     container: "docker://quay.io/biocontainers/krakentools:1.1--pyh5e36f6f_0"
     shell:
         """
