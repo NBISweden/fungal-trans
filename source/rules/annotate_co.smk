@@ -75,12 +75,11 @@ rule mmseqs_firstpass_taxonomy_co:
     container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     params:
-        tmp=lambda wildcards: f"mmseqs_firstpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}.{wildcards.td_db}", 
+        tmp=lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_firstpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}.{wildcards.td_db}", 
         split_memory_limit=lambda wildcards, resources: int(resources.mem_mb*.8),
         output=lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
         ranks="superkingdom,kingdom,phylum,class,order,family,genus,species",
         aln_dir=lambda wildcards, output: os.path.dirname(output.aln[0])
-    shadow: "minimal"
     resources:
         mem_mb=3600,
     shell:
@@ -90,6 +89,7 @@ rule mmseqs_firstpass_taxonomy_co:
             --lca-mode 3 --tax-output-mode 0 --lca-ranks {params.ranks} --tax-lineage 1 \
             --split-memory-limit {params.split_memory_limit}M --threads {threads} > {log} 2>&1
         mv {params.tmp}/latest/first.* {params.aln_dir}
+        rm -r {params.tmp}
         """
 
 rule mmseqs_convertali_co:
@@ -209,11 +209,10 @@ rule mmseqs_secondpass_taxonomy_co:
         expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/mmseqs_secondpass_taxonomy_co.log", mmseqs_db=config["mmseqs_db"])
     params:
         output=lambda wildcards, output: f"{os.path.dirname(output[0])}/secondpass-taxresult",
-        tmp=lambda wildcards: f"{wildcards.assembler}.{wildcards.assembly}", 
+        tmp=lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.assembly}", 
         ranks="superkingdom,kingdom,phylum,class,order,family,genus,species",
         split_memory_limit=lambda wildcards, resources: int(resources.mem_mb*.8),
-        target=lambda wildcards, input: (input.target[0])
-    shadow: "copy-minimal"
+        target=lambda wildcards, input: (input.target).replace("_taxonomy", "")
     container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
     threads: 10
@@ -221,9 +220,11 @@ rule mmseqs_secondpass_taxonomy_co:
         mem_mb=8000
     shell:
         """
+        mkdir -p {params.tmp}
         mmseqs easy-taxonomy {input.query} {params.target} {params.output} {params.tmp} \
             --lca-ranks {params.ranks} --lca-mode 3 --tax-lineage 1 --split-memory-limit {params.split_memory_limit}M \
             --threads {threads} > {log} 2>&1
+        rm -r {params.tmp}
         """
 
 rule parse_mmseqs_second_co:
