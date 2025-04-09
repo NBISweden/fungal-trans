@@ -3,4 +3,3 @@ keep-going: True
 printshellcmds: True
 cores: 1
 software-deployment-method: "apptainer"
-use-conda: False
