@@ -11,7 +11,7 @@ slurm_partitions:
     medium_memory: "main"
     small_memory: "shared"
 
-## PATHS ##
+## DATA PATHS & SAMPLE INFO ##
 # Set work directory
 workdir: "."
 # Sample information file
@@ -22,8 +22,6 @@ sample_file_list: "sample_list.tsv"
 # each sample listed in the sample_file_list should have corresponding
 # R1 and R2 files under datadir
 datadir: "data/raw"
-
-## SAMPLE INFO ##
 # Set read length of samples
 # This is used by STAR when generating the genome index
 # If samples have different read lengths, set this to the maximum read length
@@ -40,7 +38,10 @@ fastp_length_required: 50
 ## FILTERING ##
 # How should reads be filtered?
 # Remove reads that map to the host genome?
-host_filter: True
+host_filter: False
+# Host files (fna and gff)
+host_fna: ""
+host_gff: ""
 # Retain reads that map to JGI mycocosm?
 fungi_filter: False
 # Use kraken2 to add fungal reads and remove prokaryutic reads?
@@ -63,9 +64,6 @@ fungi_genomes_file: "resources/JGI/genomes.tsv"
 # jgi_password: your_jgi_password
 # If you do not have a JGI account, you can create one at https://contacts.jgi.doe.gov/registration/new
 jgi_account_info: "config/jgi_account_info.yml"
-# Host files (fna and gff)
-host_fna: "data/Picab02_chromosomes_and_unplaced.fa.gz"
-host_gff: "data/Picab02_230926_at01_longest_no_TE_sorted.gff3.gz"
 # Strobealign parameters
 strobealign_strobe_len: 17
 # STAR parameters
