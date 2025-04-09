@@ -56,11 +56,11 @@ properties:
   filter_reads:
     type: boolean
     description: Whether to filter reads
-    default: true
+    default: false
   host_filter:
     type: boolean
     description: Whether to filter host reads
-    default: true
+    default: false
   fungi_filter:
     type: boolean
     description: Whether to retain reads that map to JGI mycocosm
