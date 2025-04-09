@@ -11,7 +11,6 @@ latency-wait: 5
 executor: slurm
 shadow-prefix: "$PDC_TMP"
 software-deployment-method: "apptainer"
-use-conda: False
 apptainer-args: "--bind /cfs/klemming,$PDC_TMP,/sw/data --env TMPDIR=$PDC_TMP"
 
 # The resource definitions below specify the default used by all rules unless overridden by 
@@ -138,10 +137,10 @@ set-resources:
     runtime: 60
   emapper_search:
     runtime: 300
-    mem_mb: 88800
+    mem_mb: 106560
   emapper_search_co:
     runtime: 300
-    mem_mb: 88800
+    mem_mb: 106560
   assign_taxonomy_co:
     mem_mb: 64000
   emapper_annotate_hits_co:
@@ -209,8 +208,8 @@ set-resources:
     mem_mb: 7104
 
 set-threads:
-  emapper_search_co: 50
-  emapper_search: 50
+  emapper_search_co: 60
+  emapper_search: 60
   mmseqs_createtaxdb: 20
   mmseqs_secondpass_taxonomy_co: 20
   mmseqs_secondpass_taxonomy: 20
