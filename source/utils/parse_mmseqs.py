@@ -35,6 +35,8 @@ def parse_mmseqs2(tsv, ranks):
     taxdf.fillna("unclassified", inplace=True)
     # Extract ranks from unique assignments
     lineage_df = split_ranks(taxdf, ranks)
+    # Set Eukaryota as first rank for Fungi
+    lineage_df.loc[lineage_df.kingdom=="Fungi", ranks[0]] = "Eukaryota"
     # Add last known rank to unclassified assignments
     lineage_df = add_last_known(lineage_df, ranks)
     # Merge rank assignments to taxonomy dataframe
