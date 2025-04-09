@@ -163,7 +163,7 @@ download the R1 and R2 files and store them in the directory specified by the
 #### JGI login info
 
 If your config file has `fungi_filter: True` (to filter reads by mapping against
-JGI Mycocosm transcripts) or if the `extra_genomes:` is set to a non-empty
+JGI Mycocosm transcripts) or if the `extra_genomes:` parameter is set to a non-empty
 string (pointing to a list of genomes to use for generating a custom taxonomy
 database, see below under [Generating a custom taxonomy
 database](#generating-a-custom-taxonomy-database)) this requires that files are
@@ -225,3 +225,40 @@ read_length: 150
 When the `sample_file_list` contains accession ids for downloading directly from a public read archive, the `datadir` parameter sets the directory where fastq files are stored.
 
 The `read_length` parameter is used by the STAR aligner when generating the host genome index. If your samples have different read lengths, set this to the maximum among the samples.
+
+#### Preprocessing
+
+```yaml
+fastp_adapter_sequence: "AGATCGGAAGAGCACACGTCTGAACTCCAGTCA"
+fastp_adapter_sequence_r2: "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
+fastp_length_required: 50
+```
+
+The parameters `fastp_adapter_sequence` and `fastp_adapter_sequence_r2` specify the adapter sequences to trim from the R1 and R2 files, respectively. The default values shown above are for Illumina TruSeq adapters.
+
+The `fastp_length_required` parameter sets the minimum read length required to keep reads after quality/adapter trimming.
+
+#### Filtering
+
+Filtering of reads can be done in various ways and is applied after
+adapter/quality trimming and removal of rRNA reads.
+
+```yaml
+host_filter: False
+host_fna: ""
+host_gff: ""
+star_limitGenomeGenerateRAM: 128
+star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent"
+star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
+fungi_filter: False
+kraken_filter: False
+paired_strategy: "one_mapped"
+fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
+fungi_genomes_file: "resources/JGI/genomes.tsv"
+jgi_account_info: "config/jgi_account_info.yml"
+strobealign_strobe_len: 17
+```
+
+The `host_filter` parameter indicates whether reads that align to a host genome should be removed. If `host_filter` is set to `True` then the parameters `host_fna` and `host_gff` **must** point to a gzipped fasta and GFF annotation file, respectively. Reads are aligned using the [STAR](https://github.com/alexdobin/STAR) aligner. 
+
+The `star_limitGenomeGenerateRAM` parameter sets the maximum allowed RAM usage (in GB) when generating the host genome index. The `star_extra_build_params` and `star_extra_params` parameters act as catch-all strings for any settings you want to pass to the STAR build and 
