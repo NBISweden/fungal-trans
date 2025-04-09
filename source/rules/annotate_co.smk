@@ -199,6 +199,11 @@ rule firstpass_fungal_proteins_co:
 rule mmseqs_secondpass_taxonomy_co:
     """
     Run mmseqs taxonomy on fungal proteins
+
+    If the extra_genomes parameter is set in the config file, then the target in
+    the input will be the custom mmseq database which is a concatenation of
+    proteins from the extra genomes + fungal proteins in the database defined by
+    the mmseqs_db parameter.
     """
     output:
         expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/taxonomy/{mmseqs_db}/secondpass-taxresult_{suff}", suff=["lca.tsv", "report","tophit_aln","tophit_report"], mmseqs_db=config["mmseqs_db"])
@@ -269,6 +274,8 @@ rule secondpass_fungal_proteins_co:
 rule featurecount_co:
     """
     Count read assignments to co-assemblies
+
+    This rule counts assignments to all predicted genes, not only fungal ones.
     """
     input:
         gff="results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/final.fa.transdecoder.gff3",
@@ -324,10 +331,9 @@ rule collate_featurecount_co:
 #################################
 rule emapper_search_co:
     """
-    Run eggNOG-mapper on fungal proteins from co-assembly
+    Run eggNOG-mapper on all predicted proteins from co-assembly
     """
     input:
-        #faa="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.faa",
         faa=rules.transdecoder_predict_co.output[0],
         db=f"{config['emapper_db_dir']}/eggnog.db",
         mmseqs_db=f"{config['emapper_db_dir']}/mmseqs/mmseqs.db"
