@@ -55,9 +55,9 @@ def parse_sample_list(f, config):
             assemblies[assembly] = {"R1": [], "R2": []}
     for sample in df.index:
         accession = ""
-        if "Read_file" and "Pair_file" in df.columns:
-            R1 = df.loc[sample, "Read_file"]
-            R2 = df.loc[sample, "Pair_file"]
+        if "R1" and "R2" in df.columns:
+            R1 = df.loc[sample, "R1"]
+            R2 = df.loc[sample, "R2"]
         elif "accession" in df.columns:
             accession = df.loc[sample, "accession"]
             R1 = f"{dir}/{sample}_1.fastq.gz"
