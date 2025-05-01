@@ -442,7 +442,7 @@ rule quantify_eggnog_co:
     shadow: "minimal"
     shell:
         """
-        mkdir {params.tmpdir}
+        mkdir -p {params.tmpdir}
         for f in {input.abundance};
         do
             base=$(basename $f)
