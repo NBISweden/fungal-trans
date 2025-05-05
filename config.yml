@@ -107,7 +107,7 @@ insilico_norm_mem: 100
 fc_params: "-s 2 -p -t exon -g Parent -Q 10 --countReadPairs"
 ## kallisto parameters
 # Use the settings below for strandedness
-# if using IlluminaTruSeq Stranded libraries this should be '–rf-stranded'
+# if using IlluminaTruSeq Stranded libraries this should be '--rf-stranded'
 # for Standard Illumina, this should be an empty string ("")'
 kallisto_params: "--rf-stranded"
 
