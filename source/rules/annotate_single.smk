@@ -387,23 +387,6 @@ rule quantify_eggnog:
         python {params.src} quantify {input.abundance} {input.parsed} {output[0]}
         """
 
-rule quantify_eggnog_normalized:
-    """
-    Normalize pathways further by the number of KEGG orthologs belonging to each pathway
-    """
-    output:
-        "results/annotation/{assembler}/{sample_id}/eggNOG/{db}.norm.raw.tsv"
-    input:
-        abundance = "results/annotation/{assembler}/{sample_id}/featureCounts/fc.raw.tsv",
-        parsed = "results/annotation/{assembler}/{sample_id}/eggNOG/{db}.parsed.tsv",
-        norm = "resources/kegg/kegg_ko2{db}.tsv"
-    params:
-        src = workflow.source_path("../utils/eggnog-parser.py"),
-    shell:
-        """
-        python {params.src} quantify --normalize {input.norm} {input.abundance} {input.parsed} {output[0]}
-        """
-
 rule eggnog_merge_and_sum:
     """
     Take count tables for an annotation type in each sample and merge them

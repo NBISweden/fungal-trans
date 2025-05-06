@@ -8,7 +8,6 @@ localrules:
     parse_featurecounts_co,
     parse_eggnog_co,
     quantify_eggnog_co,
-    quantify_eggnog_normalized_co,
     sum_taxonomy_co,
     eggnog_tax_annotations,
 
@@ -349,6 +348,7 @@ rule emapper_search_co:
     threads: 10
     conda: "../../envs/emapper.yaml"
     container: "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
+    shadow: "minimal"
     shell:
         """
         mkdir -p {params.tmpdir}
@@ -431,53 +431,19 @@ rule quantify_eggnog_co:
     Note that since ORFs can be annotated to multiple features, the same ORF can be counted multiple times.
     """
     input:
-        abundance=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.raw.tsv",
-            sample_id=samples.keys()),
+        abundance=rules.collate_featurecount_co.output[0],
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.raw.tsv"
-    params:
-        src=workflow.source_path("../utils/eggnog-parser.py"),
-        tmpdir=os.path.join("{assembly}", "{db}")
-    shadow: "minimal"
-    shell:
-        """
-        mkdir -p {params.tmpdir}
-        for f in {input.abundance};
-        do
-            base=$(basename $f)
-            sample=$(echo -e $base | sed "s/.raw.tsv//g")
-            python {params.src} quantify $f {input.parsed} {params.tmpdir}/$sample.tsv
-        done
-        python {params.src} merge --sum {params.tmpdir}/*.tsv {output[0]}
-        """
-
-rule quantify_eggnog_normalized_co:
-    """
-    Normalize modules/pathways further by the number of KEGG orthologs belonging to each module/pathway
-    """
-    input:
-        abundance=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.raw.tsv",
-            sample_id=samples.keys()),
-        parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
-        norm="resources/kegg/kegg_ko2{db}.tsv"
-    output:
-        "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.norm.raw.tsv"
-    params:
-        src=workflow.source_path("../utils/eggnog-parser.py"),
-        tmpdir=os.path.join("{assembly}", "norm", "{db}")
-    shadow: "minimal"
-    shell:
-        """
-        mkdir -p {params.tmpdir}
-        for f in {input.abundance};
-        do
-            base=$(basename $f)
-            sample=$(echo -e $base | sed "s/.raw.tsv//g")
-            python {params.src} quantify --normalize {input.norm} $f {input.parsed} {params.tmpdir}/$sample.tsv
-        done
-        python {params.src} merge --sum {params.tmpdir}/*.tsv {output[0]}
-        """
+    run:
+        abundance_df=pd.read_csv(input.abundance, sep="\t", index_col=0)
+        parsed_df=pd.read_csv(input.parsed, sep="\t", index_col=0)
+        df=pd.merge(parsed_df, abundance_df, left_index=True, right_index=True, how="right")
+        df.fillna("Unclassified", inplace=True)
+        feature_cols=list(parsed_df.columns)
+        df_sum=df.groupby(feature_cols).sum().reset_index()
+        df_sum.set_index(feature_cols[0], inplace=True)
+        df_sum.to_csv(output[0], sep="\t")
 
 rule eggnog_tax_annotations:
     """Collate gene annotations and abundances for a certain rank:taxon combination"""
