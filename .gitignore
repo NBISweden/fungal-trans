@@ -145,3 +145,5 @@ tmp
 *.html
 .pixi
 pixi.lock
+
+.java
