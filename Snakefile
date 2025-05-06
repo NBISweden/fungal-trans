@@ -170,7 +170,7 @@ def all_input(wildcards):
         inputs.extend(
             expand(
                 "results/collated/{assembler}/eggNOG/{db}.raw.tsv",
-                db=["enzymes","pathways","pathways.norm","modules","kos","tc","cazy"],
+                db=["enzymes","pathways","modules","kos","tc","cazy"],
                 assembler=config["assembler"],
             )
         )
@@ -237,7 +237,7 @@ def all_input(wildcards):
         inputs.extend(
             expand(
                 "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.raw.tsv",
-                db=["enzymes","pathways","pathways.norm","modules","kos","tc","cazy"],
+                db=["enzymes","pathways","modules","kos","tc","cazy"],
                 assembly=assemblies.keys(), 
                 assembler=config["assembler"]
             )
