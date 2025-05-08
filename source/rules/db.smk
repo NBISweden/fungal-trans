@@ -233,7 +233,7 @@ rule mmseqs_create_taxidmap:
             separator="\t", 
             has_header=False, 
             with_column_names=lambda cols: [{"column_1": "id", "column_2": "taxid", "column_3": "column_3"}[col] for col in cols]).select(["id","taxid"])
-        protmap.join(taxmap, on="id").sink_csv(output.tsv, separator="\t")
+        protmap.join(taxmap, on="id").select(["accession","taxid"]).sink_csv(output.tsv, separator="\t", include_header=False)
 
 
 rule download_taxdump:
