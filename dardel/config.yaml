@@ -2,23 +2,28 @@
 # this system at https://support.pdc.kth.se/doc/.
 
 # Snakemake command line options
+#resources: "mem_mb=1800000"
+cores: 128
 keep-going: True
 printshellcmds: True
 rerun-triggers: mtime
 rerun-incomplete: True
 jobs: 200
-latency-wait: 5
+local-cores: 4
+latency-wait: 300
 executor: slurm
 shadow-prefix: "$PDC_TMP"
 software-deployment-method: "apptainer"
 apptainer-args: "--bind /cfs/klemming,$PDC_TMP,/sw/data --env TMPDIR=$PDC_TMP"
+#group-components: kraken=4
 
 # The resource definitions below specify the default used by all rules unless overridden by 
 # the set-resources section
 default-resources: 
-  slurm_account: <your-slurm-account>
+  slurm_account: naiss2025-22-737
   slurm_partition: shared
   runtime: 120
+  #mem_mb_per_cpu: 1776
 
 # The set-resources section specifies the resources to use for specific rules, this overrides
 # the default resources
@@ -28,7 +33,7 @@ set-resources:
     runtime: 30
     mem_mb: 888
   mmseqs_extract_fungalDB:
-    runtime: 120
+    runtime: 240
     mem_mb: 35200
   mmseqs_convert2fasta_fungalDB:
     runtime: 60
@@ -51,32 +56,32 @@ set-resources:
     mem_mb: 35520
   # preprocess.smk
   fastq_replace_ids:
-    runtime: 60
-    mem_mb: 1776
+    runtime: 300
+    mem_mb: 17760
   fastp:
     runtime: 60
-    mem_mb: 1776
-  sortmerna:
-    runtime: 240
     mem_mb: 5328
+  sortmerna:
+    runtime: 600
+    mem_mb: 10656
   # filter.smk
   strobealign_map_fungi:
-    runtime: 30
+    runtime: 45
     mem_mb: 17760
   process_fungal_mappings:
     runtime: 60
-    mem_mb: 1776
+    mem_mb: 3552
   star_build_host:
     runtime: 1440
   star_map_host:
-    runtime: 120
+    runtime: 180
     mem_mb: 88800
   process_host_bam:
     runtime: 60
     mem_mb: 1776
   filter_fungal_reads:
-    runtime: 30
-    mem_mb: 888
+    runtime: 60
+    mem_mb: 3552
   fastq_stats:
     runtime: 30
   filter_with_kraken:
@@ -84,16 +89,19 @@ set-resources:
   # kraken.smk
   preload_kraken_db:
     #slurm_partition: main
-    runtime: 10
+    runtime: 20
     #mem_mb: 400000
   run_kraken:
     #slurm_partition: main
-    runtime: 20
+    runtime: 60
   kraken:
     #slurm_partition: main
-    runtime: 10
+    runtime: 20
   filter_with_kraken:
-    runtime: 30
+    runtime: 60
+  #extract_kraken_reads:
+    #mem_mb: 7104
+    #runtime: 120
   # annotate.smk
   transdecoder_longorfs_co:
     runtime: 60
@@ -108,15 +116,15 @@ set-resources:
     runtime: 60
     mem_mb: 3552
   mmseqs_firstpass_taxonomy_co:
-    runtime: 60
-    mem_mb: 3552
+    runtime: 1440
+    mem_mb: 63936
   mmseqs_firstpass_taxonomy:
     runtime: 60
     mem_mb: 3552
   transdecoder_predict_co:
-    runtime: 60
+    runtime: 180
     tasks: 1
-    mem_mb: 888
+    mem_mb: 28416
   mmseqs_createquerydb_co:
     runtime: 60
     mem_mb: 3552
@@ -129,34 +137,51 @@ set-resources:
     runtime: 30
     mem_mb: 888
     tasks: 1
-  mmseqs_taxonomy_co:
-    runtime: 1440
-    tasks: 20
-    mem_mb: 88800
+  mmseqs_convertali_co:
+    runtime: 80
+    mem_mb: 14208
+    tasks: 1
   featurecount:
     runtime: 60
+  featurecount_co:
+    runtime: 60
+    mem_mb: 14208
   emapper_search:
     runtime: 300
     mem_mb: 106560
   emapper_search_co:
     runtime: 300
-    mem_mb: 106560
+    mem_mb: 124320
   assign_taxonomy_co:
     mem_mb: 64000
   emapper_annotate_hits_co:
-    runtime: 30
+    runtime: 60
     mem_mb: 53280
 # assembly.smk
   trinity_normalize:
     runtime: 1440
-  trinity_co:
-    runtime: 600
-    mem_mb: 8880
+#  trinity_co:
+#    runtime: 1440
+#    mem_mb: 200000
+    #tasks: 6
+    #slurm_partition: long
+  trinity_co_inchworm_chrysalis:
+    mem_mb: 200000
+    runtime: 900
+  trinity_co_butterfly_parallel:
+    mem_mb: 8000
+    runtime: 420
+  trinity_co_butterfly_merge:
+    mem_mb: 4000
+    runtime: 30
+  trinity_co_final:
+    mem_mb: 32000
+    runtime: 1080
   megahit_co:
     mem_mb: 17000
     runtime: 600
   transabyss_co:
-    mem_mb: 17000
+    mem_mb: 34000
     runtime: 1440
   transabyss_merge_co:
     mem_mb: 17000
@@ -173,23 +198,26 @@ set-resources:
     runtime: 60
     mem_mb: 3552
   subread_index_co:
-    runtime: 60
-    mem_mb: 3552
+    runtime: 180
+    mem_mb: 7104
   subread_align_co:
     runtime: 60
-    mem_mb: 3552
+    mem_mb: 14208
   kallisto_index_co:
     runtime: 180
-    mem_mb: 1776
+    mem_mb: 28416
   kallisto_quant_co:
     runtime: 180
-    mem_mb: 1776
+    mem_mb: 14208
   kallisto_index:
     runtime: 180
     mem_mb: 1776
   kallisto_quant:
     runtime: 180
     mem_mb: 1776
+  collate_kallisto_co:
+    runtime: 120
+    mem_mb: 14208
   bowtie_co:
     runtime: 240
     mem_mb: 32000
@@ -206,10 +234,25 @@ set-resources:
   fungi_both_mapped:
     runtime: 180
     mem_mb: 7104
+  secondpass_fungal_proteins_co:
+    runtime: 600
+    mem_mb: 7104
 
 set-threads:
+  fastq_replace_ids: 10
   emapper_search_co: 60
   emapper_search: 60
   mmseqs_createtaxdb: 20
   mmseqs_secondpass_taxonomy_co: 20
   mmseqs_secondpass_taxonomy: 20
+  mmseqs_extract_fungalDB: 20
+  mmseqs_convertali_co: 8
+  #trinity_co: 64
+  trinity_co_inchworm_chrysalis: 32
+  trinity_co_butterfly_parallel: 1
+  trinity_co_butterfly_merge: 1
+  trinity_co_final: 64
+  mmseqs_firstpass_taxonomy_co: 36
+  kallisto_index_co: 16
+  transdecoder_predict_co: 8
+  collate_kallisto_co: 8
