@@ -44,9 +44,10 @@ rule preload_kraken_db:
     params:
         db = lambda wildcards: os.path.join(config["kraken_db_dir"], wildcards.kraken_db)
     resources:
-        mem_mb=lambda wildcards, input: max(1.2 * int(os.stat(input[0]).st_size / 1024**2), 888),
-        slurm_partition=lambda wildcards: kraken_partition
-    group: "kraken"
+        mem_mb=lambda wildcards, input: max(1.15 * int(os.stat(input[0]).st_size / 1024**2), 888),
+        constraint='largemem'#,
+        ##slurm_partition=lambda wildcards: kraken_partition
+    group: "kraken2"
     shell:
         """
         mkdir -p /dev/shm/{wildcards.kraken_db}
@@ -68,17 +69,18 @@ rule run_kraken:
         db=rules.preload_kraken_db.output
     log:
         "results/kraken/{kraken_db}/{sample_id}/{sample_id}.log"
-    threads: 16
+    threads: 4
     params:
         db = lambda wildcards: wildcards.kraken_db,
         tmp = "{sample_id}.out",
         unc_out = lambda wildcards, output: os.path.join(os.path.dirname(output[0]), wildcards.sample_id+ ".unclassified#.fastq.gz"),
     conda: "../../envs/kraken.yaml"
     container: "docker://quay.io/biocontainers/kraken2:2.1.3--pl5321h077b44d_4"
-    group: "kraken"
-    shadow: "minimal"
+    group: "kraken2"
+    shadow: "shallow"
     resources:
-        slurm_partition=lambda wildcards: kraken_partition(wildcards)
+        constraint='largemem'
+        #slurm_partition=lambda wildcards: kraken_partition(wildcards)
     shell:
         """
         kraken2 --db /dev/shm/{params.db} --memory-mapping --output {params.tmp} --report {output[1]} --gzip-compressed \
@@ -94,7 +96,7 @@ rule kraken:
         expand("results/kraken/{kraken_db}/{sample_id}/{sample_id}.out.gz", sample_id=samples.keys(), kraken_db=config["kraken_db"])
     params:
         kraken_db=config["kraken_db"]
-    group: "kraken"
+    group: "kraken2"
     resources:
         slurm_partition=lambda wildcards: kraken_partition(wildcards)
     shell:
@@ -122,7 +124,7 @@ rule extract_kraken_reads:
         R1="{taxname}.{sample_id}_R1.fastq",
         R2="{taxname}.{sample_id}_R2.fastq",
     conda: "../../envs/kraken-tools.yaml" 
-    shadow: "minimal"
+    shadow: "shallow"
     container: "docker://quay.io/biocontainers/krakentools:1.1--pyh5e36f6f_0"
     shell:
         """
