@@ -3,8 +3,8 @@ localrules:
     multiqc_map_report_co, 
     wrap_assembly,
     wrap_assembly_co,
-    parse_kallisto_co,
-    collate_kallisto_co
+    #parse_kallisto_co,
+    #collate_kallisto_co
 
 ###############################
 ## Mapping for co-assemblies ##
@@ -110,47 +110,90 @@ rule wrap_assembly_co:
         seqkit seq -w 60 {input} > {output} 2> {log}
         """
 
-rule subread_index_co:
+# rule subread_index_co:
+#     """
+#     Build subread index for co-assemblies.
+#     """
+#     input:
+#         rules.wrap_assembly_co.output
+#     output:
+#         expand("results/map/co-assembly/{{assembler}}/{{assembly}}/subread_index.{suff}",
+#                 suff = ["00.b.array", "00.b.tab", "files", "lowinf", "reads"])
+#     log:
+#         "results/map/co-assembly/{assembler}/{assembly}/subread_index.log"
+#     container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
+#     conda: "../../envs/featurecount.yaml"
+#     params:
+#         outdir = lambda wildcards, output: os.path.dirname(output[0]),
+#         max_mem = lambda wildcards, resources: int(resources.mem_mb)
+#     shell:
+#         """
+#         subread-buildindex -M {params.max_mem} -o {params.outdir}/subread_index {input} > {log} 2>&1
+#         """
+
+rule strobealign_index_co:
     """
-    Build subread index for co-assemblies.
+    Build strobealign index for co-assemblies.
     """
     input:
         rules.wrap_assembly_co.output
     output:
-        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/subread_index.{suff}",
-                suff = ["00.b.array", "00.b.tab", "files", "lowinf", "reads"])
+        "results/map/co-assembly/{assembler}/{assembly}/strobealign_index.sti"
     log:
-        "results/map/co-assembly/{assembler}/{assembly}/subread_index.log"
-    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
-    conda: "../../envs/featurecount.yaml"
+        "results/map/co-assembly/{assembler}/{assembly}/strobealign_index.log"
+    container: "docker://quay.io/biocontainers/strobealign:0.16.1--h5ca1c30_0"
     params:
-        outdir = lambda wildcards, output: os.path.dirname(output[0])
+        readlen = config["read_length"]
+    threads: 8
     shell:
         """
-        subread-buildindex -o {params.outdir}/subread_index {input} > {log} 2>&1
+        strobealign --create-index -t {threads} -r {params.readlen} {input} > {log} 2>&1
+        touch {output}
         """
 
-rule subread_align_co:
+# rule subread_align_co:
+#     """
+#     Align reads to co-assemblies.
+#     """
+#     input:
+#         index = rules.subread_index_co.output,
+#         R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+#         R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+#     output:
+#         "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam"
+#     log:
+#         "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.subread_align.log"
+#     container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
+#     conda: "../../envs/featurecount.yaml"
+#     params:
+#         index = lambda wildcards, input: os.path.join(os.path.dirname(input.index[0]), "subread_index"),
+#     threads: 4
+#     shell:
+#         """
+#         subread-align -T {threads} -sortReadsByCoordinates -r {input.R1} -R {input.R2} -i {params.index} -o {output} -t 0 > {log} 2>&1
+#         """
+
+rule strobealign_align_co:
     """
-    Align reads to co-assemblies.
+    Align reads to co-assemblies using strobealign (outputs SAM, piped into samtools for BAM).
     """
     input:
-        index = rules.subread_index_co.output,
+        index = rules.strobealign_index_co.output,
+        ref_fa = rules.wrap_assembly_co.output,
         R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
         R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     output:
         "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam"
     log:
-        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.subread_align.log"
-    container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
-    conda: "../../envs/featurecount.yaml"
-    params:
-        index = lambda wildcards, input: os.path.join(os.path.dirname(input.index[0]), "subread_index"),
-    threads: 4
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.strobealign.log"
+    container: "docker://andreass1/strobealign-samtools_ub:latest"
+    threads: 8
     shell:
         """
-        subread-align -T {threads} -sortReadsByCoordinates -r {input.R1} -R {input.R2} -i {params.index} -o {output} -t 0 > {log} 2>&1
+        strobealign --use-index -t {threads} {input.ref_fa} {input.R1} {input.R2} 2>> {log} | samtools sort -@ {threads} -O BAM -o {output} 2>> {log}
+        samtools index {output}
         """
+
 
 rule multiqc_map_report_co:
     """
