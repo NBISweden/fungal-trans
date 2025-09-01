@@ -1,13 +1,13 @@
 localrules:
-    mmseqs_convertali_co,
+    #mmseqs_convertali_co,
     parse_mmseqs_first_co,
     parse_mmseqs_second_co,
     firstpass_fungal_proteins_co,
-    secondpass_fungal_proteins_co,
+    #secondpass_fungal_proteins_co,
     collate_featurecount_co,
-    parse_featurecounts_co,
+    #parse_featurecounts_co,
     parse_eggnog_co,
-    quantify_eggnog_co,
+    #quantify_eggnog_co,
     sum_taxonomy_co,
     eggnog_tax_annotations,
 
@@ -79,8 +79,6 @@ rule mmseqs_firstpass_taxonomy_co:
         output=lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
         ranks="superkingdom,kingdom,phylum,class,order,family,genus,species",
         aln_dir=lambda wildcards, output: os.path.dirname(output.aln[0])
-    resources:
-        mem_mb=3600,
     shell:
         """
         mkdir -p {params.tmp}
@@ -109,7 +107,7 @@ rule mmseqs_convertali_co:
         alignment=lambda wildcards, input: os.path.splitext(input.alignment[0])[0]
     shell:
         """
-        mmseqs convertalis {input.query} {input.target} {params.alignment} {output.m8} --threads 1 --format-mode 0 > {log} 2>&1
+        mmseqs convertalis {input.query} {input.target} {params.alignment} {output.m8} --threads {threads} --format-mode 0 > {log} 2>&1
         """
 
 rule transdecoder_predict_co:
@@ -263,7 +261,7 @@ rule secondpass_fungal_proteins_co:
     params:
         outdir=lambda wildcards, output: os.path.dirname(output[0]),
         indir=lambda wildcards, input: os.path.dirname(input.genecall[0]),
-    shadow: "minimal"
+    shadow: "shallow"
     run:
         write_fungal_proteins(input.parsed[0], params.indir, params.outdir)
 
@@ -348,7 +346,7 @@ rule emapper_search_co:
     threads: 10
     conda: "../../envs/emapper.yaml"
     container: "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
-    shadow: "minimal"
+    shadow: "shallow"
     shell:
         """
         mkdir -p {params.tmpdir}

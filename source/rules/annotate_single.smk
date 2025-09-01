@@ -5,9 +5,9 @@ localrules:
     secondpass_fungal_proteins,
     collate_taxonomy,
     eggnog_merge_and_sum,
-    parse_featurecounts,
+    #parse_featurecounts,
     parse_eggnog,
-    quantify_eggnog,
+    #quantify_eggnog,
     sum_taxonomy,
 
 ##########################################
@@ -70,7 +70,7 @@ rule mmseqs_firstpass_taxonomy:
     threads: 4
     container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda: "../../envs/mmseqs.yaml"
-    shadow: "minimal"
+    shadow: "shallow"
     params:
         tmp = lambda wildcards: f"mmseqs_firstpass_taxonomy.{wildcards.assembler}.{wildcards.sample_id}.{wildcards.td_db}", 
         split_memory_limit = lambda wildcards, resources: int(resources.mem_mb*.8),
@@ -245,7 +245,7 @@ rule secondpass_fungal_proteins:
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
         indir = lambda wildcards, input: os.path.dirname(input.genecall[0]),
-    shadow: "minimal"
+    shadow: "shallow"
     run:
         write_fungal_proteins(input.parsed[0], params.indir, params.outdir)
 
@@ -308,7 +308,7 @@ rule emapper_search:
         outdir = lambda wc, output: os.path.dirname(output[0]),
     log: "results/annotation/{assembler}/{sample_id}/eggNOG/emapper.log"
     threads: 10
-    shadow: "minimal"
+    shadow: "shallow"
     conda: "../../envs/emapper.yaml"
     container: "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
     shell:
