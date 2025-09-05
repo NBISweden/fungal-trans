@@ -22,7 +22,7 @@ apptainer-args: >-
 # The resource definitions below specify the default used by all rules unless overridden by 
 # the set-resources section
 default-resources: 
-  slurm_account: hpc2n2025-170
+  slurm_account: <hpc2n_compute_project>
   slurm_partition: batch
   runtime: 120
   constraint: 'zen3|zen4|skylake'
@@ -97,22 +97,22 @@ set-resources:
     runtime: 20
     #constraint: zen3
     constraint: 'largemem'
-    slurm_account: hpc2n2025-185
+    slurm_account: <largemem_project>
     cores: 16
   run_kraken:
     runtime: 60
     #constraint: zen3
     constraint: 'largemem'
-    slurm_account: hpc2n2025-185
+    slurm_account: <largemem_project>
     cores: 2
   kraken:
     constraint: 'largemem'
-    slurm_account: hpc2n2025-185
+    slurm_account: <largemem_project>
     #slurm_partition: main
     runtime: 20
   kraken2:
     constraint: 'largemem'
-    slurm_account: hpc2n2025-185
+    slurm_account: <largemem_project>
     #slurm_partition: main
     #runtime: 20
   filter_with_kraken:
@@ -180,7 +180,7 @@ set-resources:
     mem_mb: 53280
   quantify_eggnog_co:
     runtime: 60
-    mem_mb: 16000
+    mem_mb: 24000
   parse_featurecounts_co:
     runtime: 20
     mem_mb: 16000
@@ -190,25 +190,18 @@ set-resources:
 # assembly.smk
   trinity_normalize:
     runtime: 2880
-    #constraint: 'zen3|zen4'
     #slurm_partition: memory
-#  trinity_co:
-#    runtime: 5760
-#    mem_mb: 1100000
-    #tasks: 6
-    #constraint: largemem
-    #slurm_account: hpc2n2025-185
   trinity_co_inchworm:
     mem_mb: 700000
     runtime: 2160
     constraint: 'largemem'
-    slurm_account: hpc2n2025-185
+    slurm_account: <largemem_project>
     #constraint: 'zen3|zen4'
   trinity_co_chrysalis:
     mem_mb: 700000
     runtime: 4320
     constraint: 'largemem'
-    slurm_account: hpc2n2025-185
+    slurm_account: <largemem_project>
     #constraint: 'zen3|zen4'
     #slurm_partition: main
   trinity_co_butterfly_parallel:
@@ -287,8 +280,8 @@ set-resources:
     runtime: 180
     mem_mb: 7104
   secondpass_fungal_proteins_co:
-    runtime: 1440
-    mem_mb: 7104
+    runtime: 4320
+    mem_mb: 16000
 
 set-threads:
   fastq_replace_ids: 10
@@ -313,3 +306,4 @@ set-threads:
   transdecoder_predict_co: 8
   collate_kallisto_co: 8
   parse_featurecounts_co: 4
+  secondpass_fungal_proteins_co: 4
