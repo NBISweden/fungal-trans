@@ -148,52 +148,6 @@ def get_mmseq_taxdb(wildcards):
     return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
 
 
-def write_fungal_proteins(parsed, indir, outdir):
-    """
-    Write fungal coding sequences and proteins to separate files
-
-    Parameters
-    ----------
-    parsed: str
-        Path to the parsed taxonomy file
-    indir: str
-        Path to the input directory
-    outdir: str
-        Path to the output directory
-    """
-    import pandas as pd
-    import os
-
-    df = pd.read_csv(parsed, sep="\t", header=0, index_col=0)
-    fungi = df.loc[df["kingdom"] == "Fungi"].index.tolist()
-    gff = os.path.join(indir, "final.fa.transdecoder.gff3")
-    with open(f"{outdir}/fungal.gff3", "w") as fhout, open(gff, "r") as fhin:
-        for line in fhin:
-            if line.startswith("#"):
-                fhout.write(line)
-            else:
-                if line.split("\t")[-1].split(";")[0].replace("ID=", "") in fungi:
-                    fhout.write(line)
-    bed = os.path.join(indir, "final.fa.transdecoder.bed")
-    with open(f"{outdir}/fungal.bed", "w") as fhout, open(bed, "r") as fhin:
-        for i, line in enumerate(fhin):
-            if i == 0:
-                fhout.write(line)
-            else:
-                if line.split("\t")[3].split(";")[0].replace("ID=", "") in fungi:
-                    fhout.write(line)
-    with open("fungi.ids", "w") as fhout:
-        for i in fungi:
-            fhout.write(i + "\n")
-    shell(
-        "seqkit grep -f fungi.ids {indir}/final.fa.transdecoder.cds > {outdir}/fungal.cds"
-    )
-    shell(
-        "seqkit grep -f fungi.ids {indir}/final.fa.transdecoder.pep > {outdir}/fungal.faa"
-    )
-    df.loc[fungi].to_csv(f"{outdir}/fungal.taxonomy.tsv", sep="\t", index=True)
-
-
 def slurm_mem_partition(mb):
     """
     Determine the SLURM memory partition based on the memory
