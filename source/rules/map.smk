@@ -95,6 +95,58 @@ rule collate_kallisto_co:
             df = pd.merge(df, _df, how="outer", left_index=True, right_index=True)
         df.to_csv(output.tpm, sep="\t")
 
+rule rsem_index_co:
+    input:
+        "results/co-assembly/{assembler}/{assembly}/final.fa"
+    output:
+        expand(
+            "results/map/co-assembly/{{assembler}}/{{assembly}}/final.fa.{suff}",
+            suff = ["bowtie2.ok","gene_trans_map", "RSEM.rsem.prepped.ok"])
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/rsem_index.log"
+    params:
+        trinity_mode = lambda wildcards: "--trinity-mode" if wildcards.assembler == "trinity" else "",
+    threads: 10
+    conda: "../../envs/trinity.yaml"
+    shadow: "shallow"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
+    shell:
+        """
+        $TRINITY_HOME/util/align_and_estimate_abundance.pl --transcripts {input} --aln_method bowtie2 \
+            --est_method RSEM --thread_count {threads} {params.trinity_mode} --prep_reference >{log} 2>&1
+        """
+
+rule rsem_map_co:
+    input:
+        fa="results/co-assembly/{assembler}/{assembly}/final.fa",
+        index=rules.rsem_index_co.output,
+        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/rsem.log"
+    output:
+        genes="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM.genes.results",
+        genes_ok="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM.genes.results.ok",
+        isoforms="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM.isoforms.results",
+        isoforms_ok="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM.isoforms.results.ok",
+        stat=expand(
+            "results/map/co-assembly/{{assembler}}/{{assembly}}/{{sample_id}}/RSEM.stat/RSEM.{suff}",
+            suff = ["cnt","model","theta"]
+        )
+    params:
+        output_dir = lambda wildcards, output: os.path.dirname(output.genes),
+        trinity_mode = lambda wildcards: "--trinity-mode" if wildcards.assembler == "trinity" else "",
+    threads: 4
+    conda: "../../envs/trinity.yaml"
+    shadow: "shallow"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
+    shell:
+        """
+        $TRINITY_HOME/util/align_and_estimate_abundance.pl --transcripts {input.fa} --seqType fq \
+            --left {input.R1} --right {input.R2} --est_method RSEM {params.trinity_mode} \
+            --aln_method bowtie2 --thread_count {threads} --output_dir {params.output_dir} > {log} 2>&1
+        """
+
 rule wrap_assembly_co:
     """
     Subread has a line length limit on fasta files, to be sure we are under this limit we wrap the sequences.
@@ -125,7 +177,7 @@ rule subread_index_co:
     conda: "../../envs/featurecount.yaml"
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        max_mem = lambda wildcards, resources: int(resources.mem_mb)
+        max_mem = lambda wildcards, resources: int(resources.mem_mb) if type(resources.mem_mb) ==int else resources.mem_mb
     shell:
         """
         subread-buildindex -M {params.max_mem} -o {params.outdir}/subread_index {input} > {log} 2>&1
