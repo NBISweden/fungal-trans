@@ -5,9 +5,9 @@ localrules:
     secondpass_fungal_proteins,
     collate_taxonomy,
     eggnog_merge_and_sum,
-    parse_featurecounts,
+    #parse_featurecounts,
     parse_eggnog,
-    quantify_eggnog,
+    #quantify_eggnog,
     sum_taxonomy,
 
 
@@ -83,12 +83,9 @@ rule mmseqs_firstpass_taxonomy:
     log:
         "results/annotation/{assembler}/{sample_id}/transdecoder/mmseqs_firstpass_taxonomy.{td_db}.log",
     threads: 4
-    container:
-        "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
-    conda:
-        "../../envs/mmseqs.yaml"
-    shadow:
-        "minimal"
+    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
+    conda: "../../envs/mmseqs.yaml"
+    shadow: "shallow"
     params:
         tmp=lambda wildcards: f"mmseqs_firstpass_taxonomy.{wildcards.assembler}.{wildcards.sample_id}.{wildcards.td_db}",
         split_memory_limit=lambda wildcards, resources: int(resources.mem_mb * 0.8),
@@ -320,11 +317,11 @@ rule secondpass_fungal_proteins:
     log:
         "results/annotation/{assembler}/{sample_id}/genecall/secondpass_fungal_proteins_co.log",
     params:
-        outdir=lambda wildcards, output: os.path.dirname(output[0]),
-        indir=lambda wildcards, input: os.path.dirname(input.genecall[0]),
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        indir = lambda wildcards, input: os.path.dirname(input.genecall[0]),
         src=workflow.source_path("../utils/write_fungal_proteins.py"),
     shadow:
-        "minimal"
+        "shallow"
     shell:
         """
         python {params.src} -i {input.parsed} \
@@ -335,7 +332,6 @@ rule secondpass_fungal_proteins:
             -o {params.outdir} \
             -a Parent --prefix fungal 2>{log}
         """
-
 
 ###################
 ## READ COUNTING ##
@@ -409,12 +405,9 @@ rule emapper_search:
     log:
         "results/annotation/{assembler}/{sample_id}/eggNOG/emapper.log",
     threads: 10
-    shadow:
-        "minimal"
-    conda:
-        "../../envs/emapper.yaml"
-    container:
-        "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
+    shadow: "shallow"
+    conda: "../../envs/emapper.yaml"
+    container: "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
     shell:
         """
         mkdir -p {params.tmpdir}

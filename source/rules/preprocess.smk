@@ -66,7 +66,7 @@ rule fastq_replace_ids:
         R2sort = "{sample_id}_R2.sort.fastq",
         orig = "results/preprocess/replace_ids/{sample_id}.orig",
         renamed = "results/preprocess/replace_ids/{sample_id}.renamed"
-    shadow: "minimal"
+    shadow: "shallow"
     shell:
         """
         gunzip -c {input.R1} | paste - - - - | sort -k1,1 -t " " | tr "\t" "\n" > {params.R1sort}
@@ -148,7 +148,7 @@ rule sortmerna_index:
         runtime = 60
     threads: 2
     conda: "../../envs/sortmerna.yaml"
-    shadow: "minimal"
+    shadow: "shallow"
     container: "docker://quay.io/biocontainers/sortmerna:4.3.6--h9ee0642_0"
     shell:
         """
@@ -181,7 +181,7 @@ rule sortmerna:
     threads: 4
     conda:
         "../../envs/sortmerna.yaml"
-    shadow: "minimal"
+    shadow: "shallow"
     container: "docker://quay.io/biocontainers/sortmerna:4.3.6--h9ee0642_0"
     shell:
         """

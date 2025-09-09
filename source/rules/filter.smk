@@ -25,7 +25,7 @@ rule strobealign_map_fungi:
     params:
         tmpdir = "{sample_id}.{chunk}",
         k = config["strobealign_strobe_len"]
-    shadow: "minimal"
+    shadow: "shallow"
     container: "docker://quay.io/biocontainers/strobealign:0.15.0--h5ca1c30_1"
     threads: 6
     shell:
@@ -159,7 +159,7 @@ rule star_map_host:
         temp_stat = "{sample_id}/{sample_id}.Log.final.out",
         setting = config["star_extra_params"]
     conda: "../../envs/star.yaml"
-    shadow: "minimal"
+    shadow: "shallow"
     container: "docker://quay.io/biocontainers/star:2.7.11b--h5ca1c30_5"
     threads: 10
     shell:
@@ -240,7 +240,7 @@ rule filter_with_kraken:
     params:
         tmpdir = "{sample_id}.{paired_strategy}",
         kraken_db=config["kraken_db"]
-    shadow: "minimal"
+    shadow: "shallow"
     shell:
         """
         exec &> {log}

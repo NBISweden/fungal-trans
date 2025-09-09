@@ -120,7 +120,7 @@ mmseqs_db_dir: "/sw/data/MMseqs2_data/latest/rackham"
 # what database to use for the homology filtering step by TransDecoder
 # this database is both used to filter predicted genes called and for
 # a first round of taxonomic assignment/filtering of transcripts
-transdecoder_homology_db: "UniProtKB_Swiss-Prot"
+transdecoder_homology_db: "UniRef90"
 # mmseqs_db is the database to use for the actual taxonomic assignment
 mmseqs_db: "NR"
 # extra_genomes is a file listing additional genomes to include in the

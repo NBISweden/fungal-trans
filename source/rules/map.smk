@@ -3,8 +3,8 @@ localrules:
     multiqc_map_report_co, 
     wrap_assembly,
     wrap_assembly_co,
-    parse_kallisto_co,
-    collate_kallisto_co
+    #parse_kallisto_co,
+    #collate_kallisto_co
 
 ###############################
 ## Mapping for co-assemblies ##
@@ -124,11 +124,13 @@ rule subread_index_co:
     container: "docker://quay.io/biocontainers/subread:2.0.8--h577a1d6_0"
     conda: "../../envs/featurecount.yaml"
     params:
-        outdir = lambda wildcards, output: os.path.dirname(output[0])
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        max_mem = lambda wildcards, resources: int(resources.mem_mb)
     shell:
         """
-        subread-buildindex -o {params.outdir}/subread_index {input} > {log} 2>&1
+        subread-buildindex -M {params.max_mem} -o {params.outdir}/subread_index {input} > {log} 2>&1
         """
+
 
 rule subread_align_co:
     """
@@ -151,6 +153,7 @@ rule subread_align_co:
         """
         subread-align -T {threads} -sortReadsByCoordinates -r {input.R1} -R {input.R2} -i {params.index} -o {output} -t 0 > {log} 2>&1
         """
+
 
 rule multiqc_map_report_co:
     """

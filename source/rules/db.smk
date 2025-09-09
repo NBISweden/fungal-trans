@@ -37,7 +37,7 @@ rule init_jgi:
         cookies="resources/JGI/cookies"
     log:
         "resources/JGI/init_jgi.log"
-    shadow: "minimal"
+    shadow: "shallow"
     params:
         user_name = config["jgi_user"],
         password = config["jgi_password"]
