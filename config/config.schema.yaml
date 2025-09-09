@@ -16,6 +16,15 @@ properties:
         type: string
         default: "shared"
         description: "Partition for jobs requiring <220G RAM"
+  ## JGI ##
+  jgi_user:
+    type: string
+    default: ""
+    description: "JGI user name"
+  jgi_password:
+    type: string
+    default: ""
+    description: "JGI password"
   ## PATHS ##
   workdir:
     type: string
