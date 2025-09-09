@@ -17,19 +17,6 @@ if os.path.exists("config.yml"):
 validate(config, "config/config.schema.yaml")
 
 
-workdir: config["workdir"]
-
-# set jgi account info
-with open(config["jgi_account_info"], 'r') as fhin:
-    config.update(yaml.safe_load(fhin))
-
-# Parse samples and assemblies
-samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], config)
-# Parse JGI genomes from fungi info url, also save to file for quick re-use in future runs
-genomes = parse_genomes(config["fungi_info"], f=config["fungi_genomes_file"])
-
-strobealign_chunks = {}
-
 def chunks(lst, n):
     """
     Yield successive n-sized chunks from list
@@ -37,8 +24,21 @@ def chunks(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
-for i, chunk in enumerate(chunks(genomes.index.tolist(), 100)):
-    strobealign_chunks[f"chunk{i}"] = expand("resources/JGI/genomes/{portal}.transcripts.filt.fna.gz", portal=chunk)
+
+workdir: config["workdir"]
+genomes = []
+strobealign_chunks = {}
+# set jgi account info
+if os.path.exists(config["jgi_account_info"]):
+    with open(config["jgi_account_info"], 'r') as fhin:
+        config.update(yaml.safe_load(fhin))
+    # Parse JGI genomes from fungi info url, also save to file for quick re-use in future runs
+    genomes = parse_genomes(config["fungi_info"], f=config["fungi_genomes_file"])
+    for i, chunk in enumerate(chunks(genomes.index.tolist(), 100)):
+        strobealign_chunks[f"chunk{i}"] = expand("resources/JGI/genomes/{portal}.transcripts.filt.fna.gz", portal=chunk)
+
+# Parse samples and assemblies
+samples, map_dict, assemblies = parse_sample_list(config["sample_file_list"], config)
 
 # Reads list of additional genomes to include when building custom mmseqs2 database
 extra_genomes = {}
@@ -54,7 +54,7 @@ else:
 wildcard_constraints:
     sample_id = f"({'|'.join(list(samples.keys()))})",
     assembler = "megahit|trinity|transabyss",
-    portals = f"({'|'.join(list(genomes.index.tolist()))})",
+    portals = "" if type(genomes)==list else f"({'|'.join(list(genomes.index.tolist()))})",
     taxname = f"({'|'.join(list(config['taxmap'].keys()))})",
     i = "1|2",
     paired_strategy = "one_mapped|both_mapped",
