@@ -16,7 +16,6 @@ if os.path.exists("config.yml"):
 
 validate(config, "config/config.schema.yaml")
 
-
 def chunks(lst, n):
     """
     Yield successive n-sized chunks from list
@@ -256,17 +255,26 @@ def all_input(wildcards):
         # count tables
         inputs.extend(
             expand(
-                "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.raw.tsv",
+                "results/collated/co-assembly/{assembler}/{assembly}/abundance/featureCounts/raw.tsv",
                 assembly=assemblies.keys(), 
                 assembler=config["assembler"],
             )
         )
         inputs.extend(
             expand(
-                "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.{c}.tsv",
+                "results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/{c}.tsv",
                 assembly=assemblies.keys(),
                 assembler=config["assembler"],
                 c=["est_counts", "tpm"]
+            )
+        )
+        inputs.extend(
+            expand(
+                "results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/{rsem_res}.{s}.tsv",
+                assembly=assemblies.keys(),
+                assembler=config["assembler"],
+                rsem_res=["genes","isoforms"],
+                s=["expected_count", "TPM","FPKM"]
             )
         )
         # taxonomy counts
