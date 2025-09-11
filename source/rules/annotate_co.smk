@@ -413,14 +413,13 @@ rule collate_featurecount_co:
             sample_id=samples.keys(),
         ),
     output:
-        "results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.raw.tsv",
+        "results/collated/co-assembly/{assembler}/{assembly}/abundance/featureCounts/raw.tsv",
     run:
         df = pd.DataFrame()
         for f in input:
             _df = pd.read_csv(f, sep="\t", header=0, index_col=0)
             df = pd.merge(df, _df, right_index=True, left_index=True, how="outer")
         df.to_csv(output[0], sep="\t", index=True, header=True)
-
 
 #################################
 ## EGGNOG-MAPPER CO-ASSEMBLIES ##
@@ -569,7 +568,7 @@ rule eggnog_tax_annotations:
     input:
         gene_tax="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
-        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.raw.tsv",
+        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/featureCounts/raw.tsv",
     output:
         expand(
             "results/collated/co-assembly/{{assembler}}/{{assembly}}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{{db}}.raw.tsv",
@@ -620,7 +619,7 @@ rule eggnog_tax_annotations:
 rule sum_taxonomy_co:
     input:
         gene_tax="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
-        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.raw.tsv",
+        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/featureCounts/raw.tsv",
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.raw.tsv",
     run:
