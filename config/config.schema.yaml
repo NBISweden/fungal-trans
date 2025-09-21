@@ -160,6 +160,14 @@ properties:
     description: Parameters for kallisto
     default: "--rf-stranded"
   ## ANNOTATION ##
+  interproscan_url:
+    type: string
+    description: URL to InterProScan tar.gz file
+    default: "http://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.75-106.0/alt/interproscan-data-5.75-106.0.tar.gz"
+  interproscan_profiles:
+    type: array
+    description: Profiles to use for the external interproscan nextflow pipeline. These profiles have to either be available in the interproscan pipeline (e.g. apptainer) or in the config/interproscan.config file.
+    default: ["kebnekaise","apptainer"]
   mmseqs_db_dir:
     type: string
     description: Path to MMSeqs2 databases

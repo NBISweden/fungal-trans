@@ -173,6 +173,14 @@ def all_input(wildcards):
                 assembler=config["assembler"],
             )
         )
+        # interproscan
+        inputs.extend(
+            expand(
+                "results/annotation/{assembler}/{sample_id}/interproscan/interproscan.tsv",
+                assembler=config["assembler"],
+                sample_id=samples.keys()
+            )
+        )
         # count tables
         inputs.extend(
             expand(
@@ -250,6 +258,14 @@ def all_input(wildcards):
                 db=["kos","enzymes","modules","pathways","tc","cazy"],
                 tax_rank=config["tax_rank"],
                 tax_name=config["tax_name"]
+            )
+        )
+        # interproscan
+        inputs.extend(
+            expand(
+                "results/annotation/co-assembly/{assembler}/{assembly}/interproscan/interproscan.tsv",
+                assembler=config["assembler"],
+                assembly=assemblies.keys()
             )
         )
         # count tables

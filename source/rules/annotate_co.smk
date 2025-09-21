@@ -155,6 +155,7 @@ rule transdecoder_predict_co:
     shell:
         """
         TransDecoder.Predict -t {input.fa} --retain_blastp_hits {input.m8} -O {params.output_dir} > {log} 2>&1
+        sed -i 's/*$//g' {output[0]}
         """
 
 
@@ -420,6 +421,37 @@ rule collate_featurecount_co:
             _df = pd.read_csv(f, sep="\t", header=0, index_col=0)
             df = pd.merge(df, _df, right_index=True, left_index=True, how="outer")
         df.to_csv(output[0], sep="\t", index=True, header=True)
+
+################################
+## INTERPROSCAN CO-ASSEMBLIES ##
+################################
+def set_interproscan_extra(wildcards, resources):
+    extra = "-c config/interproscan.config"
+    if "kebnekaise" in config["interproscan_profiles"] or "dardel" in config["interproscan_profiles"]:
+        extra += f" --project {resources.slurm_account}"
+    return extra
+
+rule interproscan_co:
+    """
+    Runs the interproscan nextflow pipeline to annotate proteins.
+    """
+    output:
+        tsv="results/annotation/co-assembly/{assembler}/{assembly}/interproscan/interproscan.tsv"
+    input:
+        input=rules.transdecoder_predict_co.output[0],
+        datadir=rules.download_interproscan_data.output.data
+    log:
+        "results/annotation/co-assembly/{assembler}/{assembly}/interproscan/interproscan.log"
+    params:
+        pipeline = "ebi-pf-team/interproscan6",
+        revision = "6.0.0-beta",
+        extra = lambda wildcards, resources: set_interproscan_extra(wildcards, resources),
+        profile = config["interproscan_profiles"],
+        outdir = lambda wildcards, output: os.path.dirname(output.tsv),
+        outprefix = "interproscan"
+    handover: True
+    wrapper:
+        "v7.2.0/utils/nextflow"
 
 #################################
 ## EGGNOG-MAPPER CO-ASSEMBLIES ##
