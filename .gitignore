@@ -147,3 +147,6 @@ tmp
 pixi.lock
 
 .java
+
+.nextflow
+work
