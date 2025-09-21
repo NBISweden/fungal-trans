@@ -109,7 +109,7 @@ fc_params: "-s 2 -p -t exon -g Parent -Q 10 --countReadPairs"
 # Use the settings below for strandedness
 # if using IlluminaTruSeq Stranded libraries this should be '--rf-stranded'
 # for Standard Illumina, this should be an empty string ("")'
-kallisto_params: "--rf-stranded"
+kallisto_params: ""
 
 ## ANNOTATION ##
 ## MMseqs2 paths ##
@@ -133,7 +133,13 @@ extra_genomes: "extra_JGI_genomes.tsv"
 # this path must contain the 'eggnog.db', 'eggnog_proteins.dmnd', 'eggnog.taxa.db' files
 # and 'mmseqs/' directory
 emapper_db_dir: "/sw/data/eggNOG_data/5.0.0/rackham"
-
+# interproscan_url is the URL path where the pipeline will fetch interproscan data
+interproscan_url: "http://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.75-106.0/alt/interproscan-data-5.75-106.0.tar.gz"
+# interproscan_profiles is a list of profiles to use for running the external interproscan nextflow pipeline
+# set kebnekaise or dardel if running on one of these clusters and also apptainer to handle software dependencies.
+interproscan_profiles:
+  - "dardel"
+  - "apptainer"
 ## TAXONOMIC SUMMARY ##
 tax_rank: kingdom
 tax_name: Fungi
