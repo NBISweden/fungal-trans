@@ -1,5 +1,6 @@
 localrules:
     download_taxdump,
+    download_interproscan_data,
     download_eggnog,
     get_kegg_files,
     download_refseq_db,
@@ -9,6 +10,29 @@ localrules:
     concat_proteins,
     mmseqs_filter_fungalDB,
     mmseqs_create_taxidmap
+
+# interproscan
+
+rule download_interproscan_data:
+    output:
+        data=directory("resources/interproscan/data")
+    log:
+        log="resources/interproscan/log",
+        version="resources/interproscan/version"
+    params:
+        url=config["interproscan_url"],
+        basename=os.path.basename(config["interproscan_url"]),
+        version=os.path.basename(config["interproscan_url"]).replace(".tar.gz", ""),
+        outdir=lambda wildcards, output: os.path.dirname(output.data)
+    shadow: "minimal"
+    shell:
+        """
+        curl -O {params.url} > {log.log}
+        curl -s -O {params.url}.md5
+        echo -e "version: {params.version}" > {log.version}
+        md5sum -c {params.basename}.md5 >> {log.log}
+        tar -pxzf {params.basename} --strip-components=1 -C {params.outdir}
+        """
 
 # eggnog
 

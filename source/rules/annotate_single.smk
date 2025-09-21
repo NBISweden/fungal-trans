@@ -151,6 +151,7 @@ rule transdecoder_predict:
     shell:
         """
         TransDecoder.Predict -t {input.fa} --retain_blastp_hits {input.m8} -O {params.output_dir} > {log} 2>&1
+        sed -i 's/*$//g' {output[0]}
         """
 
 
@@ -381,6 +382,28 @@ rule parse_featurecounts:
         )
         df.to_csv(output[0], sep="\t")
 
+
+rule interproscan:
+    """
+    Runs the interproscan nextflow pipeline to annotate proteins.
+    """
+    output:
+        tsv="results/annotation/{assembler}/{sample_id}/interproscan/interproscan.tsv"
+    input:
+        input=rules.transdecoder_predict.output[0],
+        datadir=rules.download_interproscan_data.output.data
+    log:
+        "results/annotation/{assembler}/{sample_id}/interproscan/interproscan.log",
+    params:
+        pipeline = "ebi-pf-team/interproscan6",
+        revision = "6.0.0-beta",
+        extra = lambda wildcards, resources: set_interproscan_extra(wildcards, resources),
+        profile = config["interproscan_profiles"],
+        outdir = lambda wildcards, output: os.path.dirname(output.tsv),
+        outprefix = "interproscan"
+    handover: True
+    wrapper:
+        "v7.2.0/utils/nextflow"
 
 ###################
 ## EGGNOG-MAPPER ##
