@@ -39,8 +39,8 @@ rule init_jgi:
         "resources/JGI/init_jgi.log"
     shadow: "shallow"
     params:
-        user_name = config["jgi_user"],
-        password = config["jgi_password"]
+        user_name = config["jgi_user"] if "jgi_user" in config.keys() else "",
+        password = config["jgi_password"] if "jgi_password" in config.keys() else ""
     retries: 3
     shell:
         """

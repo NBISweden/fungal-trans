@@ -281,77 +281,6 @@ rule transabyss_merge_co:
         mv {params.tmpout} {output.fa}
         """
 
-# rule trinity_co:
-#     """
-#     Co-assemble fungal reads with Trinity.
-#     """
-#     output:
-#         fa = "results/co-assembly/trinity/{assembly}/final.fa"
-#     input:
-#         R1=rules.trinity_normalize.output.R1,
-#         R2=rules.trinity_normalize.output.R2
-#     log: "results/co-assembly/trinity/{assembly}/log"
-#     params:
-#         min_contig_len = config["min_contig_len"],
-#         tmpdir="{assembly}.co.trinity",
-#         outdir = lambda wildcards, output: os.path.dirname(output.fa),
-#         out_base = lambda wildcards, output: os.path.basename(output.fa),
-#         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
-#     threads: 6
-#     resources:
-#         #runtime = 72 * 60
-#     conda: "../../envs/trinity.yaml"
-#     shadow: "shallow"
-#     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
-#     shell:
-#         """
-#         rm -rf {params.outdir}/*
-#         rm -rf {params.tmpdir}
-#         mkdir -p {params.tmpdir}
-#         Trinity --no_normalize_reads --CPU {threads} --min_contig_length {params.min_contig_len} \
-#             --output {params.tmpdir} --left {input.R1} --right {input.R2} \
-#             --seqType fq --max_memory {params.max_mem}G > {log} 2>&1
-#         mv {params.tmpdir}/* {params.outdir}/
-#         mv {params.tmpdir}.Trinity.fasta {params.outdir}/{params.out_base}
-#         """
-
-
-# rule trinity_co_inchworm_chrysalis:
-#     """
-#     Run first two stages of Trinity (Inchworm and Chrysalis).
-#     Can be further split if job is too big (see Trinity documentation)
-#     """
-#     input:
-#         R1=rules.trinity_normalize.output.R1,
-#         R2=rules.trinity_normalize.output.R2
-#     output:
-#         cmds="tmp/{assembly}.co.trinity/recursive_trinity.cmds"
-#     log:
-#         "tmp/{assembly}.co.trinity/log_inchworm_chrysalis"
-#     params:
-#         min_contig_len = config["min_contig_len"],
-#         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000),
-#         tmpdir=tmpdir
-#     conda: "../../envs/trinity.yaml"
-#     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
-#     shell:
-#         """
-#         mkdir -p {params.tmpdir}
-#         Trinity \
-#             --no_distributed_trinity_exec \
-#             --min_contig_length {params.min_contig_len} \
-#             --max_memory {params.max_mem}G \
-#             --CPU {threads} \
-#             --left {input.R1} --right {input.R2} \
-#             --output {params.tmpdir} \
-#             --seqType fq \
-#             --no_normalize_reads \
-#             > {params.tmpdir}/log_inchworm_chrysalis 2>&1
-
-#         cp {params.tmpdir}/recursive_trinity.cmds {output.cmds}
-#         cp {params.tmpdir}/log_inchworm_chrysalis {log}
-#         """
-
 rule trinity_co_inchworm:
     """
     Run only the Inchworm step of Trinity.
@@ -361,72 +290,28 @@ rule trinity_co_inchworm:
         R1=rules.trinity_normalize.output.R1,
         R2=rules.trinity_normalize.output.R2
     output:
-        inchworm_finished="tmp/{assembly}.co.trinity/inchworm.DS.fa.finished"
+        inchworm_finished="results/co-assembly/trinity/{assembly}/trinity.multi-stage/inchworm.DS.fa.finished"
     log:
-        "tmp/{assembly}.co.trinity/log_inchworm"
+        "results/co-assembly/trinity/{assembly}/trinity.multi-stage/log_inchworm"
     params:
         min_contig_len=config["min_contig_len"],
-        tmpdir=tmpdir,
+        outdir=lambda wildcards, output: os.path.dirname(output.inchworm_finished),
         max_mem = lambda wildcards, resources: int(resources.mem_mb / 1000)
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
-        mkdir -p {params.tmpdir}
-        #max_mem=$(({resources.mem_mb} / 1000))
         Trinity \
             --no_run_chrysalis --min_kmer_cov 2 \
             --min_contig_length {params.min_contig_len} \
             --max_memory {params.max_mem}G \
             --CPU {threads} \
             --left {input.R1} --right {input.R2} \
-            --output {params.tmpdir} \
+            --output {params.outdir} \
             --seqType fq \
             --no_normalize_reads \
-            > {params.tmpdir}/log_inchworm 2>&1
-
-        # Copy a marker file for Snakemake
-        cp {params.tmpdir}/inchworm.DS.fa.finished {output.inchworm_finished}
-        cp {params.tmpdir}/log_inchworm {log}
+            > {log} 2>&1
         """
-
-# rule trinity_inchworm:
-#     """
-#     Run only the Inchworm step of Trinity.
-#     Produces intermediate assembly files in tmpdir, to be used by Chrysalis.
-#     """
-#     input:
-#         R1=rules.trinity_normalize.output.R1,
-#         R2=rules.trinity_normalize.output.R2
-#     output:
-#         inchworm_finished="tmp/{assembly}.co.trinity/inchworm.DS.fa.finished"
-#     log:
-#         "tmp/{assembly}.co.trinity/log_inchworm"
-#     params:
-#         min_contig_len = config["min_contig_len"],
-#         max_mem = lambda wildcards, resources: int(resources.mem_mb / 1000),
-#         tmpdir=tmpdir
-#     conda: "../../envs/trinity.yaml"
-#     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
-#     shell:
-#         """
-#         mkdir -p {params.tmpdir}
-#         Trinity \
-#             --no_run_chrysalis \
-#             --min_contig_length {params.min_contig_len} \
-#             --max_memory {params.max_mem}G \
-#             --CPU {threads} \
-#             --left {input.R1} --right {input.R2} \
-#             --output {params.tmpdir} \
-#             --seqType fq \
-#             --no_normalize_reads \
-#             > {params.tmpdir}/log_inchworm 2>&1
-
-#         # Copy a marker file for Snakemake
-#         cp {params.tmpdir}/trinity_out_dir/inchworm.DS.fa.finished {output.inchworm_finished}
-#         cp {params.tmpdir}/log_inchworm {log}
-#         """
-
 
 rule trinity_co_chrysalis:
     """
@@ -438,13 +323,13 @@ rule trinity_co_chrysalis:
         R1=rules.trinity_normalize.output.R1,
         R2=rules.trinity_normalize.output.R2
     output:
-        cmds="tmp/{assembly}.co.trinity/recursive_trinity.cmds"
+        cmds="results/co-assembly/trinity/{assembly}/trinity.multi-stage/recursive_trinity.cmds"
     log:
-        "tmp/{assembly}.co.trinity/log_chrysalis"
+        "results/co-assembly/trinity/{assembly}/trinity.multi-stage/log_chrysalis"
     params:
         min_contig_len = config["min_contig_len"],
         max_mem = lambda wildcards, resources: int(resources.mem_mb / 1000),
-        tmpdir=tmpdir
+        outdir=lambda wildcards, output: os.path.dirname(output.cmds)
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
@@ -458,31 +343,26 @@ rule trinity_co_chrysalis:
             --seqType fq \
             --no_normalize_reads \
             --left {input.R1} --right {input.R2} \
-            --output {params.tmpdir} \
-            > {params.tmpdir}/log_chrysalis 2>&1
-
-        cp {params.tmpdir}/recursive_trinity.cmds {output.cmds}
-        cp {params.tmpdir}/log_chrysalis {log}
+            --output {params.outdir} \
+            > {log} 2>&1
         """
 
 checkpoint trinity_co_butterfly_split:
     """
     Prepare for parallel Butterfly execution by splitting commands.
+    Splits the cmds file into 999 separate files.
     """
     input:
-        "tmp/{assembly}.co.trinity/recursive_trinity.cmds"
+        rules.trinity_co_chrysalis.output.cmds
     output:
-        directory("tmp/{assembly}.co.trinity/parallel_jobs")
+        directory("results/co-assembly/trinity/{assembly}/trinity.multi-stage/parallel_jobs")
     log:
-        "tmp/{assembly}.co.trinity/log_split"
-    params:
-        tmpdir=tmpdir
+        "results/co-assembly/trinity/{assembly}/trinity.multi-stage/log_split"
     shell:
         """
-        mkdir -p {params.tmpdir}/parallel_jobs &> {log}
-        split -n l/999 -e -d {input} {params.tmpdir}/parallel_jobs/job_ &>> {log}
-        sed -i 's/\r$//' {params.tmpdir}/parallel_jobs/job_* &>> {log}
-        cp -r {params.tmpdir}/parallel_jobs {output}
+        mkdir -p {output}
+        split -n l/999 -e -d {input} {output}/job_ &>> {log}
+        sed -i 's/\r$//' {output}/job_* &>> {log}
         """
 
 rule trinity_co_butterfly_parallel:
@@ -490,19 +370,19 @@ rule trinity_co_butterfly_parallel:
     Run Trinity Butterfly commands (split for parallelization).
     """
     input:
-        "tmp/{assembly}.co.trinity/parallel_jobs/job_{job_index}"
+        "results/co-assembly/trinity/{assembly}/trinity.multi-stage/parallel_jobs/job_{job_index}"
     output:
-        "tmp/{assembly}.co.trinity/parallel_jobs/completed_{job_index}"
+        "results/co-assembly/trinity/{assembly}/trinity.multi-stage/parallel_jobs/completed_{job_index}"
     log:
-        "tmp/{assembly}.co.trinity/log_parallel_{job_index}"
+        "results/co-assembly/trinity/{assembly}/trinity.multi-stage/parallel_jobs/log_parallel_{job_index}"
     params:
         tmpdir=tmpdir
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
-        bash {input} &> {log}
-        cp {input} {output} &>> {log}
+        bash {input} > {log}
+        cp {input} {output}
         """
 
 def trinity_co_completed_jobs(wildcards):
@@ -510,7 +390,7 @@ def trinity_co_completed_jobs(wildcards):
     from glob import glob
     parallel_dir = checkpoints.trinity_co_butterfly_split.get(**wildcards).output[0]
     job_ids = [os.path.basename(p).replace("job_", "") for p in glob(f"{parallel_dir}/job_*")]
-    return expand(f"{parallel_dir}/completed_{{job_index}}", job_index=job_ids)
+    return [f"{parallel_dir}/completed_{job_index}" for job_index in job_ids]
 
 rule trinity_co_butterfly_merge:
     """
@@ -518,13 +398,11 @@ rule trinity_co_butterfly_merge:
     """
     input:
         jobs=trinity_co_completed_jobs,
-        cmds="tmp/{assembly}.co.trinity/recursive_trinity.cmds"
+        cmds=rules.trinity_co_chrysalis.output.cmds
     output:
-        "tmp/{assembly}.co.trinity/recursive_trinity.cmds.completed"
+        "results/co-assembly/trinity/{assembly}/trinity.multi-stage/recursive_trinity.cmds.completed"
     log:
-        "tmp/{assembly}.co.trinity/log_merge"
-    params:
-        tmpdir=tmpdir
+        "results/co-assembly/trinity/{assembly}/trinity.multi-stage/log_merge"
     shell:
         """
         cat {input.jobs} > {output} 2> {log}
@@ -535,37 +413,35 @@ rule trinity_co_final:
     Finalize the Trinity assembly.
     """
     input:
-        cmds_completed="tmp/{assembly}.co.trinity/recursive_trinity.cmds.completed",
+        cmds_completed=rules.trinity_co_butterfly_merge.output[0],
         R1=rules.trinity_normalize.output.R1,
         R2=rules.trinity_normalize.output.R2
     output:
-        fa="results/co-assembly/trinity/{assembly}/final.fa"
+        fa="results/co-assembly/trinity/{assembly}/final.fa",
+        map="results/co-assembly/trinity/{assembly}/final.fa.gene_trans_map"
     log:
-        "results/co-assembly/trinity/{assembly}/log"
+        "results/co-assembly/trinity/{assembly}/log_final"
     params:
         min_contig_len = config["min_contig_len"],
-        tmpdir=tmpdir,
-        max_mem = lambda wildcards, resources: int(resources.mem_mb /1000)
+        max_mem = lambda wildcards, resources: int(resources.mem_mb /1000),
+        outdir=lambda wildcards, input: os.path.dirname(input.cmds_completed)
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
-        cp {input.cmds_completed} {params.tmpdir}
         Trinity \
             --max_memory {params.max_mem}G \
             --CPU {threads} \
             --no_bowtie --min_kmer_cov 2 \
-            --output {params.tmpdir} \
+            --output {params.outdir} \
             --left {input.R1} --right {input.R2} \
             --min_contig_length {params.min_contig_len} \
             --seqType fq \
             --no_normalize_reads \
             --full_cleanup \
-            > {params.tmpdir}/log_final 2>&1
-
-        mv {params.tmpdir}.Trinity.fasta {output.fa}
-        cp {params.tmpdir}/log_final {log}
-        rm -rf {params.tmpdir}/*
+            > {log} 2>&1
+        mv {params.outdir}.Trinity.fasta {output.fa}
+        mv {params.outdir}.Trinity.fasta.gene_trans_map {output.map}
         """
 
 rule megahit_co:

@@ -1,4 +1,4 @@
-$schema: "http://json-schema.org/draft-06/schema#"
+$schema: "https://json-schema.org/draft/2020-12/schema"
 description: Configuration schema
 properties:
   slurm_partitions:
@@ -16,6 +16,15 @@ properties:
         type: string
         default: "shared"
         description: "Partition for jobs requiring <220G RAM"
+  ## JGI ##
+  jgi_user:
+    type: string
+    default: ""
+    description: "JGI user name"
+  jgi_password:
+    type: string
+    default: ""
+    description: "JGI password"
   ## PATHS ##
   workdir:
     type: string

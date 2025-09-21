@@ -32,15 +32,15 @@ rule kallisto_quant_co:
     Quantify reads with kallisto.
     """
     output:
-        h5 = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/abundance.h5",
-        tsv = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/abundance.tsv",
-        json = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/run_info.json",
+        h5 = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/abundance.h5",
+        tsv = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/abundance.tsv",
+        json = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/run_info.json",
     input:
         index = rules.kallisto_index_co.output,
         R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
         R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     log:
-        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto.log"
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/kallisto.log"
     container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
     conda: "../../envs/kallisto.yaml"
     params:
@@ -58,42 +58,114 @@ rule parse_kallisto_co:
     Parses Kallisto output
     """
     output:
-        est="results/annotation/co-assembly/{assembler}/{assembly}/kallisto/{sample_id}.est_counts.tsv",
-        tpm="results/annotation/co-assembly/{assembler}/{assembly}/kallisto/{sample_id}.tpm.tsv",
+        tsv="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/{s}.tsv",
     input:
         tsv=rules.kallisto_quant_co.output.tsv
     run:
         df = pd.read_csv(input.tsv, sep="\t", index_col=0, header=0, comment="#", usecols=[0,3,4], names=["gene_id", "est_counts", "tpm"])
-        est = df.loc[:, ["est_counts"]]
-        est.columns=[wildcards.sample_id]
-        tpm = df.loc[:, ["tpm"]]
-        tpm.columns=[wildcards.sample_id]
-        est.to_csv(output.est, sep="\t")
-        tpm.to_csv(output.tpm, sep="\t")
+        df = df.loc[:, [wildcards.s]]
+        df.columns=[wildcards.sample_id]
+        df.to_csv(output.tsv, sep="\t")
 
 rule collate_kallisto_co:
     """
     Collate Kallisto output
     """
     output:
-        est="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.est_counts.tsv",
-        tpm="results/collated/co-assembly/{assembler}/{assembly}/abundance/{assembly}.tpm.tsv",
+        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/{s}.tsv",
     input:
-        est=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/kallisto/{sample_id}.est_counts.tsv",
-            sample_id = samples.keys()),
-        tpm=expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/kallisto/{sample_id}.tpm.tsv",
+        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/{{s}}.tsv",
             sample_id = samples.keys())
     run:
         df = pd.DataFrame()
-        for f in input.est:
+        for f in input:
             _df=pd.read_csv(f, sep="\t", index_col=0, header=0)
             df = pd.merge(df, _df, how="outer", left_index=True, right_index=True)
-        df.to_csv(output.est, sep="\t")
+        df.to_csv(output.tsv, sep="\t")
+
+#########################
+## RSEM quantification ##
+#########################
+
+rule rsem_index_co:
+    input:
+        "results/co-assembly/{assembler}/{assembly}/final.fa"
+    output:
+        expand(
+            "results/co-assembly/{{assembler}}/{{assembly}}/final.fa.{suff}",
+            suff = ["bowtie2.ok", "RSEM.rsem.prepped.ok"])
+    log:
+        "results/co-assembly/{assembler}/{assembly}/rsem_index.log"
+    params:
+        trinity_mode = lambda wildcards: "--trinity_mode" if wildcards.assembler == "trinity" else "",
+    threads: 10
+    conda: "../../envs/trinity.yaml"
+    shadow: "shallow"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
+    shell:
+        """
+        $TRINITY_HOME/util/align_and_estimate_abundance.pl --transcripts {input} --aln_method bowtie2 \
+            --est_method RSEM --thread_count {threads} {params.trinity_mode} --prep_reference >{log} 2>&1
+        """
+
+rule rsem_map_co:
+    input:
+        fa="results/co-assembly/{assembler}/{assembly}/final.fa",
+        index=rules.rsem_index_co.output,
+        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/rsem.log"
+    output:
+        genes="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.genes.results",
+        isoforms="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.isoforms.results",
+        isoforms_ok="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.isoforms.results.ok",
+        stat=expand(
+            "results/map/co-assembly/{{assembler}}/{{assembly}}/{{sample_id}}/RSEM/RSEM.stat/RSEM.{suff}",
+            suff = ["cnt","model","theta"]
+        ),
+        bam=temp("results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEN/bowtie2.bam"),
+        rsem_bam=temp("results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEN/bowtie2.bam.for_rsem.bam"),
+    params:
+        output_dir = lambda wildcards, output: os.path.dirname(output.genes),
+        trinity_mode = lambda wildcards: "--trinity_mode" if wildcards.assembler == "trinity" else "",
+    threads: 4
+    conda: "../../envs/trinity.yaml"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
+    shell:
+        """
+        $TRINITY_HOME/util/align_and_estimate_abundance.pl --transcripts {input.fa} --seqType fq \
+            --left {input.R1} --right {input.R2} --est_method RSEM {params.trinity_mode} \
+            --aln_method bowtie2 --thread_count {threads} --output_dir {params.output_dir} > {log} 2>&1
+        """
+
+rule parse_rsem_co:
+    input:
+        res="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.{rsem_res}.results"
+    output:
+        tsv="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/{rsem_res}.{s}.tsv"
+    run:
+        import pandas as pd
+        df = pd.read_csv(input.res, sep="\t", index_col=0)
+        df = df.loc[:, [wildcards.s]]
+        df.columns = [wildcards.sample_id]
+        df.to_csv(output.tsv, sep="\t")
+
+rule collate_rsem_co:
+    """
+    Collate RSEM output
+    """
+    output:
+        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/{rsem_res}.{s}.tsv",
+    input:
+        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/RSEM/{{rsem_res}}.{{s}}.tsv",
+            sample_id = samples.keys())
+    run:
         df = pd.DataFrame()
-        for f in input.tpm:
+        for f in input:
             _df=pd.read_csv(f, sep="\t", index_col=0, header=0)
             df = pd.merge(df, _df, how="outer", left_index=True, right_index=True)
-        df.to_csv(output.tpm, sep="\t")
+        df.to_csv(output.tsv, sep="\t")
 
 rule wrap_assembly_co:
     """
@@ -125,7 +197,7 @@ rule subread_index_co:
     conda: "../../envs/featurecount.yaml"
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
-        max_mem = lambda wildcards, resources: int(resources.mem_mb)
+        max_mem = lambda wildcards, resources: int(resources.mem_mb) if type(resources.mem_mb) ==int else resources.mem_mb
     shell:
         """
         subread-buildindex -M {params.max_mem} -o {params.outdir}/subread_index {input} > {log} 2>&1
@@ -160,9 +232,9 @@ rule multiqc_map_report_co:
     Generate a multiqc report for co-assemblies.
     """
     input:
-        kallisto_logs = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto.log",
+        kallisto_logs = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/kallisto.log",
             sample_id = samples.keys()),
-        kallisto = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/abundance.h5",
+        kallisto = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/abundance.h5",
             sample_id = samples.keys()),
         fc_logs = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tsv.summary",
             sample_id = samples.keys())
