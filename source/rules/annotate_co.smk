@@ -361,7 +361,7 @@ rule featurecount_co:
     """
     input:
         gff="results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/final.fa.transdecoder.gff3",
-        bam="results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam",
+        bam="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/bowtie2.bam"
     output:
         cnt="results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tsv",
         summary="results/annotation/co-assembly/{assembler}/{assembly}/featureCounts/{sample_id}.fc.tsv.summary",
