@@ -16,23 +16,6 @@ rule download_kraken_db:
         curl -L -o resources/kraken/taxo.k2d {params.taxo}
         """
 
-def kraken_partition(wildcards):
-    """
-    Get the partition for Kraken
-
-    Parameters
-    ----------
-    wildcards : Wildcards
-        Wildcards from Snakemake
-
-    Returns
-    -------
-    str
-        Partition for Kraken
-    """
-    size_mb = int(os.stat(f"{config['kraken_db_dir']}/{config['kraken_db']}/hash.k2d").st_size / 1024**2)
-    return slurm_mem_partition(size_mb)
-
 rule preload_kraken_db:
     """
     Preload the Kraken database into memory
@@ -45,8 +28,6 @@ rule preload_kraken_db:
         db = lambda wildcards: os.path.join(config["kraken_db_dir"], wildcards.kraken_db)
     resources:
         mem_mb=lambda wildcards, input: max(1.15 * int(os.stat(input[0]).st_size / 1024**2), 888),
-        constraint='largemem'#,
-        ##slurm_partition=lambda wildcards: kraken_partition
     group: "kraken2"
     shell:
         """
@@ -78,9 +59,6 @@ rule run_kraken:
     container: "docker://quay.io/biocontainers/kraken2:2.1.3--pl5321h077b44d_4"
     group: "kraken2"
     shadow: "shallow"
-    resources:
-        constraint='largemem'
-        #slurm_partition=lambda wildcards: kraken_partition(wildcards)
     shell:
         """
         kraken2 --db /dev/shm/{params.db} --memory-mapping --output {params.tmp} --report {output[1]} --gzip-compressed \
@@ -97,8 +75,6 @@ rule kraken:
     params:
         kraken_db=config["kraken_db"]
     group: "kraken2"
-    resources:
-        slurm_partition=lambda wildcards: kraken_partition(wildcards)
     shell:
         """
         rm -rf /dev/shm/{params.kraken_db}
