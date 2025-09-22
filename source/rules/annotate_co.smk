@@ -570,18 +570,56 @@ rule parse_eggnog_co:
         python {params.src} parse {params.dldir} {input.f} {params.outdir} 2>{log}
         """
 
+def get_quant_table(wildcards):
+    if wildcards.quant_type in ["TPM","FPKM","expected_count"]:
+        return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/RSEM/isoforms.{wildcards.quant_type}.tsv"
+    elif wildcards.quant_type in ["tpm","est_counts"]:
+        return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/kallisto/{wildcards.quant_type}.tsv"
+    
+def get_protein_quant_table(wildcards):
+    if wildcards.quant_type in ["TPM","FPKM","expected_count"]:
+        return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/RSEM/proteins.{wildcards.quant_type}.tsv"
+    elif wildcards.quant_type in ["tpm","est_counts"]:
+        return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/kallisto/proteins.{wildcards.quant_type}.tsv"
+    elif wildcards.quant_type=="raw":
+            return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/featureCounts/{wildcards.quant_type}.tsv"
+
+rule sum_proteins_co:
+    """
+    Sum quantification to protein level
+    """
+    input:
+        tsv=get_quant_table,
+        gff="results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/final.fa.transdecoder.gff3"
+    output:
+        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/{tool}/proteins.{quant_type}.tsv"
+    run:
+        import polars as pl
+        gff_df = pl.scan_csv(input.gff, separator="\t", has_header=False, new_columns=["transcript_id","source","feature_type","start","end","score", "strand","frame","attr"])
+        # generate transcript id to protein table
+        transcript2protein = (
+            gff_df.filter(pl.col("feature_type")=="CDS")
+            .select(["transcript_id","attr"])
+            .with_columns(protein=pl.col("attr").str.split(";").list.first().str.replace("ID=cds.",""))
+            .drop("attr")
+        ).collect(engine="streaming")
+        tsv_df = pl.read_csv(input.tsv, separator="\t")
+        joined = transcript2protein.join(tsv_df, on="transcript_id")
+        protein_sum = joined.group_by("protein").agg(pl.sum(tsv_df.columns[1:]))
+        protein_sum.write_csv(output.tsv, separator="\t")
+
 
 # TODO: Fix quantifying
 rule quantify_eggnog_co:
     """
-    Sums up read counts for each feature in the eggNOG database
+    Sums up quantification results for each feature in the eggNOG database
     Note that since ORFs can be annotated to multiple features, the same ORF can be counted multiple times.
     """
     input:
-        abundance=rules.collate_featurecount_co.output[0],
+        abundance=get_protein_quant_table,
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
     output:
-        "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.raw.tsv",
+        "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{quant_type}.tsv",
     run:
         abundance_df = pd.read_csv(input.abundance, sep="\t", index_col=0)
         parsed_df = pd.read_csv(input.parsed, sep="\t", index_col=0)
@@ -594,22 +632,20 @@ rule quantify_eggnog_co:
         df_sum.set_index(feature_cols[0], inplace=True)
         df_sum.to_csv(output[0], sep="\t")
 
-
 rule eggnog_tax_annotations:
     """Collate gene annotations and abundances for a certain rank:taxon combination"""
     input:
         gene_tax="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
-        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/featureCounts/raw.tsv",
+        abundance=get_protein_quant_table,
     output:
         expand(
-            "results/collated/co-assembly/{{assembler}}/{{assembly}}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{{db}}.raw.tsv",
+            "results/collated/co-assembly/{{assembler}}/{{assembly}}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{{db}}.{{quant_type}}.tsv",
             tax_rank=config["tax_rank"],
             tax_name=config["tax_name"],
         ),
     run:
         import pandas as pd
-
         abundance = pd.read_csv(input.abundance, header=0, sep="\t", index_col=0)
         parsed = pd.read_csv(input.parsed, header=0, sep="\t", index_col=0)
         gene_tax = pd.read_csv(input.gene_tax, header=0, sep="\t", index_col=0)
@@ -647,13 +683,12 @@ rule eggnog_tax_annotations:
 ## TAXONOMIC ANNOTATION ##
 ##########################
 
-
 rule sum_taxonomy_co:
     input:
         gene_tax="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
-        abundance="results/collated/co-assembly/{assembler}/{assembly}/abundance/featureCounts/raw.tsv",
+        abundance=get_protein_quant_table,
     output:
-        "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.raw.tsv",
+        "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{quant_type}.tsv"
     run:
         ranks = [
             "superkingdom",

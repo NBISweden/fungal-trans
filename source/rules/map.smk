@@ -3,8 +3,6 @@ localrules:
     multiqc_map_report_co, 
     wrap_assembly,
     wrap_assembly_co,
-    #parse_kallisto_co,
-    #collate_kallisto_co
 
 ###############################
 ## Mapping for co-assemblies ##
@@ -72,9 +70,9 @@ rule collate_kallisto_co:
     Collate Kallisto output
     """
     output:
-        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/{s}.tsv",
+        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/{quant_type}.tsv",
     input:
-        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/{{s}}.tsv",
+        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/{{quant_type}}.tsv",
             sample_id = samples.keys())
     run:
         df = pd.DataFrame()
@@ -143,11 +141,11 @@ rule parse_rsem_co:
     input:
         res="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.{rsem_res}.results"
     output:
-        tsv="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/{rsem_res}.{s}.tsv"
+        tsv="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/{rsem_res}.{quant_type}.tsv"
     run:
         import pandas as pd
         df = pd.read_csv(input.res, sep="\t", index_col=0)
-        df = df.loc[:, [wildcards.s]]
+        df = df.loc[:, [wildcards.quant_type]]
         df.columns = [wildcards.sample_id]
         df.to_csv(output.tsv, sep="\t")
 
@@ -156,9 +154,9 @@ rule collate_rsem_co:
     Collate RSEM output
     """
     output:
-        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/{rsem_res}.{s}.tsv",
+        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/{rsem_res}.{quant_type}.tsv",
     input:
-        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/RSEM/{{rsem_res}}.{{s}}.tsv",
+        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/RSEM/{{rsem_res}}.{{quant_type}}.tsv",
             sample_id = samples.keys())
     run:
         df = pd.DataFrame()

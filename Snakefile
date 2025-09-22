@@ -58,7 +58,8 @@ wildcard_constraints:
     i = "1|2",
     paired_strategy = "one_mapped|both_mapped",
     kraken_db = config["kraken_db"],
-    mmseqs_db = config["mmseqs_db"]
+    mmseqs_db = config["mmseqs_db"],
+    quant_type = "expected_count|est_counts|tpm|FPKM|TPM|raw"
 
 # Get environment info
 pythonpath = sys.executable
@@ -252,12 +253,13 @@ def all_input(wildcards):
         # eggnog taxonomy
         inputs.extend(
             expand(
-                "results/collated/co-assembly/{assembler}/{assembly}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{db}.raw.tsv",
+                "results/collated/co-assembly/{assembler}/{assembly}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{db}.{quant_type}.tsv",
                 assembly=assemblies.keys(), 
                 assembler=config["assembler"],
                 db=["kos","enzymes","modules","pathways","tc","cazy"],
                 tax_rank=config["tax_rank"],
-                tax_name=config["tax_name"]
+                tax_name=config["tax_name"],
+                quant_type=["expected_count","TPM","FPKM","est_counts","tpm","raw"]
             )
         )
         # interproscan
@@ -278,27 +280,27 @@ def all_input(wildcards):
         )
         inputs.extend(
             expand(
-                "results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/{c}.tsv",
+                "results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/proteins.{quant_type}.tsv",
                 assembly=assemblies.keys(),
                 assembler=config["assembler"],
-                c=["est_counts", "tpm"]
+                quant_type=["est_counts", "tpm"]
             )
         )
         inputs.extend(
             expand(
-                "results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/{rsem_res}.{s}.tsv",
+                "results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/proteins.{quant_type}.tsv",
                 assembly=assemblies.keys(),
                 assembler=config["assembler"],
-                rsem_res=["genes","isoforms"],
-                s=["expected_count", "TPM","FPKM"]
+                quant_type=["expected_count", "TPM","FPKM"]
             )
         )
         # taxonomy counts
         inputs.extend(
             expand(
-                "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.raw.tsv",
+                "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{quant_type}.tsv",
                 assembly=assemblies.keys(), 
                 assembler=config["assembler"],
+                quant_type=["expected_count","TPM","FPKM","est_counts","tpm","raw"]
             )
         )
         # mapping report
