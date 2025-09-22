@@ -54,6 +54,7 @@ Here, `--configfile` specifies a configuration file to use which contains parame
 
 - The `dardel` profile is tailored for running on the [Dardel](https://www.pdc.kth.se/hpc-services/computing-systems/dardel-hpc-system) HPC system.
 - The `local` profile is more general and can be used to test the workflow on your local computer.
+- The `kebnekaise` profile is tailored for running on the [HPC2N](https://www.hpc2n.umu.se/) system.
 
 Each profile has a subdirectory in the repository root containing a `config.yaml` file in YAML format:
 
@@ -61,11 +62,13 @@ Each profile has a subdirectory in the repository root containing a `config.yaml
 ./
 ├── dardel
 │   └── config.yaml
+├── kebnekaise
+│   └── config.yaml
 └── local
     └── config.yaml
 ```
 
-For both these profiles, the first section of the `config.yaml` file specifies several command line flags for Snakemake, *e.g.*:
+For all these profiles, the first section of the `config.yaml` file specifies several command line flags for Snakemake, *e.g.*:
 
 ```yaml
 rerun-triggers: "mtime" # use modification time of files as a trigger for rerunning jobs
@@ -121,7 +124,7 @@ module load PDC apptainer
 
 The workflow can be configured using a configuration file in YAML format. The
 default configuration file is included in this repo as `config.yml` in the
-repository root. The best practice is to make a copy of this file and apply any
+repository root. We recommend making a copy of this file and applying any
 changes needed in the copy, _e.g._:
 
 ```bash
@@ -166,7 +169,7 @@ If your config file has `fungi_filter: True` (to filter reads by mapping against
 JGI Mycocosm transcripts) or if the `extra_genomes:` parameter is set to a non-empty
 string (pointing to a list of genomes to use for generating a custom taxonomy
 database, see below under [Generating a custom taxonomy
-database](#generating-a-custom-taxonomy-database)) this requires that files are
+database](#generating-a-custom-taxonomy-database)), this requires that files are
 downloaded from [JGI Mycocosm](https://mycocosm.jgi.doe.gov/mycocosm/home). To
 make this work you need to have login credentials which you can obtain by
 registering [here](https://contacts.jgi.doe.gov/registration/new). Once you have
@@ -181,7 +184,16 @@ jgi_password: "your-password"
 then modify your configuration file so that the `jgi_account_info` parameter
 points to the file with your credentials.
 
-Information about genomes found in the JGI Mycocosm database will be stored in `resources/JGI/genomes.tsv`. This file will be available after a dry-run of the workflow so you may inspect it before running the workflow. The file should look like this:
+The `fungi_info` parameter specifies the path to a JGI Genome portal listing in
+HTML format. Previously, this file could be parsed directly from the URL
+https://mycocosm.jgi.doe.gov/fungi/fungi.info.html but this is not possible
+anymore because of a CAPTCHA introduced by JGI. Instead you can download this
+file in your browser and supply the HTML file with the `fungi_info` parameter.
+
+The `fungi_genomes_file` specifies where to save information for genomes parsed
+from the `fungi_info` HTML file. This file will be available after a dry-run of the
+workflow so you may inspect it before running the workflow. The file should look
+like this:
 
 | portal | Name | bp | genes |
 |--------|------|----|------|
@@ -199,7 +211,7 @@ file needs to be specified in your configuration file with the `host_fna` and
 
 #### Generating a custom taxonomy database
 
-Assembled transcripts are annotated taxonomically using MMSeqs2 using one of the
+Assembled transcripts are annotated taxonomically with MMSeqs2 using one of the
 official databases with taxonomy support (see configuration parameters
 `mmseqs_db_dir` and `mmseqs_db`). However, if you want to supplement the
 taxonomy database with additional reference proteins from JGI Mycocosm you need
@@ -222,9 +234,13 @@ datadir: "data/raw"
 read_length: 150
 ```
 
-When the `sample_file_list` contains accession ids for downloading directly from a public read archive, the `datadir` parameter sets the directory where fastq files are stored.
+When the `sample_file_list` contains accession ids for downloading directly from
+a public read archive, the `datadir` parameter sets the directory where fastq
+files are stored.
 
-The `read_length` parameter is used by the STAR aligner when generating the host genome index. If your samples have different read lengths, set this to the maximum among the samples.
+The `read_length` parameter is used by the STAR aligner when generating the host
+genome index. If your samples have different read lengths, set this to the
+maximum among the samples.
 
 #### Preprocessing
 
@@ -234,9 +250,12 @@ fastp_adapter_sequence_r2: "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
 fastp_length_required: 50
 ```
 
-The parameters `fastp_adapter_sequence` and `fastp_adapter_sequence_r2` specify the adapter sequences to trim from the R1 and R2 files, respectively. The default values shown above are for Illumina TruSeq adapters.
+The parameters `fastp_adapter_sequence` and `fastp_adapter_sequence_r2` specify
+the adapter sequences to trim from the R1 and R2 files, respectively. The
+default values shown above are for Illumina TruSeq adapters.
 
-The `fastp_length_required` parameter sets the minimum read length required to keep reads after quality/adapter trimming.
+The `fastp_length_required` parameter sets the minimum read length required to
+keep reads after quality/adapter trimming.
 
 #### Filtering
 
@@ -250,15 +269,111 @@ host_gff: ""
 star_limitGenomeGenerateRAM: 128
 star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent"
 star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
+
 fungi_filter: False
-kraken_filter: False
 paired_strategy: "one_mapped"
 fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
 fungi_genomes_file: "resources/JGI/genomes.tsv"
 jgi_account_info: "config/jgi_account_info.yml"
 strobealign_strobe_len: 17
+
+kraken_filter: False
+kraken_db: "20240229-015730_nt"
+kraken_db_dir: "/sw/data/Kraken2_data"
+kraken_confidence: 0.2
 ```
 
-The `host_filter` parameter indicates whether reads that align to a host genome should be removed. If `host_filter` is set to `True` then the parameters `host_fna` and `host_gff` **must** point to a gzipped fasta and GFF annotation file, respectively. Reads are aligned using the [STAR](https://github.com/alexdobin/STAR) aligner. 
+The `host_filter` parameter indicates whether reads that align to a host genome
+should be removed. If `host_filter` is set to `True` then the parameters
+`host_fna` and `host_gff` **must** point to a gzipped fasta and GFF annotation
+file, respectively. Reads are aligned using the
+[STAR](https://github.com/alexdobin/STAR) aligner. 
 
-The `star_limitGenomeGenerateRAM` parameter sets the maximum allowed RAM usage (in GB) when generating the host genome index. The `star_extra_build_params` and `star_extra_params` parameters act as catch-all strings for any settings you want to pass to the STAR build and 
+The `star_limitGenomeGenerateRAM` parameter sets the maximum allowed RAM usage
+(in GB) when generating the host genome index. The `star_extra_build_params` and
+`star_extra_params` parameters act as catch-all strings for any settings you
+want to pass to the STAR build and STAR align rules.
+
+Setting `fungi_filter` parameter to `True` activates filtering of preprocessed
+reads by mapping reads to a collection of transcriptomes downloaded from the JGI
+Genome Portal. The `paired_strategy` parameter sets how read fungal filtering is
+applied. With `one_mapped` paired end reads where *at least* one of the reads
+map to a fungal transcriptome are kept as fungal. With `both_mapped` only reads
+where both reads in a pair map to fungi are kept. The `strobealign_strobe_len`
+parameter sets the seed length and is used by
+[strobealign](https://github.com/ksahlin/StrobeAlign) when filtering fungal
+reads. For additional information see the [JGI Login Info](#jgi-login-info)
+section.
+
+With `kraken_filter` set to `True` reads are also assigned a taxonomy using kraken2. The kraken database to use is specified with the `kraken_db` and `kraken_db_dir` parameters. For example, if you have the full `NT` kraken database stored in `/data/Kraken2_data/k2_core_nt_20250609/hash.` in the form:
+
+```
+/data/Kraken2_data
+└── k2_core_nt_20250609
+    ├── hash.k2d
+    ├── opts.k2d
+    └── taxo.k2d
+```
+
+then `kraken_db_dir` should be set to `data/Kraken2_data` and `kraken_db` to `k2_core_nt_20250609`.
+
+#### Assembly
+
+The workflow assembles preprocessed and filtered reads with either Trinity,
+TransAbyss or Megahit. We recommend Trinity which is also the default.
+
+```yaml
+co_assembly: True
+single_assembly: False
+assembler: trinity
+transabyss_kmers: [21, 25, 29, 31, 65, 75, 85, 95]
+min_contig_len: 200
+insilico_norm_max_cov: 30
+insilico_norm_mem: 100
+```
+
+With `co_assembly` set to `True`, co-assemblies are generated based on the
+`assembly` column in the sample information file. If `single_assembly` is set to
+`True` then each sample is assembled separately.
+
+The `assembler` parameter sets what assembly software to use. Choose from
+`trinity` (recommended), `transabyss` or `megahit`.
+
+The `transabyss_kmers` parameter is a list of kmer lengths to use in an
+iterative assembly with TransAbyss.
+
+The `min_contig_len` parameter specifies the minimum contig length to keep from
+assemblies.
+
+When generating co-assemblies, preprocessed reads from all input samples are
+passed through an *in silico* normalization step prior to assembly. This is done
+for all three supported assembly tools. The `insilico_norm_max_cov` parameter
+sets the targeted maximum coverage for reads. The `insilico_norm_mem` parameter
+sets the allowed memory usage (in GB) for the normalization step.
+
+#### Read mapping/quantification
+
+Assembled transcripts and predicted proteins are quantified by mapping
+preprocessed and filtered reads against the assemblies. The workflow runs both
+an alignment-based mapping step using the RSEM program as well as a
+pseudo-alignment step using Kallisto. In addition, the BAM file generated as
+part of running RSEM is used with featureCounts to assign reads directly to
+features in the assembly.
+
+```yaml
+fc_params: "-p --countReadPairs -t exon -g Parent -Q 10 -s 0 "
+kallisto_params: "-b 100"
+```
+
+The `fc_params` parameter passes settings to featureCounts. The default is to:
+
+- run in paired end mode (-p)
+- count fragments (--countReadPairs)
+- assign reads to exon features (-t exon)
+- group by Parent attributes (-g Parent)
+- require a minimum mapping quality of 10 (-Q 10), and
+- set strandedness to 0 (-s 0) (standard Illumina)
+
+> [!IMPORTANT]  
+> If your input data is from IlluminaTruSeq Stranded libraries, add `-s 2` to
+> the `fc_params` string and `--rf-stranded` to the `kallisto_params`.
