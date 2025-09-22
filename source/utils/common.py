@@ -146,22 +146,3 @@ def get_mmseq_taxdb(wildcards):
     if config["refine_taxonomy"]:
         return config["mmseqs_refine_db"]
     return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
-
-
-def slurm_mem_partition(mb):
-    """
-    Determine the SLURM memory partition based on the memory
-
-    mb: int
-        Memory in MB of the input
-
-    Returns
-    -------
-    str
-        SLURM memory partition
-    """
-    if mb > 900000:
-        return config["slurm_partitions"]["large_memory"]
-    elif mb > 220000:
-        return config["slurm_partitions"]["medium_memory"]
-    return config["slurm_partitions"]["small_memory"]
