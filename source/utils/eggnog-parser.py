@@ -67,7 +67,7 @@ def get_kegg_ortholog_info(outdir):
     url = "https://www.genome.jp/kegg-bin/download_htext?htext=ko00001.keg&format=json"
     logging.info("Fetching ko00001.keg from www.kegg.jp")
     # Download file
-    tmp_out = os.path.expandvars("$TMPDIR/ko00001.json")
+    tmp_out = f"{outdir}/ko00001.json"
     urllib.request.urlretrieve(url, tmp_out)
     with open(tmp_out) as fh:
         s = json.load(fh)
@@ -117,7 +117,7 @@ def get_kegg_module_info(outdir):
     # Process KEGG Module information
     logging.info("Fetching ko00002.keg from www.kegg.jp")
     url = "https://www.kegg.jp/kegg-bin/download_htext?htext=ko00002.keg&format=json"
-    tmp_out = os.path.expandvars("$TMPDIR/ko00002.json")
+    tmp_out = f"{outdir}/ko00002.json"
     urllib.request.urlretrieve(url, tmp_out)
     modules_out = f"{outdir}/kegg_modules.tsv"
     with open(tmp_out) as fh:
