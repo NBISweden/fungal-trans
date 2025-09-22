@@ -52,8 +52,9 @@ kraken_filter: False
 # if 'one_mapped', then only one read in a pair has to map to fungal transcriptomes
 # and pairs where at least one read maps to the host genome will be discarded
 paired_strategy: "one_mapped"
-# URL to file listing JGI genomes for which to download transcript files
-fungi_info: "https://mycocosm.jgi.doe.gov/fungi/fungi.info.html"
+# HTML file listing JGI genomes for which to download transcript files
+# Get this file from https://mycocosm.jgi.doe.gov/fungi/fungi.info.html
+fungi_info: "Fungi.html"
 # Path to file listing JGI genomes for which to download transcript files
 # if this file does not exist it will be generated from the URL above
 fungi_genomes_file: "resources/JGI/genomes.tsv"
