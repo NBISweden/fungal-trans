@@ -337,8 +337,6 @@ rule secondpass_fungal_proteins_co:
         outdir=lambda wildcards, output: os.path.dirname(output[0]),
         indir=lambda wildcards, input: os.path.dirname(input.genecall[0]),
         src=workflow.source_path("../utils/write_fungal_proteins.py"),
-    shadow:
-        "shallow"
     shell:
         """
         python {params.src} -i {input.parsed} \
@@ -570,26 +568,26 @@ rule parse_eggnog_co:
         python {params.src} parse {params.dldir} {input.f} {params.outdir} 2>{log}
         """
 
-def get_quant_table(wildcards):
+def get_quant_table_co(wildcards):
     if wildcards.quant_type in ["TPM","FPKM","expected_count"]:
         return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/RSEM/isoforms.{wildcards.quant_type}.tsv"
     elif wildcards.quant_type in ["tpm","est_counts"]:
         return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/kallisto/{wildcards.quant_type}.tsv"
     
-def get_protein_quant_table(wildcards):
+def get_protein_quant_table_co(wildcards):
     if wildcards.quant_type in ["TPM","FPKM","expected_count"]:
         return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/RSEM/proteins.{wildcards.quant_type}.tsv"
     elif wildcards.quant_type in ["tpm","est_counts"]:
         return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/kallisto/proteins.{wildcards.quant_type}.tsv"
     elif wildcards.quant_type=="raw":
-            return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/featureCounts/{wildcards.quant_type}.tsv"
+        return f"results/collated/co-assembly/{wildcards.assembler}/{wildcards.assembly}/abundance/featureCounts/{wildcards.quant_type}.tsv"
 
 rule sum_proteins_co:
     """
     Sum quantification to protein level
     """
     input:
-        tsv=get_quant_table,
+        tsv=get_quant_table_co,
         gff="results/annotation/co-assembly/{assembler}/{assembly}/transdecoder/final.fa.transdecoder.gff3"
     output:
         tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/{tool}/proteins.{quant_type}.tsv"
@@ -608,15 +606,13 @@ rule sum_proteins_co:
         protein_sum = joined.group_by("protein").agg(pl.sum(tsv_df.columns[1:]))
         protein_sum.write_csv(output.tsv, separator="\t")
 
-
-# TODO: Fix quantifying
 rule quantify_eggnog_co:
     """
     Sums up quantification results for each feature in the eggNOG database
     Note that since ORFs can be annotated to multiple features, the same ORF can be counted multiple times.
     """
     input:
-        abundance=get_protein_quant_table,
+        abundance=get_protein_quant_table_co,
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{quant_type}.tsv",
@@ -637,7 +633,7 @@ rule eggnog_tax_annotations:
     input:
         gene_tax="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
         parsed="results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv",
-        abundance=get_protein_quant_table,
+        abundance=get_protein_quant_table_co,
     output:
         expand(
             "results/collated/co-assembly/{{assembler}}/{{assembly}}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{{db}}.{{quant_type}}.tsv",
@@ -686,7 +682,7 @@ rule eggnog_tax_annotations:
 rule sum_taxonomy_co:
     input:
         gene_tax="results/annotation/co-assembly/{assembler}/{assembly}/genecall/fungal.taxonomy.tsv",
-        abundance=get_protein_quant_table,
+        abundance=get_protein_quant_table_co,
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{quant_type}.tsv"
     run:
