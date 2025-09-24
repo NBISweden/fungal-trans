@@ -1,17 +1,6 @@
-# Download parameters for fastq-dump (leave empty unless testing)
-dlparams: ""
-
-# SLURM partitions to use for jobs depending on memory requirements
-# adjust these to match the available partitions on your cluster
-# the 'large_memory' partition is used for jobs that require >900G RAM
-# the 'medium_memory' partition is used for jobs that require >220G, <900G  RAM
-# the 'small_memory' partition is used for jobs that require <220G RAM
-slurm_partitions:
-    large_memory: "memory"
-    medium_memory: "main"
-    small_memory: "shared"
-
+##############################
 ## DATA PATHS & SAMPLE INFO ##
+##############################
 # Set work directory
 workdir: "."
 # Sample information file
@@ -28,24 +17,46 @@ datadir: "data/raw"
 # among the samples
 read_length: 150
 
+###################
 ## PREPROCESSING ##
-## fastp
+###################
+# Preprocessing is done with fastp
+
+# fastp_adapter_sequence and fastp_adapter_sequence_r2 set the adapter sequences to trim
 # the default values are for Illumina TruSeq adapters
 fastp_adapter_sequence: "AGATCGGAAGAGCACACGTCTGAACTCCAGTCA"
 fastp_adapter_sequence_r2: "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
+# fastp_length_required sets the minimum read length required after trimming
 fastp_length_required: 50
 
+###############
 ## FILTERING ##
+###############
 # How should reads be filtered?
-# Remove reads that map to the host genome?
+
+## HOST FILTERING ##
+# Host filtering is done by mapping reads against a host genome with STAR
 host_filter: False
-# Host files (fna and gff)
+# host_fna is a fasta file of the host genome
 host_fna: ""
+# host_gff if a GFF3 format file of the host genome
 host_gff: ""
-# Retain reads that map to JGI mycocosm?
+# star_limitGenomeGenerateRAM sets the maximum allowed RAM usage (in GB)
+# when generating the genome index
+star_limitGenomeGenerateRAM: 128
+# star_extra_build_params sets the extra parameters for star index build
+star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent"
+# star_extra_params sets the extra parameters for star alignment
+# if STAR aligner fails to map reads to host, consider lowering the values below
+# in order to increase sensitivity of the aligner. WARNING: Note that this may
+# increase the number of false positive host reads meaning that fungal reads
+# may end up in the 'host' bin
+star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
+
+## FUNGI FILTERING ##
+# Fungal filtering is done by mapping reads against transcriptomes of fungal
+# genomes downloaded from JGI Mycocosm.
 fungi_filter: False
-# Use kraken2 to add fungal reads and remove prokaryutic reads?
-kraken_filter: False
 # The paired strategy sets how to handle read-pair mapping during filtering
 # if 'both_mapped', then both reads in a pair have to map to fungal transcriptomes
 # and neither read can map to the host genome
@@ -67,53 +78,74 @@ fungi_genomes_file: "resources/JGI/genomes.tsv"
 jgi_account_info: "config/jgi_account_info.yml"
 # Strobealign parameters
 strobealign_strobe_len: 17
-# STAR parameters
-# star_limitGenomeGenerateRAM sets the maximum allowed RAM usage (in GB)
-# when generating the genome index
-star_limitGenomeGenerateRAM: 128
-# star_extra_build_params sets the extra parameters for star index build
-star_extra_build_params: "--genomeChrBinNbits 15 --genomeSAsparseD 3 --genomeSAindexNbases 14 --sjdbGTFtagExonParentTranscript Parent"
-# star_extra_params sets the extra parameters for star alignment
-# if STAR aligner fails to map reads to host, consider lowering the values below
-# in order to increase sensitivity of the aligner. WARNING: Note that this may
-# increase the number of false positive host reads meaning that fungal reads
-# may end up in the 'host' bin
-star_extra_params: "--outFilterScoreMinOverLread 0.66 --outFilterMatchNminOverLread 0.66 --seedSearchStartLmax 50"
+# Use kraken2 to add fungal reads and remove prokaryutic reads?
 
+## KRAKEN FILTERING ##
+# Kraken2 filtering is done by classifying reads with Kraken2 using a database
+# of choice, then retaining reads classified as fungal.
+kraken_filter: False
+
+# kraken_db sets the folder name of the kraken2 database (must contain hash.k2d
+# opts.k2d and taxo.k2d files)
+kraken_db: "20240229-015730_nt"
+# kraken_db_dir sets the base directory of kraken data. the folder name
+# specified with kraken_db must exist within this directory
+kraken_db_dir: "/sw/data/Kraken2_data"
+kraken_confidence: 0.2
+
+##############
 ## ASSEMBLY ##
-# should a co-assembly be generated?
-# if True, assemblies will be generated based on the assembly
-# column in the sample_file_list
+##############
+
+# should a co-assembly be generated? If True, assemblies will be generated based
+# on the assembly column in the sample_file_list
 co_assembly: True
 # should single-sample assemblies be generated?
 single_assembly: False
-# Choose what assembler to use
-# allowed values are 'megahit', 'trinity' or 'transabyss'
+# Choose what assembler to use. Allowed values are 'megahit', 'trinity' or
+# 'transabyss'
 assembler: trinity
 # for transabyss, set the kmer values to use for iterative assembly
 transabyss_kmers: [21, 25, 29, 31, 65, 75, 85, 95]
 # set the minimum contig length 
 min_contig_len: 200
-# set the target max coverage for insilico normalization
-# this is used to normalize the reads for co-assemblies
+# set the target max coverage for insilico normalization this is used to
+# normalize the reads for co-assemblies
 insilico_norm_max_cov: 30
 # set the maximum memory (in GB) to use for insilico normalization (in GB)
 insilico_norm_mem: 100
 
-## READ ASSIGNMENT ##
-# feature counts parameters
-# the -s parameter sets strandedness that featureCounts expects
-# for IlluminaTruSeq Stranded libraries, set this to 2
-# for Standard Illumina, set this to 0
-fc_params: "-s 2 -p -t exon -g Parent -Q 10 --countReadPairs"
-## kallisto parameters
-# Use the settings below for strandedness
-# if using IlluminaTruSeq Stranded libraries this should be '--rf-stranded'
-# for Standard Illumina, this should be an empty string ("")'
-kallisto_params: ""
+#################################
+## READ MAPPING/QUANTIFICATION ##
+#################################
+# Quantification is done by mapping reads against assembled transcripts. The
+# workflow runs RSEM (alignment based) and Kallisto (pseudo-aligner). BAM files
+# produced by RSEM is also used with featureCounts to assign reads directly to
+# predicted ORFs.
 
+## featureCounts
+# fc_params sets the read assignment parameters used by featureCounts.
+# The default is to:
+# - run in paired end mode (-p)
+# - count fragments (--countReadPairs)
+# - assign reads to exon features (-t exon)
+# - group by Parent attributes (-g Parent)
+# - require a minimum mapping quality of 10 (-Q 10), and
+# - set strandedness to 0 (-s 0) (standard Illumina)
+# For IlluminaTruSeq Stranded libraries, use '-s 2'
+fc_params: "-p --countReadPairs -t exon -g Parent -Q 10 -s 0 "
+## kallisto
+# The kallisto_params can be used to pass any argument to kallisto. The default is to simply run with 100 bootstraps (-b 100). 
+# If using IlluminaTruSeq Stranded libraries, also add '--rf-stranded' to this parameter.
+kallisto_params: "-b 100"
+
+################
 ## ANNOTATION ##
-## MMseqs2 paths ##
+################
+# Annotation includes gene calling with TransDecoder, taxonomic assignment with
+# MMSeqs2 and functional assignments with eggNOG-mapper and Interproscan.
+
+## MMseqs2 paths
 # mmseqs_db_dir is the path to where MMSeqs2 databases are stored
 # this path must contain databases used in the transdecoder_homology_db
 # and mmseqs_db parameters
@@ -141,17 +173,19 @@ interproscan_url: "http://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.75-106.0/a
 interproscan_profiles:
   - "dardel"
   - "apptainer"
-## TAXONOMIC SUMMARY ##
+# The tax_rank and tax_name parameters set what taxonomic level to extract
+# eggNOG annotations for (put in a separate folder)
 tax_rank: kingdom
 tax_name: Fungi
 
+#######################
 ## READ PARTITIONING ##
-# kraken database path
-kraken_db: "20240229-015730_nt"
-kraken_db_dir: "/sw/data/Kraken2_data"
-kraken_confidence: 0.2
-# partition reads into taxonomic bins
+#######################
+# Reads classified by Kraken2 can be partitioned into bins using the taxmap parameter below.
 taxmap:
-    Prokaryota: [2, 2157]
-    Fungi: [4751]
-    Eukaryota: [2759]
+  Prokaryota: [2, 2157]
+  Fungi: [4751]
+  Eukaryota: [2759]
+
+# Download parameters for fastq-dump (leave empty unless testing)
+dlparams: ""
