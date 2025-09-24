@@ -253,16 +253,14 @@ rule mmseqs_secondpass_taxonomy:
         ),
     params:
         output=lambda wildcards, output: f"{os.path.dirname(output[0])}/secondpass-taxresult",
-        tmp=lambda wildcards: f"mmseqs_secondpass_taxonomy_co.{wildcards.assembler}.{wildcards.sample_id}",
+        tmp=lambda wildcards: f"{os.environ.get('TMPDIR', 'scratch')}/mmseqs_secondpass_taxonomy.{wildcards.assembler}.{wildcards.sample_id}",
         ranks="superkingdom,kingdom,phylum,class,order,family,genus,species",
         split_memory_limit=lambda wildcards, resources: int(resources.mem_mb * 0.8),
-        target=lambda wildcards, input: (input.target[0]),
+        target=lambda wildcards, input: (input.target).replace("_taxonomy", ""),
     container:
         "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     conda:
         "../../envs/mmseqs.yaml"
-    shadow:
-        "copy-minimal"
     threads: 10
     shell:
         """
@@ -316,13 +314,11 @@ rule secondpass_fungal_proteins:
         ),
         genecall=rules.transdecoder_predict.output,
     log:
-        "results/annotation/{assembler}/{sample_id}/genecall/secondpass_fungal_proteins_co.log",
+        "results/annotation/{assembler}/{sample_id}/genecall/secondpass_fungal_proteins.log",
     params:
         outdir = lambda wildcards, output: os.path.dirname(output[0]),
         indir = lambda wildcards, input: os.path.dirname(input.genecall[0]),
         src=workflow.source_path("../utils/write_fungal_proteins.py"),
-    shadow:
-        "shallow"
     shell:
         """
         python {params.src} -i {input.parsed} \
@@ -346,7 +342,7 @@ rule featurecount:
         summary="results/annotation/{assembler}/{sample_id}/featureCounts/fc.tsv.summary",
     input:
         gff="results/annotation/{assembler}/{sample_id}/transdecoder/final.fa.transdecoder.gff3",
-        bam="results/map/{assembler}/{sample_id}/{sample_id}.bam",
+        bam="results/map/{assembler}/{sample_id}/RSEM/bowtie2.bam",
     log:
         "results/annotation/{assembler}/{sample_id}/featureCounts/fc.log",
     conda:
@@ -507,22 +503,66 @@ rule parse_eggnog:
         python {params.src} parse {params.dldir} {input.f} {params.outdir} 2>{log}
         """
 
+def get_quant_table(wildcards):
+    if wildcards.quant_type in ["TPM","FPKM","expected_count"]:
+        return f"results/map/{wildcards.assembler}/{wildcards.sample_id}/RSEM/RSEM.isoforms.results"
+    elif wildcards.quant_type in ["tpm","est_counts"]:
+        return f"results/map/{wildcards.assembler}/{wildcards.sample_id}/kallisto/abundance.tsv"
+    
+def get_protein_quant_table(wildcards):
+    if wildcards.quant_type in ["TPM","FPKM","expected_count"]:
+        return f"results/annotation/{wildcards.assembler}/{wildcards.sample_id}/abundance/RSEM/proteins.{wildcards.quant_type}.tsv"
+    elif wildcards.quant_type in ["tpm","est_counts"]:
+        return f"results/annotation/{wildcards.assembler}/{wildcards.sample_id}/abundance/kallisto/proteins.{wildcards.quant_type}.tsv"
+    elif wildcards.quant_type=="raw":
+        return f"results/annotation/{wildcards.assembler}/{wildcards.sample_id}/featureCounts/fc.raw.tsv"
+
+rule sum_proteins:
+    """
+    Sum quantification to protein level
+    """
+    input:
+        tsv=get_quant_table,
+        gff="results/annotation/{assembler}/{sample_id}/transdecoder/final.fa.transdecoder.gff3"
+    output:
+        tsv="results/annotation/{assembler}/{sample_id}/abundance/{tool}/proteins.{quant_type}.tsv"
+    run:
+        import polars as pl
+        gff_df = pl.scan_csv(input.gff, separator="\t", has_header=False, new_columns=["transcript_id","source","feature_type","start","end","score", "strand","frame","attr"])
+        # generate transcript id to protein table
+        transcript2protein = (
+            gff_df.filter(pl.col("feature_type")=="CDS")
+            .select(["transcript_id","attr"])
+            .with_columns(protein=pl.col("attr").str.split(";").list.first().str.replace("ID=cds.",""))
+            .drop("attr")
+        ).collect(engine="streaming")
+        tsv_df = pl.read_csv(input.tsv, separator="\t", ignore_errors=True)
+        tsv_df = tsv_df.select([tsv_df.columns[0], wildcards.quant_type]).rename({tsv_df.columns[0]: "transcript_id"})
+        joined = transcript2protein.join(tsv_df, on="transcript_id")
+        protein_sum = joined.group_by("protein").agg(pl.sum(tsv_df.columns[1:]))
+        protein_sum.write_csv(output.tsv, separator="\t")
+
 
 rule quantify_eggnog:
     """
     Sum abundances of annotation types
     """
-    output:
-        "results/annotation/{assembler}/{sample_id}/eggNOG/{db}.raw.tsv",
     input:
-        abundance="results/annotation/{assembler}/{sample_id}/featureCounts/fc.raw.tsv",
+        abundance=get_protein_quant_table,
         parsed="results/annotation/{assembler}/{sample_id}/eggNOG/{db}.parsed.tsv",
-    params:
-        src=workflow.source_path("../utils/eggnog-parser.py"),
-    shell:
-        """
-        python {params.src} quantify {input.abundance} {input.parsed} {output[0]}
-        """
+    output:
+        "results/annotation/{assembler}/{sample_id}/eggNOG/{db}.{quant_type}.tsv",
+    run:
+        abundance_df = pd.read_csv(input.abundance, sep="\t", index_col=0)
+        parsed_df = pd.read_csv(input.parsed, sep="\t", index_col=0)
+        df = pd.merge(
+            parsed_df, abundance_df, left_index=True, right_index=True, how="right"
+        )
+        df.fillna("Unclassified", inplace=True)
+        feature_cols = list(parsed_df.columns)
+        df_sum = df.groupby(feature_cols).sum().reset_index()
+        df_sum.set_index(feature_cols[0], inplace=True)
+        df_sum.to_csv(output[0], sep="\t")
 
 
 rule eggnog_merge_and_sum:
@@ -530,10 +570,10 @@ rule eggnog_merge_and_sum:
     Take count tables for an annotation type in each sample and merge them
     """
     output:
-        "results/collated/{assembler}/eggNOG/{db}.raw.tsv",
+        "results/collated/{assembler}/eggNOG/{db}.{quant_type}.tsv",
     input:
         expand(
-            "results/annotation/{{assembler}}/{sample_id}/eggNOG/{{db}}.raw.tsv",
+            "results/annotation/{{assembler}}/{sample_id}/eggNOG/{{db}}.{{quant_type}}.tsv",
             sample_id=samples.keys(),
         ),
     params:
@@ -554,10 +594,10 @@ rule sum_taxonomy:
     Sum taxonomic counts for fungal proteins
     """
     output:
-        raw="results/annotation/{assembler}/{sample_id}/taxonomy/taxonomy.raw.tsv",
+        quant="results/annotation/{assembler}/{sample_id}/taxonomy/taxonomy.{quant_type}.tsv",
     input:
         gene_tax="results/annotation/{assembler}/{sample_id}/genecall/fungal.taxonomy.tsv",
-        raw="results/annotation/{assembler}/{sample_id}/featureCounts/fc.raw.tsv",
+        quant=get_protein_quant_table
     run:
         ranks = [
             "superkingdom",
@@ -570,11 +610,11 @@ rule sum_taxonomy:
             "species",
         ]
         gene_tax = pd.read_csv(input.gene_tax, header=0, sep="\t", index_col=0)
-        raw = pd.read_csv(input.raw, header=0, sep="\t", index_col=0)
-        gene_tax_raw = pd.merge(gene_tax, raw, left_index=True, right_index=True)
-        species_raw = gene_tax_raw.groupby(ranks).sum().reset_index()
+        quant = pd.read_csv(input.quant, header=0, sep="\t", index_col=0)
+        gene_tax_quant = pd.merge(gene_tax, quant, left_index=True, right_index=True)
+        species_quant = gene_tax_quant.groupby(ranks).sum().reset_index()
         # Write results
-        species_raw.to_csv(output.raw, sep="\t", index=False)
+        species_quant.to_csv(output.quant, sep="\t", index=False)
 
 
 def merge_tax(files):
@@ -622,13 +662,13 @@ rule collate_taxonomy:
     Collate taxonomic counts for all samples
     """
     output:
-        raw="results/collated/{assembler}/taxonomy/taxonomy.raw.tsv",
+        quant="results/collated/{assembler}/taxonomy/taxonomy.{quant_type}.tsv",
     input:
-        raw=expand(
-            "results/annotation/{assembler}/{sample_id}/taxonomy/taxonomy.raw.tsv",
+        quant=expand(
+            "results/annotation/{assembler}/{sample_id}/taxonomy/taxonomy.{{quant_type}}.tsv",
             assembler=config["assembler"],
             sample_id=samples.keys(),
         ),
     run:
-        raw = merge_tax(input.raw)
-        raw.to_csv(output.raw, sep="\t", index=False)
+        quant = merge_tax(input.quant)
+        quant.to_csv(output.quant, sep="\t", index=False)
