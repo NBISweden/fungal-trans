@@ -59,6 +59,7 @@ wildcard_constraints:
     paired_strategy = "one_mapped|both_mapped",
     kraken_db = config["kraken_db"],
     mmseqs_db = config["mmseqs_db"],
+    rsem_res = "isoforms|genes",
     quant_type = "expected_count|est_counts|tpm|FPKM|TPM|raw"
 
 # Get environment info
@@ -97,6 +98,7 @@ def all_input(wildcards):
     )
     # Host reads
     if config["host_filter"]:
+        # rule process_host_bam (rules/filter.smk)
         inputs.extend(
             expand(
                 "results/filtered/{sample_id}/{sample_id}_R{i}.{h}.fastq.gz",
@@ -107,6 +109,7 @@ def all_input(wildcards):
         )
     if config["fungi_filter"]:
         if config["host_filter"]:
+            # rule filter_fungal_reads (rules/filter.smk)
             inputs.extend(
                 expand(
                     "results/filtered/{sample_id}/{sample_id}_R{i}.fungi.{paired_strategy}.nohost.fastq.gz",
@@ -116,6 +119,7 @@ def all_input(wildcards):
                 )
             )
         # Filtered reads
+        # rule process_fungal_mappings (rules/filter.smk)
         inputs.extend(
             expand(
                 "results/filtered/{sample_id}/{sample_id}_R{i}.fungi.{paired_strategy}.fastq.gz",
@@ -136,13 +140,44 @@ def all_input(wildcards):
             )
         )
         # stats
+        # rule assembly_stats (rules/assembly.smk)
         inputs.extend(
             expand(
                 "results/report/assembly/{assembler}_stats.tsv",
                 assembler=config["assembler"]
             )
         )
+        # featureCounts
+        # rule parse_featurecounts (rules/annotate_single.smk)
+        inputs.extend(
+            expand(
+                "results/annotation/{assembler}/{sample_id}/featureCounts/fc.raw.tsv",
+                assembler=config["assembler"],
+                sample_id=samples.keys(),
+            )
+        )
+        # kallisto
+        # rule parse_kallisto (rules/map.smk)
+        inputs.extend(
+            expand(
+                "results/map/{assembler}/{sample_id}/kallisto/{quant_type}.tsv",
+                assembler=config["assembler"],
+                sample_id=samples.keys(),
+                quant_type=["est_counts","tpm"]
+            )
+        )
+        # RSEM
+        # rule parse_rsem (rules/map.smk)
+        inputs.extend(
+            expand(
+                "results/map/{assembler}/{sample_id}/RSEM/isoforms.{quant_type}.tsv",
+                assembler=config["assembler"],
+                sample_id=samples.keys(),
+                quant_type=["expected_count","TPM","FPKM"]
+            )
+        )
         # taxonomy
+        # rule parse_mmseqs_second (rules/annotate_single.smk)
         inputs.extend(
             expand(
                 "results/annotation/{assembler}/{sample_id}/taxonomy/{mmseqs_db}/secondpass.parsed.tsv",
@@ -152,29 +187,27 @@ def all_input(wildcards):
             )
         )
         # taxonomic counts
+        # rule sum_taxonomy (rules/annotation_single.smk)
         inputs.extend(
             expand(
-                "results/annotation/{assembler}/{sample_id}/taxonomy/taxonomy.raw.tsv",
+                "results/annotation/{assembler}/{sample_id}/taxonomy/taxonomy.{quant_type}.tsv",
                 assembler=config["assembler"],
                 sample_id=samples.keys(),
-            )
-        )
-        # collated taxonomy counts
-        inputs.extend(
-            expand(
-                "results/collated/{assembler}/taxonomy/taxonomy.raw.tsv",
-                assembler=config["assembler"],
+                quant_type=["expected_count","TPM","FPKM","est_counts","tpm","raw"]
             )
         )
         # eggnog
+        # rule eggnog_merge_and_sum (rules/annotate_single.smk)
         inputs.extend(
             expand(
-                "results/collated/{assembler}/eggNOG/{db}.raw.tsv",
+                "results/collated/{assembler}/eggNOG/{db}.{quant_type}.tsv",
                 db=["enzymes","pathways","modules","kos","tc","cazy"],
                 assembler=config["assembler"],
+                quant_type=["expected_count","TPM","FPKM","est_counts","tpm","raw"]
             )
         )
         # interproscan
+        # rule interproscan (rules/annotate_single.smk)
         inputs.extend(
             expand(
                 "results/annotation/{assembler}/{sample_id}/interproscan/interproscan.tsv",
@@ -182,15 +215,17 @@ def all_input(wildcards):
                 sample_id=samples.keys()
             )
         )
-        # count tables
+        # collated taxonomy counts
+        # rule collate_taxonomy (rules/annotation_single.smk)
         inputs.extend(
             expand(
-                "results/annotation/{assembler}/{sample_id}/featureCounts/fc.raw.tsv",
+                "results/collated/{assembler}/taxonomy/taxonomy.{quant_type}.tsv",
                 assembler=config["assembler"],
-                sample_id=samples.keys(),
+                quant_type=["expected_count","TPM","FPKM","est_counts","tpm","raw"]
             )
         )
         # map report
+        # rule multiqc_map_report (rules/map.smk)
         inputs.extend(
             expand(
                 "results/report/map/{assembler}_map_report.html",
@@ -199,6 +234,7 @@ def all_input(wildcards):
         )
     
     # Kraken
+    # rule run_kraken (rules/kraken.smk)
     inputs.extend(
         expand(
             "results/kraken/{kraken_db}/{sample_id}/{sample_id}.{suffix}",
@@ -212,6 +248,7 @@ def all_input(wildcards):
         host_string = ".nohost"
     else:
         host_string = ""
+    # rule extract_kraken_reads (rules/kraken.smk)
     inputs.extend(
         expand(
             "results/kraken/{kraken_db}/{sample_id}/taxbins/{taxname}_R{i}{host_string}.fastq.gz",
@@ -234,6 +271,7 @@ def all_input(wildcards):
             )
         )
         # stats
+        # rule co_assembly_stats (rules/assembly.smk)
         inputs.extend(
             expand(
                 "results/report/co-assembly/{assembler}.{assembly}_assembly_stats.tsv", 
@@ -242,15 +280,18 @@ def all_input(wildcards):
             )
         )
         # eggnog
+        # rule quantify_eggnog_co (rules/annotate_co.smk)
         inputs.extend(
             expand(
-                "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.raw.tsv",
+                "results/collated/co-assembly/{assembler}/{assembly}/eggNOG/{db}.{quant_type}.tsv",
                 db=["enzymes","pathways","modules","kos","tc","cazy"],
                 assembly=assemblies.keys(), 
-                assembler=config["assembler"]
+                assembler=config["assembler"],
+                quant_type=["expected_count","TPM","FPKM","est_counts","tpm","raw"]
             )
         )
         # eggnog taxonomy
+        # rule eggnog_tax_annotations (rules/annotate_co.smk)
         inputs.extend(
             expand(
                 "results/collated/co-assembly/{assembler}/{assembly}/eggNOG_taxonomy/{tax_rank}.{tax_name}.{db}.{quant_type}.tsv",
@@ -263,6 +304,7 @@ def all_input(wildcards):
             )
         )
         # interproscan
+        # rule interproscan_co (rules/annotate_co.smk)
         inputs.extend(
             expand(
                 "results/annotation/co-assembly/{assembler}/{assembly}/interproscan/interproscan.tsv",
@@ -271,6 +313,7 @@ def all_input(wildcards):
             )
         )
         # count tables
+        # rule collate_featurecount_co (rules/annotate_co.smk)
         inputs.extend(
             expand(
                 "results/collated/co-assembly/{assembler}/{assembly}/abundance/featureCounts/raw.tsv",
@@ -278,6 +321,7 @@ def all_input(wildcards):
                 assembler=config["assembler"],
             )
         )
+        # rule sum_proteins_co (rules/annotate_co.smk)
         inputs.extend(
             expand(
                 "results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/proteins.{quant_type}.tsv",
@@ -286,6 +330,7 @@ def all_input(wildcards):
                 quant_type=["est_counts", "tpm"]
             )
         )
+        # rule sum_proteins_co (rules/annotate_co.smk)
         inputs.extend(
             expand(
                 "results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/proteins.{quant_type}.tsv",
@@ -295,6 +340,7 @@ def all_input(wildcards):
             )
         )
         # taxonomy counts
+        # rule sum_taxonomy_co (rules/annotate_co.smk)
         inputs.extend(
             expand(
                 "results/collated/co-assembly/{assembler}/{assembly}/taxonomy/taxonomy.{quant_type}.tsv",
@@ -304,6 +350,7 @@ def all_input(wildcards):
             )
         )
         # mapping report
+        # rule multiqc_map_report_co (rules/map.smk)
         inputs.extend(
             expand(
                 "results/report/map/{assembler}_{assembly}_map_report.html", 
