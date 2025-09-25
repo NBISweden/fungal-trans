@@ -146,3 +146,19 @@ def get_mmseq_taxdb(wildcards):
     if config["refine_taxonomy"]:
         return config["mmseqs_refine_db"]
     return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
+
+def get_eggnog_parser_extra_cmd(wildcards):
+    cmd = ""
+    db2cols = {
+            "kos": "KEGG_ko",
+            "enzymes": "EC",
+            "modules": "KEGG_Module",
+            "pathways": "KEGG_Pathway",
+            "tc": "KEGG_TC",
+            "cazy": "CAZy"
+        }
+    col = db2cols[wildcards.db]
+    cmd += f"--col {col}"
+    if wildcards.db in ["modules","pathways","kos"]:
+        cmd+=f" --info_file resources/kegg/kegg_{wildcards.db}.tsv"
+    return cmd

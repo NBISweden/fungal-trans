@@ -519,11 +519,14 @@ rule emapper_annotate_hits_co:
 ################################
 ## PARSE EGGNOG CO-ASSEMBLIES ##
 ################################
+
 rule parse_eggnog_co:
     """
-    Parses the eggnog-mapper output and outputs tab-separated files for pathways, kegg orthologs, enzymes and modules.
+    Parses the eggnog-mapper output and outputs tab-separated files for
+    pathways, kegg orthologs, enzymes and modules.
 
-    Each tab-separated file contains the ORF id in the first column. ORFs annotated to multiple features are duplicated in the output.
+    Each tab-separated file contains the ORF id in the first column. ORFs
+    annotated to multiple features are duplicated in the output.
 
     For example, an ORF annotated like so in the emapper output:
     #query ... KEGG_ko              KEGG_Pathway                                                       ...
@@ -553,20 +556,18 @@ rule parse_eggnog_co:
             ],
         ),
     output:
-        expand(
-            "results/annotation/co-assembly/{{assembler}}/{{assembly}}/eggNOG/{db}.parsed.tsv",
-            db=["enzymes", "kos", "modules", "pathways", "tc", "cazy"],
-        ),
+        parsed = "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.tsv"
     log:
-        "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/parser.log",
+        "results/annotation/co-assembly/{assembler}/{assembly}/eggNOG/{db}.parsed.log",
     params:
         src=workflow.source_path("../utils/eggnog-parser.py"),
         dldir="resources/kegg",
-        outdir=lambda wc, output: os.path.dirname(output[0]),
+        cmd=lambda wildcards: get_eggnog_parser_extra_cmd
     shell:
         """
-        python {params.src} parse {params.dldir} {input.f} {params.outdir} 2>{log}
+        python {params.src} parse {input.f} {output.parsed} {params.cmd} > {log} 2>&1
         """
+
 
 def get_quant_table_co(wildcards):
     if wildcards.quant_type in ["TPM","FPKM","expected_count"]:

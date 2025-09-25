@@ -474,11 +474,6 @@ rule parse_eggnog:
     """
     Parse eggNOG-mapper results and output tables for different annotation types
     """
-    output:
-        expand(
-            "results/annotation/{{assembler}}/{{sample_id}}/eggNOG/{db}.parsed.tsv",
-            db=["enzymes", "kos", "modules", "pathways", "tc", "cazy"],
-        ),
     input:
         f=rules.emapper_annotate_hits.output,
         db=expand(
@@ -492,15 +487,17 @@ rule parse_eggnog:
                 "kegg_pathways.tsv",
             ],
         ),
+    output:
+        parsed = "results/annotation/{assembler}/{sample_id}/eggNOG/{db}.parsed.tsv",
     log:
-        "results/annotation/{assembler}/{sample_id}/eggNOG/parser.log",
+        "results/annotation/{assembler}/{sample_id}/eggNOG/{db}.parsed.log",
     params:
         src=workflow.source_path("../utils/eggnog-parser.py"),
         dldir="resources/kegg",
-        outdir=lambda wc, output: os.path.dirname(output[0]),
+        cmd=lambda wildcards: get_eggnog_parser_extra_cmd
     shell:
         """
-        python {params.src} parse {params.dldir} {input.f} {params.outdir} 2>{log}
+        python {params.src} parse {input.f} {output.parsed} {params.cmd} > {log} 2>&1
         """
 
 def get_quant_table(wildcards):
@@ -554,6 +551,7 @@ rule quantify_eggnog:
         "results/annotation/{assembler}/{sample_id}/eggNOG/{db}.{quant_type}.tsv",
     run:
         abundance_df = pd.read_csv(input.abundance, sep="\t", index_col=0)
+        abundance_df.columns = [wildcards.sample_id]
         parsed_df = pd.read_csv(input.parsed, sep="\t", index_col=0)
         df = pd.merge(
             parsed_df, abundance_df, left_index=True, right_index=True, how="right"
@@ -611,6 +609,7 @@ rule sum_taxonomy:
         ]
         gene_tax = pd.read_csv(input.gene_tax, header=0, sep="\t", index_col=0)
         quant = pd.read_csv(input.quant, header=0, sep="\t", index_col=0)
+        quant.columns = [wildcards.sample_id]
         gene_tax_quant = pd.merge(gene_tax, quant, left_index=True, right_index=True)
         species_quant = gene_tax_quant.groupby(ranks).sum().reset_index()
         # Write results
