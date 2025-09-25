@@ -574,19 +574,21 @@ rule eggnog_merge_and_sum:
             "results/annotation/{{assembler}}/{sample_id}/eggNOG/{{db}}.{{quant_type}}.tsv",
             sample_id=samples.keys(),
         ),
-    params:
-        src=workflow.source_path("../utils/eggnog-parser.py"),
-    shell:
-        """
-        python {params.src} merge --sum {input} {output[0]}
-        """
-
+    run:
+        import polars as pl
+        df = pl.DataFrame()
+        for i, f in enumerate(sorted(input)):
+            _df = pl.read_csv(f, separator="\t")
+            if i==0:
+                on = _df.select(pl.col(pl.String)).columns
+                df = _df
+                continue
+            df = df.join(_df, on=on, how="full", coalesce=True).fill_null(0)
+        df.write_csv(output[0], separator="\t")
 
 ##########################
 ## TAXONOMIC ANNOTATION ##
 ##########################
-
-
 rule sum_taxonomy:
     """
     Sum taxonomic counts for fungal proteins
