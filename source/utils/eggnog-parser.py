@@ -2,9 +2,8 @@
 
 from argparse import ArgumentParser
 import pandas as pd
-import json
+import polars as pl
 import os
-import urllib.request
 import logging
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
@@ -61,6 +60,8 @@ def get_kegg_ortholog_hierarchy(s):
 
 
 def get_kegg_ortholog_info(outdir):
+    import urllib.request
+    import json
     outdir = outdir.rstrip("/")
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -113,6 +114,8 @@ def get_kegg_ortholog_info(outdir):
 
 
 def get_kegg_module_info(outdir):
+    import urllib.request
+    import json
     outdir = outdir.rstrip("/")
     # Process KEGG Module information
     logging.info("Fetching ko00002.keg from www.kegg.jp")
@@ -134,94 +137,28 @@ def get_kegg_module_info(outdir):
 
 # Parse functions
 #################
-def feature2orf(df, feature, lstrip=False, match=False, extra=""):
-    orfs = []
-    features = []
-    extras = []
-    for i in df.index:
-        orf = df.loc[i,"orf"]
-        feats = df.loc[i,feature].split(",")
-        if lstrip:
-            feats = [x.lstrip(lstrip) for x in feats]
-        if match:
-            feats = [x for x in feats if match in x]
-        if extra != "":
-            extras.append(df.loc[i, extra])
-        orfs+=[orf]*len(feats)
-        features+=feats
-    if extra == "":
-        return pd.DataFrame([orfs, features], index=["orf", feature]).T
-    else:
-        return pd.DataFrame([orfs, features, extras], index=["orf", feature, extra]).T
-
-def parse_ko_annotations(annotations, dldir, outdir, map_go=False):
-    logging.info(f"Reading annotations from {annotations}")
-    annot = pd.read_csv(annotations, header=None, usecols=[0, 2, 3, 4, 6, 9, 10, 11, 12, 13, 16, 17, 18, 20], comment="#",
-                        names=["orf", "evalue", "score", "COG", "COG_category", "GO", "EC", "ko", "pathway", "module", "BRITE", "tc", "cazy", "pfams"],
-                        sep="\t")
-    logging.info("Mapping ORFs to KEGG Orthologs")
-    orf2ko = feature2orf(annot.loc[annot["ko"]!="-"], "ko", lstrip="ko:")
-    logging.info(f"{len(orf2ko["orf"].unique())} ORFs with {len(orf2ko["ko"].unique())} KOs")
-    logging.info("Mapping ORFs to modules")
-    orf2module = feature2orf(annot.loc[annot["module"]!="-"], "module")
-    logging.info(f"{len(orf2module["orf"].unique())} ORFs in {len(orf2module["module"].unique())} modules")
-    logging.info("Mapping ORFs to pathways")
-    orf2pathway = feature2orf(annot.loc[annot["pathway"]!="-"], "pathway", match="map")
-    logging.info(f"{len(orf2pathway["orf"].unique())} ORFs in {len(orf2pathway["pathway"].unique())} Pathways")
-    logging.info("Mapping ORFs to transporters")
-    orf2tc = feature2orf(annot.loc[annot["tc"]!="-"], feature="tc")
-    logging.info(f"{len(orf2tc["orf"].unique())} ORFs in {len(orf2tc["tc"].unique())} transporters")
-    orf2tc.set_index("orf", inplace=True)
-    orf2tc.sort_index(inplace=True)
-    logging.info("Mapping ORFs to CAZY")
-    orf2caz = feature2orf(annot.loc[annot["cazy"]!="-"], feature="cazy")
-    logging.info(f"{len(orf2caz["orf"].unique())} ORFs in {len(orf2caz["cazy"].unique())} CAZYs")
-    orf2caz.set_index("orf", inplace=True)
-    orf2caz.sort_index(inplace=True)
-
-    logging.info(f"Loading KEGG info files from {dldir}")
-    ko2ec = pd.read_csv(f"{dldir}/kegg_ko2ec.tsv", header=None, names=["ko", "ec"], index_col=0, sep="\t")
-    kos = pd.read_csv(f"{dldir}/kegg_kos.tsv", index_col=0, sep="\t")
-    modules = pd.read_csv(f"{dldir}/kegg_modules.tsv", index_col=0, sep="\t")
-    pathways = pd.read_csv(f"{dldir}/kegg_pathways.tsv", index_col=0, sep="\t")
-    # Because each orf can have multiple enzyme annotations it might get placed into the same pathway several times
-    # select the first combination for each orf to avoid redundancy.
-    # Add KEGG Ortholog names
-    orf2ko = pd.merge(orf2ko, kos, left_on="ko", right_index=True, how="left")
-    orf2ko.set_index("orf", inplace=True)
-    orf2ko.sort_index(inplace=True)
-    # Map enzymes
-    logging.info("Mapping enzymes")
-    orf2ec = pd.merge(orf2ko, ko2ec, left_on="ko", right_index=True)
-    # Get the first instance of each orf->ec mapping
-    orf2ec = orf2ec.groupby(["orf", "ec"]).first().reset_index()
-    orf2ec.drop("ko", axis=1, inplace=True)
-    orf2ec.set_index("orf", inplace=True)
-    orf2ec.sort_index(inplace=True)
-    # Add pathway info
-    orf2pathway = pd.merge(orf2pathway, pathways, left_on="pathway", right_index=True, how="left")
-    orf2pathway.set_index("orf", inplace=True)
-    orf2pathway.sort_index(inplace=True)
-    # Add module info
-    orf2module = pd.merge(orf2module, modules, left_on="module", right_index=True, how="left")
-    orf2module.set_index("orf", inplace=True)
-    orf2module.sort_index(inplace=True)
-    # Map GO IDs
-    if map_go:
-        logging.info("Mapping ORFs to GO terms")
-        orf2go = feature2orf(annot.loc[annot["GO"]!="-"], feature="GO")
-        logging.info(f"{len(orf2go["orf"].unique())} ORFs in {len(orf2go["GO"].unique())} GO terms")
-    # Write files
-    logging.info(f"Writing files to {outdir}")
-    orf2ko.to_csv(f"{outdir}/kos.parsed.tsv", index=True, sep="\t")
-    orf2ec.to_csv(f"{outdir}/enzymes.parsed.tsv", index=True, sep="\t")
-    orf2pathway.to_csv(f"{outdir}/pathways.parsed.tsv", index=True, sep="\t")
-    orf2module.to_csv(f"{outdir}/modules.parsed.tsv", index=True, sep="\t")
-    orf2tc.to_csv(f"{outdir}/tc.parsed.tsv", index=True, sep="\t")
-    orf2caz.to_csv(f"{outdir}/cazy.parsed.tsv", index=True, sep="\t")
-    if map_go:
-        orf2go.to_csv(f"{outdir}/gos.parsed.tsv", index=True, sep="\t")
-
+def parse_ko_annotations(annotations, info_file, outfile, col):
+    logging.info(f"Reading {col} annotations from {annotations}")
+    df = pl.scan_csv(annotations, separator="\t", comment_prefix="##").select(
+        ["#query",col]
+        ).filter(
+            pl.col(col)!="-"
+        ).collect(engine="streaming")
+    df = df.rename({'#query': 'orf'})
+    df = df.with_columns(
+        explode=pl.col(col).str.split(",")
+        ).explode("explode").drop(col).rename({'explode': col})
+    if col=="KEGG_ko":
+        df = df.with_columns(pl.col(col).str.replace("ko:", ""))
+    elif col=="KEGG_Pathway":
+        df = df.filter(pl.col(col).str.startswith("map"))
+    if info_file:
+        info_df = pl.read_csv(info_file, separator="\t", ignore_errors=True)
+        df = df.join(info_df, right_on=info_df.columns[0], left_on=col, how="left")
+        df = df.fill_null("Unknown")
+    df = df.sort("orf")
+    logging.info(f"Writing annotations to {outfile}")
+    df.write_csv(outfile, separator="\t")
 
 # Quantify functions
 ####################
@@ -292,12 +229,7 @@ def download(args):
 
 
 def parse(args):
-    for f in ["kegg_ec2pathways.tsv", "kegg_ko2ec.tsv", "kegg_ko2pathways.tsv",
-              "kegg_kos.tsv", "kegg_modules.tsv", "kegg_pathways.tsv"]:
-        if not os.path.exists(f"{args.dldir}/{f}"):
-            download(args)
-            break
-    parse_ko_annotations(args.annotations, args.dldir, args.outdir, args.map_go)
+    parse_ko_annotations(args.annotations, args.info_file, args.outfile, args.col)
 
 
 def quant(args):
@@ -326,14 +258,13 @@ def main():
     download_parser.set_defaults(func=download)
     # Annotation parser
     annot_parser = subparser.add_parser("parse", help="Parse emapper annotation files")
-    annot_parser.add_argument("dldir",
-                              help="Directory used to store KEGG info files (from download command)")
     annot_parser.add_argument("annotations",
                               help="emapper.py annotation files (Typically *.emapper.annotations)")
-    annot_parser.add_argument("outdir",
-                              help="Output directory for parsed files")
-    annot_parser.add_argument("--map_go", action="store_true", 
-                              help="Also map GO terms (can take a long time)")
+    annot_parser.add_argument("outfile",
+                              help="Output file for parsed results")
+    annot_parser.add_argument("--info_file",
+                              help="Extra info file to merge annotations with")
+    annot_parser.add_argument("--col", type=str, help="Column to parse", default="KEGG_ko")
     annot_parser.set_defaults(func=parse)
     # Sum annotations parser
     quant_parser = subparser.add_parser("quantify", help="Add abundances and summarize KEGG features")
