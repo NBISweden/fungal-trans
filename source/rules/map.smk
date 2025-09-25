@@ -234,7 +234,7 @@ rule rsem_map:
         R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
         R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
     log:
-        "results/map/map/{assembler}/{sample_id}/RSEM/rsem.log"
+        "results/map/{assembler}/{sample_id}/RSEM/rsem.log"
     output:
         genes="results/map/{assembler}/{sample_id}/RSEM/RSEM.genes.results",
         isoforms="results/map/{assembler}/{sample_id}/RSEM/RSEM.isoforms.results",
