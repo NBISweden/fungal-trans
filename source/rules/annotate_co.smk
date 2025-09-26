@@ -414,11 +414,7 @@ rule collate_featurecount_co:
     output:
         "results/collated/co-assembly/{assembler}/{assembly}/abundance/featureCounts/raw.tsv",
     run:
-        df = pd.DataFrame()
-        for f in input:
-            _df = pd.read_csv(f, sep="\t", header=0, index_col=0)
-            df = pd.merge(df, _df, right_index=True, left_index=True, how="outer")
-        df.to_csv(output[0], sep="\t", index=True, header=True)
+        merge_files(input, output[0])
 
 ################################
 ## INTERPROSCAN CO-ASSEMBLIES ##
