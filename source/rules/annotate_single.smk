@@ -4,7 +4,7 @@ localrules:
     firstpass_fungal_proteins,
     secondpass_fungal_proteins,
     collate_taxonomy,
-    eggnog_merge_and_sum,
+    eggnog_merge,
     #parse_featurecounts,
     parse_eggnog,
     #quantify_eggnog,
@@ -562,19 +562,7 @@ rule quantify_eggnog:
         df_sum.set_index(feature_cols[0], inplace=True)
         df_sum.to_csv(output[0], sep="\t")
 
-def merge_files(input):
-    import polars as pl
-    df = pl.DataFrame()
-    for i, f in enumerate(sorted(input)):
-        _df = pl.read_csv(f, separator="\t")
-        if i==0:
-            on = _df.select(pl.col(pl.String)).columns
-            df = _df
-            continue
-        df = df.join(_df, on=on, how="full", coalesce=True).fill_null(0)
-    return df
-
-rule eggnog_merge_and_sum:
+rule eggnog_merge:
     """
     Take count tables for an annotation type in each sample and merge them
     """
@@ -586,8 +574,7 @@ rule eggnog_merge_and_sum:
             sample_id=samples.keys(),
         ),
     run:
-        df = merge_files(input)
-        df.write_csv(output[0], separator="\t")
+        merge_files(input, output[0])
 
 ##########################
 ## TAXONOMIC ANNOTATION ##
@@ -633,5 +620,4 @@ rule collate_taxonomy:
             sample_id=samples.keys(),
         ),
     run:
-        df = merge_files(input)
-        df.write_csv(output[0], separator="\t")
+        merge_files(input, output[0])
