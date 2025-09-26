@@ -162,3 +162,15 @@ def get_eggnog_parser_extra_cmd(wildcards):
     if wildcards.db in ["modules","pathways","kos"]:
         cmd+=f" --info_file resources/kegg/kegg_{wildcards.db}.tsv"
     return cmd
+
+def merge_files(input, output):
+    import polars as pl
+    df = pl.DataFrame()
+    for i, f in enumerate(sorted(input)):
+        _df = pl.read_csv(f, separator="\t")
+        if i==0:
+            on = _df.select(pl.col(pl.String)).columns
+            df = _df
+            continue
+        df = df.join(_df, on=on, how="full", coalesce=True).fill_null(0)
+    df.write_csv(output, separator="\t")
