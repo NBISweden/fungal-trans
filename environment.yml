@@ -1,25 +1,24 @@
-name: fungal-trans
+name: default
 channels:
-  - conda-forge
-  - bioconda
-  - defaults
+- conda-forge
+- bioconda
+- nodefaults
 dependencies:
-  - python
-  - snakemake-minimal>=8.0.0
-  - biopython
-  - pandas==1.5.1
-  - lxml
-  - pycurl
-  - tqdm
-  - multiqc
-  - bowtie2
-  - samtools=1.15
-  - ete3
-  - fastuniq
-  - seqtk
-  - seqkit
-
-  # utilities
-  - wget
-  - tbb
-  - mamba
+- python *
+- mamba *
+- snakemake >=9
+- biopython *
+- tqdm *
+- pandas *
+- polars *
+- pyarrow *
+- lxml *
+- pycurl *
+- pip *
+- seqtk *
+- seqkit *
+- multiqc *
+- ete3 *
+- snakemake-executor-plugin-slurm *
+- pigz *
+- nextflow >=25.4.7,<26
