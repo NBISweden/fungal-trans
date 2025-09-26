@@ -1,6 +1,6 @@
 title: "Fungal metatranscriptomics mapping report"
 subtitle: "Sample report for the mapping steps (individual assemblies)"
-intro_text: "Preprocessed and filtered reads were aligned to each transcriptome assembly using Kallisto and subread-align."
+intro_text: "Preprocessed and filtered reads were aligned to each transcriptome assembly using Kallisto and subread-align. RSEM quantification uses bowtie2 to map reads and featureCounts assigns reads using the RSEM bam file output."
 show_analysis_paths: False
 
 section_comments:
@@ -14,6 +14,11 @@ extra_fn_clean_exts:
     - '.bowtie2.log'
     - '_R1'
     - '.bam'
+    - '.kallisto.log'
     - type: remove
       pattern: '.+\/'
       
+use_filename_as_sample_name:
+    - featurecounts
+    - rsem
+    - kallisto

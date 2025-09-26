@@ -1,8 +1,12 @@
 localrules: 
+    prep_multiqc_map,
     multiqc_map_report, 
+    prep_multiqc_map_co,
     multiqc_map_report_co, 
     wrap_assembly,
     wrap_assembly_co,
+    collate_kallisto_co,
+    collate_rsem_co
 
 ###############################
 ## Mapping for co-assemblies ##
@@ -69,16 +73,12 @@ rule collate_kallisto_co:
     Collate Kallisto output
     """
     output:
-        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/{quant_type}.tsv",
+        "results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/{quant_type}.tsv",
     input:
         expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/{{quant_type}}.tsv",
             sample_id = samples.keys())
     run:
-        df = pd.DataFrame()
-        for f in input:
-            _df=pd.read_csv(f, sep="\t", index_col=0, header=0)
-            df = pd.merge(df, _df, how="outer", left_index=True, right_index=True)
-        df.to_csv(output.tsv, sep="\t")
+        merge_files(input, output[0])
 
 #########################
 ## RSEM quantification ##
@@ -153,16 +153,12 @@ rule collate_rsem_co:
     Collate RSEM output
     """
     output:
-        tsv="results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/{rsem_res}.{quant_type}.tsv",
+        "results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/{rsem_res}.{quant_type}.tsv",
     input:
         expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/RSEM/{{rsem_res}}.{{quant_type}}.tsv",
             sample_id = samples.keys())
     run:
-        df = pd.DataFrame()
-        for f in input:
-            _df=pd.read_csv(f, sep="\t", index_col=0, header=0)
-            df = pd.merge(df, _df, how="outer", left_index=True, right_index=True)
-        df.to_csv(output.tsv, sep="\t")
+        merge_files(input, output[0])
 
 rule wrap_assembly_co:
     """
@@ -179,17 +175,39 @@ rule wrap_assembly_co:
         seqkit seq -w 60 {input} > {output} 2> {log}
         """
 
+rule prep_multiqc_map_co:
+    input:
+        kallisto = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/kallisto.log",
+            sample_id = samples.keys()),
+        fc = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tsv.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/RSEM/RSEM.stat/RSEM.cnt",
+            sample_id = samples.keys())
+    output:
+        kallisto = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.log",
+            sample_id = samples.keys()),
+        fc = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.cnt",
+            sample_id = samples.keys()),
+    run:
+        copy_logs(input.kallisto, output.kallisto)
+        copy_logs(input.fc, output.fc)
+        copy_logs(input.rsem, output.rsem)
+    
+
+
 rule multiqc_map_report_co:
     """
     Generate a multiqc report for co-assemblies.
     """
     input:
-        kallisto_logs = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/kallisto.log",
+        kallisto = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.log",
             sample_id = samples.keys()),
-        kallisto = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/abundance.h5",
+        fc = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.summary",
             sample_id = samples.keys()),
-        fc_logs = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tsv.summary",
-            sample_id = samples.keys())
+        rsem = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.cnt",
+            sample_id = samples.keys()),
     output:
         "results/report/map/{assembler}_{assembly}_map_report.html"
     log:
@@ -200,7 +218,7 @@ rule multiqc_map_report_co:
     shell:
         """
         multiqc -f -c {params.config} -n {wildcards.assembler}_{wildcards.assembly}_map_report \
-            -o {params.outdir} {input.kallisto_logs} {input.fc_logs} >{log} 2>&1
+            -o {params.outdir} {input.kallisto} {input.fc} {input.rsem} >{log} 2>&1
         """
 
 #######################################
@@ -342,17 +360,44 @@ rule wrap_assembly:
         seqkit seq -w 60 {input} > {output} 2> {log}
         """
 
+def copy_logs(input, output):
+    import shutil
+    for i, f in enumerate(sorted(input)):
+        o = sorted(output)[i]
+        shutil.copy(f, o)
+        
+
+rule prep_multiqc_map:
+    input:
+        kallisto = expand("results/map/{{assembler}}/{sample_id}/kallisto/kallisto.log",
+            sample_id = samples.keys()),
+        fc = expand("results/annotation/{{assembler}}/{sample_id}/featureCounts/fc.tsv.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/map/{{assembler}}/{sample_id}/RSEM/RSEM.stat/RSEM.cnt",
+            sample_id = samples.keys())
+    output:
+        kallisto = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.log",
+            sample_id = samples.keys()),
+        fc = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.cnt",
+            sample_id = samples.keys())
+    run:
+        copy_logs(input.kallisto, output.kallisto)
+        copy_logs(input.fc, output.fc)
+        copy_logs(input.rsem, output.rsem)
+
 rule multiqc_map_report:
     """
     Generate a multiqc report for individual assemblies.
     """
     input:
-        kallisto_logs = expand("results/map/{{assembler}}/{sample_id}/kallisto/kallisto.log",
+        kallisto = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.kallisto.log",
             sample_id = samples.keys()),
-        kallisto = expand("results/map/{{assembler}}/{sample_id}/kallisto/abundance.h5",
+        fc = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.summary",
             sample_id = samples.keys()),
-        fc_logs = expand("results/annotation/{{assembler}}/{sample_id}/featureCounts/fc.tsv.summary",
-            sample_id = samples.keys()),
+        rsem = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.cnt",
+            sample_id = samples.keys())
     output:
         "results/report/map/{assembler}_map_report.html",
     log:
@@ -363,5 +408,5 @@ rule multiqc_map_report:
     shell:
         """
         multiqc -f -c {params.config} -n {wildcards.assembler}_map_report \
-            -o {params.outdir} {input.kallisto_logs} {input.kallisto} {input.fc_logs} >{log} 2>&1
+            -o {params.outdir} {input.kallisto} {input.fc} {input.rsem} >{log} 2>&1
         """
