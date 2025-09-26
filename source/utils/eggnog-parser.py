@@ -151,7 +151,7 @@ def parse_ko_annotations(annotations, info_file, outfile, col):
     if col=="KEGG_ko":
         df = df.with_columns(pl.col(col).str.replace("ko:", ""))
     elif col=="KEGG_Pathway":
-        df = df.filter(pl.col(col).str.startswith("map"))
+        df = df.filter(pl.col(col).str.starts_with("map"))
     if info_file:
         info_df = pl.read_csv(info_file, separator="\t", ignore_errors=True)
         df = df.join(info_df, right_on=info_df.columns[0], left_on=col, how="left")
