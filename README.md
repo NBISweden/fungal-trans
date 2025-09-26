@@ -17,6 +17,11 @@ belowground fungal metacommunities) project.
     - [Generating a custom taxonomy database](#generating-a-custom-taxonomy-database)
   - [Additional parameters](#additional-parameters)
     - [Data paths and sample info](#data-paths-and-sample-info)
+    - [Preprocessing](#preprocessing)
+    - [Filtering](#filtering)
+    - [Assembly](#assembly)
+    - [Read mapping/quantification](#read-mappingquantification)
+  - [Output](#output)
 
 ## Installation
 To install this workflow do the following:
@@ -377,3 +382,213 @@ The `fc_params` parameter passes settings to featureCounts. The default is to:
 > [!IMPORTANT]  
 > If your input data is from IlluminaTruSeq Stranded libraries, add `-s 2` to
 > the `fc_params` string and `--rf-stranded` to the `kallisto_params`.
+
+#### Annotation
+
+Genes are called on assembled transcripts using [TransDecoder](https://github.com/TransDecoder/TransDecoder). Taxonomy is assigned to predicted proteins using [MMSeqs2](https://github.com/soedinglab/MMseqs2) and function is assigned with [eggNOG-mapper](https://github.com/eggnogdb/eggnog-mapper) and [InterProScan](https://github.com/ebi-pf-team/interproscan6).
+
+```yaml
+mmseqs_db_dir: "/sw/data/MMseqs2_data/latest/rackham"
+transdecoder_homology_db: "UniRef90"
+mmseqs_db: "NR"
+extra_genomes: "extra_JGI_genomes.tsv"
+emapper_db_dir: "/sw/data/eggNOG_data/5.0.0/rackham"
+interproscan_url: "http://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.75-106.0/alt/interproscan-data-5.75-106.0.tar.gz"
+interproscan_profiles:
+  - "dardel"
+  - "apptainer"
+tax_rank: kingdom
+tax_name: Fungi
+```
+
+The `mmseqs_db_dir` parameter specifies the path where MMSeqs2 databases are
+stored. This path must contain databases used in the `transdecoder_homology_db`
+and `mmseqs_db`. 
+
+The `extra_genomes` parameter can be used to supply a file with additional
+genomes from JGI Mycocosm to include in the taxonomic assignment with MMSeqs2.
+See more info in the [JGI Login Info](#jgi-login-info) section.
+
+The `emapper_db_dir` parameter should point to a path where the eggNOG database
+is stored. This path must contain the `eggnog.db`, `eggnog_proteins.dmnd`,
+`eggnog.taxa.db` files and `mmseqs/` directory.
+
+The `interproscan_url` parameter specifies the URL from where to download data
+for the InterProScan step.
+
+The `interproscan_profiles` parameter specifies a list of profile names to use
+when running the external interproscan nextflow pipeline. Use either `dardel` or
+`kebnekaise` in addition to the `apptainer` profile when running on either of
+these clusters.
+
+The `tax_rank` and `tax_name` parameters are used to extract eggNOG-mapper
+annotations for specific taxa.
+
+#### Read partitioning
+
+Reads classified by Kraken2 can be partitioned into bins using the `taxmap` parameter:
+
+```yaml
+taxmap:
+  Prokaryota: [2, 2157]
+  Fungi: [4751]
+  Eukaryota: [2759]
+```
+
+With these default settings each sample will have fastq files named
+`Prokaryota_R1.fastq.gz`, `Prokaryota_R2.fastq.gz`, `Eukaryota_R1.fastq.gz`,
+`Eukaryota_R2.fastq.gz`, `Fungi_R1.fastq.gz` and `Fungi_R2.fastq.gz` under the
+`results/kraken/<kraken_db>/<sample_id>/taxbins/` folder (where `<kraken_db>` is
+the name of the kraken2 database specified by the `kraken_db` parameter and
+`sample_id` is the sample id set in the sample info file).
+
+## Output
+
+The workflow generates output in the `results/` directory. If `co_assembly` is
+set to `True`, then each assembly name specified in the `assembly` column of the
+sample list will have a folder under `results/co-assembly/` in the format
+`results/co-assembly/<assembler>/<assembly_name>/` containing the main output
+from the assembly.
+
+
+```
+results
+├── annotation
+├── assembly
+├── co-assembly
+├── collated
+├── in-silico-normalization
+├── kraken
+├── map
+├── preprocess
+└── report
+```
+
+### Annotation folder
+
+The annotation folder contains output from gene calling on assembled
+transcripts, functional annotation and taxonomic assignments of predicted
+proteins and summed quantification estimates. The 'co-assembly' subfolder
+contains output from co-assemblies specified in the [sample list](#sample-list)
+while individual assemblies are found in the subfolder with the assembler name.
+
+```
+annotation
+├── co-assembly               # co-assembly output folder
+│   └── <assembler>           # name of assembler, e.g. 'trinity'
+│       └── <assembly name>   # name of assembly (from sample sheet)
+└── <assembler>               # name of assembler, e.g. 'trinity'
+    ├── <sample id>           # individual assembly of a single sample         
+    │   ├── abundance         # protein abundance tables
+    │   ├── eggNOG            # eggnog-mapper annotation output
+    │   ├── featureCounts     # output from read assignments with featureCounts
+    │   ├── genecall          # fungal genecall results
+    │   ├── interproscan      # interproscan annotations
+    │   ├── taxonomy          # taxonomic assignments
+    │   └── transdecoder      # full genecalling output
+```
+
+### Collated folder
+
+The collated folder contains quantication tables for taxonomic assignments and
+functional annotations, collated for all samples. The `co-assembly` subfolder
+contains files for each named co-assembly. Functional annotations and taxonomic
+assignments for individual assemblies are also collated here in a subfolder with
+the assembler name.
+
+```
+collated
+├── co-assembly               # co-assembly output folder
+│   └── <assembler>           # name of assembler, e.g. 'trinity'
+│       └── <assembly name>   # name of assembly (from sample sheet)
+│         ├── abundance       # protein/isoform abundance tables
+│         ├── eggNOG          # eggnog-mapper abundance tables
+│         ├── eggNOG_taxonomy # eggnog-mapper abundance tables for specific taxa
+│         └── taxonomy        # taxonomy abundance tables (fungal proteins)
+└── <assembler>               # name of assembler, e.g. 'trinity'
+    ├── eggNOG                # eggnog-mapper abundance tables
+    └── taxonomy              # taxonomy abundance tables (fungal proteins)
+```
+
+### In silico normalization folder
+
+The `in-silico-normalization` folder contains normalized fastq files for each
+co-assembly.
+
+```
+in-silico-normalization
+└── <assembly name>
+    ├── left.norm.fq.gz       # normalized R1 file
+    └── right.norm.fq.gz      # normalized R2 file
+```
+
+### Kraken folder
+
+The `kraken` folder contains output from classification with kraken2. Results
+are organized in a sub-folder with the name of the kraken2 database used.
+
+```
+kraken
+└── <kraken db>                                     # name of kraken database
+    ├── <sample id 1>                               # sample id
+    │   ├── <sample id 1>.kreport                   # kraken report file
+    │   ├── <sample id 1>.out.gz                    # kraken output
+    │   ├── <sample id 1>.unclassified_1.fastq.gz   # R1 unclassified reads
+    │   ├── <sample id 1>.unclassified_2.fastq.gz   # R2 unclassified reads
+    │   └── taxbins                                 # subfolder with read partitions per taxa
+    └── ...
+```
+
+### Map folder
+
+The `map` folder contains raw output from mapping and quantification with
+RSEM/Kallisto. The co-assembly subfolder contains output from mapping each
+sample to each co-assembly while mapping of samples to individual assemblies are
+stored under the assembler name.
+
+```
+map
+├── co-assembly
+│   └── <assembler>           # name of assembler, e.g. 'trinity'
+│   │   └── <assembly name>   # name of assembly (from sample sheet)
+│   │   │   └── <sample id>   # sample id
+│   │   │   │   ├── RSEM      # RSEM output for <sample id> in co-assembly
+│   │   │   │   └── kallisto  # kallisto output for <sample id> in co-assembly
+└── <assembler>               # name of assembler, e.g. 'trinity'
+│   └── <sample id>           # sample id
+│   │   ├── RSEM              # RSEM output for <sample id> in individual assembly
+│   │   └── kallisto          # kallisto output for <sample id> in individual assembly
+```
+
+### Preprocess folder
+
+The `preprocess` folder contains output from the preprocessing steps:
+adapter/quality trimming, SortMeRNA and quality checking.
+
+```
+preprocess
+├── fastp         # output from adapter/quality trimming with fastp
+├── fastqc        # quality checking with fastqc
+├── replace_ids   # fastq files with renamed standardized ids
+└── sortmerna     # output from filtering with SortMeRNA
+```
+
+### Report folder
+
+The `report` folder contains stats and HTML reports from various steps of the
+pipeline.
+
+```
+report
+├── assembly
+│   ├── <assembler>_size_dist.tsv   # long format file with size distribution of individual assemblies
+│   └── <assembler>_stats.tsv       # wide format file with common statistics of individual assemblies
+├── co-assembly
+│   ├── <assembler>_<assembly name>_size_dist.tsv   # long format file with size distribution
+│   └── <assembler>_<assembly name>_stats.tsv       # wide format file with common statistics
+├── map
+│   ├── <assembler>_<assembly name>_report.html     # MultiQC mapping report for co-assembly
+│   └── <assembler>_<assembly name>_report.html     # MultiQC mapping report for individual assemblies
+├── preprocess
+│   └── preprocess_report.html      # MultiQC report for preprocessing
+```
