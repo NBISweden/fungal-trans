@@ -12,22 +12,17 @@ jobs: 200
 local-cores: 4
 latency-wait: 300
 executor: slurm
-shadow-prefix: "/proj/nobackup/hpc2nstor2025-081/temp"
 software-deployment-method: "apptainer"
 apptainer-args: >-
   --bind /proj/nobackup/hpc2nstor2025-081,$TMPDIR,/dev/shm
   --env TMPDIR=$TMPDIR
 #group-components: kraken=4
-
 # The resource definitions below specify the default used by all rules unless overridden by 
 # the set-resources section
 default-resources: 
   slurm_account: <hpc2n_compute_project>
   slurm_partition: batch
   runtime: 120
-  constraint: 'zen3|zen4|skylake'
-  #TMPDIR2: "/scratch/${USER}-trin"
-  #mem_mb_per_cpu: 1776
 
 # The set-resources section specifies the resources to use for specific rules, this overrides
 # the default resources
@@ -178,6 +173,8 @@ set-resources:
   emapper_annotate_hits_co:
     runtime: 180
     mem_mb: 53280
+  quantify_eggnog:
+    runtime: 30
   quantify_eggnog_co:
     runtime: 60
     mem_mb: 24000
