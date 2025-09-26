@@ -1,7 +1,7 @@
-name: trinity
+name: kraken-tools
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
-  - trinity
+  - krakentools

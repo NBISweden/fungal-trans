@@ -1,19 +1,23 @@
 name: fungal-trans
 channels:
-  - bioconda
   - conda-forge
+  - bioconda
   - defaults
 dependencies:
-  - python=3.8
-  - snakemake-minimal=6.2.1
-  - biopython=1.78
-  - pandas=1.3.4
-  - multiqc=1.11
-  - bowtie2=2.4.4
-  - samtools=1.14
-  - ete3=3.1.2
-  - fastuniq=1.1
-  - seqtk=1.3
+  - python
+  - snakemake-minimal>=8.0.0
+  - biopython
+  - pandas==1.5.1
+  - lxml
+  - pycurl
+  - tqdm
+  - multiqc
+  - bowtie2
+  - samtools=1.15
+  - ete3
+  - fastuniq
+  - seqtk
+  - seqkit
 
   # utilities
   - wget

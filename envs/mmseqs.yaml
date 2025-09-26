@@ -1,7 +1,5 @@
-name: trinity
 channels:
   - conda-forge
   - bioconda
-  - defaults
 dependencies:
-  - trinity
+  - mmseqs2

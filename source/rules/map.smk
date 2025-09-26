@@ -1,166 +1,412 @@
-localrules: multiqc_map_report, multiqc_map_report_co, gff2bed, infer_experiment
+localrules: 
+    prep_multiqc_map,
+    multiqc_map_report, 
+    prep_multiqc_map_co,
+    multiqc_map_report_co, 
+    wrap_assembly,
+    wrap_assembly_co,
+    collate_kallisto_co,
+    collate_rsem_co
 
 ###############################
 ## Mapping for co-assemblies ##
 ###############################
-rule bowtie_build_co:
+rule kallisto_index_co:
+    """
+    Build kallisto index for co-assemblies.
+    """
+    output:
+        "results/map/co-assembly/{assembler}/{assembly}/kallisto_index"
+    input:
+        "results/co-assembly/{assembler}/{assembly}/final.fa"
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/kallisto_index.log"
+    container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
+    conda: "../../envs/kallisto.yaml"
+    threads: 2
+    shell:
+        """
+        kallisto index -t {threads} -i {output} {input} > {log} 2>&1
+        """
+
+rule kallisto_quant_co:
+    """
+    Quantify reads with kallisto.
+    """
+    output:
+        h5 = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/abundance.h5",
+        tsv = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/abundance.tsv",
+        json = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/run_info.json",
+    input:
+        index = rules.kallisto_index_co.output,
+        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/kallisto.log"
+    container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
+    conda: "../../envs/kallisto.yaml"
+    params:
+        outdir = lambda wildcards, output: os.path.dirname(output.h5),
+        settings = config["kallisto_params"]
+    threads: 2
+    shell:
+        """
+        kallisto quant {params.settings} -t {threads} -i {input.index} -o {params.outdir} {input.R1} {input.R2} > {log} 2>&1
+        """
+
+rule parse_kallisto_co:
+    """
+    Parses Kallisto output
+    """
+    output:
+        tsv="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/kallisto/{quant_type}.tsv",
+    input:
+        tsv=rules.kallisto_quant_co.output.tsv
+    run:
+        df = pd.read_csv(input.tsv, sep="\t", index_col=0, header=0, comment="#", usecols=[0,3,4], names=["transcript_id", "est_counts", "tpm"])
+        df = df.loc[:, [wildcards.quant_type]]
+        df.columns=[wildcards.sample_id]
+        df.to_csv(output.tsv, sep="\t")
+
+rule collate_kallisto_co:
+    """
+    Collate Kallisto output
+    """
+    output:
+        "results/collated/co-assembly/{assembler}/{assembly}/abundance/kallisto/{quant_type}.tsv",
+    input:
+        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/{{quant_type}}.tsv",
+            sample_id = samples.keys())
+    run:
+        merge_files(input, output[0])
+
+#########################
+## RSEM quantification ##
+#########################
+
+rule rsem_index_co:
     input:
         "results/co-assembly/{assembler}/{assembly}/final.fa"
     output:
-        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/final.fa.{index}.bt2l", index=range(1,5))
+        expand(
+            "results/co-assembly/{{assembler}}/{{assembly}}/final.fa.{suff}",
+            suff = ["bowtie2.ok", "RSEM.rsem.prepped.ok"])
+    log:
+        "results/co-assembly/{assembler}/{assembly}/rsem_index.log"
     params:
-        prefix = "results/map/co-assembly/{assembler}/{assembly}/final.fa"
-    threads: 1
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*4
+        trinity_mode = lambda wildcards: "--trinity_mode" if wildcards.assembler == "trinity" else "",
+    threads: 10
+    conda: "../../envs/trinity.yaml"
+    shadow: "shallow"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
-        bowtie2-build --large-index --threads {threads} {input[0]} {params.prefix}
+        $TRINITY_HOME/util/align_and_estimate_abundance.pl --transcripts {input} --aln_method bowtie2 \
+            --est_method RSEM --thread_count {threads} {params.trinity_mode} --prep_reference >{log} 2>&1
         """
 
-rule bowtie_co:
+rule rsem_map_co:
     input:
-        bt = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/final.fa.{index}.bt2l", index=range(1,5)),
+        fa="results/co-assembly/{assembler}/{assembly}/final.fa",
+        index=rules.rsem_index_co.output,
         R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
         R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    log:
+        "results/map/co-assembly/{assembler}/{assembly}/{sample_id}/rsem.log"
     output:
-        bam = "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.bam"
-    log: "results/map/co-assembly/{assembler}/{assembly}/{sample_id}.log"
-    threads: 10
-    resources:
-        runtime = lambda wildcards, attempt: attempt**2*60*4
+        genes="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.genes.results",
+        isoforms="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.isoforms.results",
+        isoforms_ok="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.isoforms.results.ok",
+        stat=expand(
+            "results/map/co-assembly/{{assembler}}/{{assembly}}/{{sample_id}}/RSEM/RSEM.stat/RSEM.{suff}",
+            suff = ["cnt","model","theta"]
+        ),
+        bam=temp("results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/bowtie2.bam"),
+        rsem_bam=temp("results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/bowtie2.bam.for_rsem.bam"),
     params:
-        prefix = "results/map/co-assembly/{assembler}/{assembly}/final.fa",
-        tmp_out = "$TMPDIR/{assembly}/{sample_id}.bam",
-        tmp_dir = "$TMPDIR/{assembly}",
-        setting = config["bowtie2_params"]
+        output_dir = lambda wildcards, output: os.path.dirname(output.genes),
+        trinity_mode = lambda wildcards: "--trinity_mode" if wildcards.assembler == "trinity" else "",
+    threads: 4
+    conda: "../../envs/trinity.yaml"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
-        mkdir -p {params.tmp_dir}
-        bowtie2 {params.setting} -p {threads} -x {params.prefix} \
-         -1 {input.R1} -2 {input.R2} 2>{log} | samtools view -h -b - | samtools sort - -o {params.tmp_out}
-         mv {params.tmp_out} {output.bam}
+        $TRINITY_HOME/util/align_and_estimate_abundance.pl --transcripts {input.fa} --seqType fq \
+            --left {input.R1} --right {input.R2} --est_method RSEM {params.trinity_mode} \
+            --aln_method bowtie2 --thread_count {threads} --output_dir {params.output_dir} > {log} 2>&1
         """
 
-rule multiqc_map_report_co:
+rule parse_rsem_co:
     input:
-        bt_logs = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}.log",
-            sample_id = samples.keys()),
-        fc_logs = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tab.summary",
-            sample_id = samples.keys())
+        res="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/RSEM.{rsem_res}.results"
     output:
-        "results/report/map/{assembler}.{assembly}_map_report.html"
-    params:
-        name = "{assembler}.{assembly}_map_report.html",
-        tmpdir = "$TMPDIR/{assembly}"
+        tsv="results/map/co-assembly/{assembler}/{assembly}/{sample_id}/RSEM/{rsem_res}.{quant_type}.tsv"
+    run:
+        import pandas as pd
+        df = pd.read_csv(input.res, sep="\t", index_col=0)
+        df = df.loc[:, [wildcards.quant_type]]
+        df.columns = [wildcards.sample_id]
+        df.to_csv(output.tsv, sep="\t")
+
+rule collate_rsem_co:
+    """
+    Collate RSEM output
+    """
+    output:
+        "results/collated/co-assembly/{assembler}/{assembly}/abundance/RSEM/{rsem_res}.{quant_type}.tsv",
+    input:
+        expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/RSEM/{{rsem_res}}.{{quant_type}}.tsv",
+            sample_id = samples.keys())
+    run:
+        merge_files(input, output[0])
+
+rule wrap_assembly_co:
+    """
+    Subread has a line length limit on fasta files, to be sure we are under this limit we wrap the sequences.
+    """
+    input:
+        "results/co-assembly/{assembler}/{assembly}/final.fa"
+    output:
+        temp("results/co-assembly/{assembler}/{assembly}/final.wrap.fa")
+    log:
+        "results/co-assembly/{assembler}/{assembly}/wrap_assembly.log"
     shell:
         """
-        mkdir -p {params.tmpdir}
-        cp {input.bt_logs} {params.tmpdir}
-        cp {input.fc_logs} {params.tmpdir}
-        multiqc -o results/report/map/ -n {params.name} {params.tmpdir}
-        rm -r {params.tmpdir}
+        seqkit seq -w 60 {input} > {output} 2> {log}
+        """
+
+rule prep_multiqc_map_co:
+    input:
+        kallisto = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/kallisto/kallisto.log",
+            sample_id = samples.keys()),
+        fc = expand("results/annotation/co-assembly/{{assembler}}/{{assembly}}/featureCounts/{sample_id}.fc.tsv.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/map/co-assembly/{{assembler}}/{{assembly}}/{sample_id}/RSEM/RSEM.stat/RSEM.cnt",
+            sample_id = samples.keys())
+    output:
+        kallisto = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.log",
+            sample_id = samples.keys()),
+        fc = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.cnt",
+            sample_id = samples.keys()),
+    run:
+        copy_logs(input.kallisto, output.kallisto)
+        copy_logs(input.fc, output.fc)
+        copy_logs(input.rsem, output.rsem)
+    
+
+
+rule multiqc_map_report_co:
+    """
+    Generate a multiqc report for co-assemblies.
+    """
+    input:
+        kallisto = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.log",
+            sample_id = samples.keys()),
+        fc = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/report/map/_input_files/{{assembler}}_{{assembly}}/{sample_id}.cnt",
+            sample_id = samples.keys()),
+    output:
+        "results/report/map/{assembler}_{assembly}_map_report.html"
+    log:
+        "results/report/map/{assembler}_{assembly}_map_report.log"
+    params:
+        config = workflow.source_path("../../config/multiqc_map_config.yaml"),
+        outdir = lambda wildcards, output: os.path.dirname(output[0])
+    shell:
+        """
+        multiqc -f -c {params.config} -n {wildcards.assembler}_{wildcards.assembly}_map_report \
+            -o {params.outdir} {input.kallisto} {input.fc} {input.rsem} >{log} 2>&1
         """
 
 #######################################
 ## Mapping for individual assemblies ##
 #######################################
-rule bowtie_build:
+rule rsem_index:
     input:
-        "results/assembly/{assembler}/{source}/{sample_id}/final.fa"
+        "results/assembly/{assembler}/{sample_id}/final.fa"
     output:
-        expand("results/map/{{assembler}}/{{source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
+        expand(
+            "results/assembly/{{assembler}}/{{sample_id}}/final.fa.{suff}",
+            suff = ["bowtie2.ok", "RSEM.rsem.prepped.ok"])
+    log:
+        "results/map/{assembler}/{sample_id}/rsem_index.log"
     params:
-        prefix = "results/map/{assembler}/{source}/{sample_id}/final.fa"
-    threads: 1
-    resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*60
-    shell:
-        """
-        bowtie2-build --large-index --threads {threads} {input[0]} {params.prefix}
-        """
-
-rule bowtie:
-    input:
-        R1 = "results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R1.fastq.gz",
-        R2 = "results/assembly/{assembler}/{source}/{sample_id}/{sample_id}_R2.fastq.gz",
-        bt = expand("results/map/{{assembler}}/{{source}}/{{sample_id}}/final.fa.{index}.bt2l", index=range(1,5))
-    output:
-        bam = "results/map/{assembler}/{source}/{sample_id}/{sample_id}.bam"
-    log: "results/map/{assembler}/{source}/{sample_id}/bowtie.log"
-    params:
-        prefix = "results/map/{assembler}/{source}/{sample_id}/final.fa",
-        tmp_out = "$TMPDIR/{sample_id}.bam",
-        setting = config["bowtie2_params"]
+        trinity_mode = lambda wildcards: "--trinity_mode" if wildcards.assembler == "trinity" else "",
     threads: 10
-    resources:
-        runtime = lambda wildcards, attempt: attempt*attempt*60
+    conda: "../../envs/trinity.yaml"
+    shadow: "shallow"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
-        bowtie2 {params.setting} -p {threads} -x {params.prefix} \
-         -1 {input.R1} -2 {input.R2} | samtools view -h -b - | samtools sort - -o {params.tmp_out} 2> {log}
-         mv {params.tmp_out} {output.bam}
+        $TRINITY_HOME/util/align_and_estimate_abundance.pl --transcripts {input} --aln_method bowtie2 \
+            --est_method RSEM --thread_count {threads} {params.trinity_mode} --prep_reference >{log} 2>&1
         """
 
-rule gff2bed:
+rule rsem_map:
     input:
-        gff = "results/annotation/{assembler}/{source}/{sample_id}/frame_selection/final.reformat.gff"
+        fa="results/assembly/{assembler}/{sample_id}/final.fa",
+        index=rules.rsem_index.output,
+        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    log:
+        "results/map/{assembler}/{sample_id}/RSEM/rsem.log"
     output:
-        bed = "results/annotation/{assembler}/{source}/{sample_id}/frame_selection/final.reformat.bed"
-    conda:
-        "../../envs/rseqc.yaml"
+        genes="results/map/{assembler}/{sample_id}/RSEM/RSEM.genes.results",
+        isoforms="results/map/{assembler}/{sample_id}/RSEM/RSEM.isoforms.results",
+        isoforms_ok="results/map/{assembler}/{sample_id}/RSEM/RSEM.isoforms.results.ok",
+        stat=expand(
+            "results/map/{{assembler}}/{{sample_id}}/RSEM/RSEM.stat/RSEM.{suff}",
+            suff = ["cnt","model","theta"]
+        ),
+        bam=temp("results/map/{assembler}/{sample_id}/RSEM/bowtie2.bam"),
+        rsem_bam=temp("results/map/{assembler}/{sample_id}/RSEM/bowtie2.bam.for_rsem.bam"),
+    params:
+        output_dir = lambda wildcards, output: os.path.dirname(output.genes),
+        trinity_mode = lambda wildcards: "--trinity_mode" if wildcards.assembler == "trinity" else "",
+    threads: 4
+    conda: "../../envs/trinity.yaml"
+    container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
         """
-        gff2bed < {input.gff} > {output.bed}
+        $TRINITY_HOME/util/align_and_estimate_abundance.pl --transcripts {input.fa} --seqType fq \
+            --left {input.R1} --right {input.R2} --est_method RSEM {params.trinity_mode} \
+            --aln_method bowtie2 --thread_count {threads} --output_dir {params.output_dir} > {log} 2>&1
         """
 
-rule infer_experiment:
+rule parse_rsem:
     input:
-        bed = "results/annotation/{assembler}/{source}/{sample_id}/frame_selection/final.reformat.bed",
-        bam = "results/map/{assembler}/{source}/{sample_id}/{sample_id}.bam"
+        res="results/map/{assembler}/{sample_id}/RSEM/RSEM.{rsem_res}.results"
     output:
-        "results/annotation/{assembler}/{source}/{sample_id}/rseqc/rseqc.out"
-    conda:
-        "../../envs/rseqc.yaml"
+        tsv="results/map/{assembler}/{sample_id}/RSEM/{rsem_res}.{quant_type}.tsv"
+    run:
+        import pandas as pd
+        df = pd.read_csv(input.res, sep="\t", index_col=0)
+        df = df.loc[:, [wildcards.quant_type]]
+        df.columns = [wildcards.sample_id]
+        df.to_csv(output.tsv, sep="\t")
+
+rule kallisto_index:
+    """
+    Build kallisto index for individual assemblies.
+    """
+    output:
+        "results/map/{assembler}/{sample_id}/kallisto_index"
+    input:
+        "results/assembly/{assembler}/{sample_id}/final.fa"
+    log:
+        "results/map/{assembler}/{sample_id}/kallisto_index.log"
+    container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
+    conda: "../../envs/kallisto.yaml"
+    threads: 2
     shell:
         """
-        infer_experiment.py -i {input.bam} -r {input.bed}> {output[0]}
+        kallisto index -t {threads} -i {output} {input} > {log} 2>&1
         """
 
-rule multiqc_map_report:
+rule kallisto_quant:
+    """
+    Quantify reads with kallisto.
+    """
     input:
-        bt_logs = expand("results/map/{{assembler}}/{{source}}/{sample_id}/bowtie.log",
+        index = rules.kallisto_index.output,
+        R1 = lambda wildcards: map_dict[wildcards.sample_id]["R1"],
+        R2 = lambda wildcards: map_dict[wildcards.sample_id]["R2"]
+    output:
+        h5 = "results/map/{assembler}/{sample_id}/kallisto/abundance.h5",
+        tsv = "results/map/{assembler}/{sample_id}/kallisto/abundance.tsv",
+        json = "results/map/{assembler}/{sample_id}/kallisto/run_info.json",
+    log:
+        "results/map/{assembler}/{sample_id}/kallisto/kallisto.log"
+    container: "docker://quay.io/biocontainers/kallisto:0.51.1--ha4fb952_1"
+    conda: "../../envs/kallisto.yaml"
+    params:
+        outdir = lambda wildcards, output: os.path.dirname(output.h5),
+        settings = config["kallisto_params"]
+    threads: 2
+    shell:
+        """
+        kallisto quant {params.settings} -t {threads} -i {input.index} -o {params.outdir} {input.R1} {input.R2} > {log} 2>&1
+        """
+
+rule parse_kallisto:
+    """
+    Parses Kallisto output
+    """
+    output:
+        tsv="results/map/{assembler}/{sample_id}/kallisto/{quant_type}.tsv",
+    input:
+        tsv=rules.kallisto_quant.output.tsv
+    run:
+        df = pd.read_csv(input.tsv, sep="\t", index_col=0, header=0, comment="#", usecols=[0,3,4], names=["transcript_id", "est_counts", "tpm"])
+        df = df.loc[:, [wildcards.quant_type]]
+        df.columns=[wildcards.sample_id]
+        df.to_csv(output.tsv, sep="\t")
+
+rule wrap_assembly:
+    """
+    Subread has a line length limit on fasta files, to be sure we are under this limit we wrap the sequences.
+    """
+    input:
+        "results/assembly/{assembler}/{sample_id}/final.fa"
+    output:
+        temp("results/assembly/{assembler}/{sample_id}/final.wrap.fa")
+    log:
+        "results/assembly/{assembler}/{sample_id}/wrap_assembly.log"
+    shell:
+        """
+        seqkit seq -w 60 {input} > {output} 2> {log}
+        """
+
+def copy_logs(input, output):
+    import shutil
+    for i, f in enumerate(sorted(input)):
+        o = sorted(output)[i]
+        shutil.copy(f, o)
+        
+
+rule prep_multiqc_map:
+    input:
+        kallisto = expand("results/map/{{assembler}}/{sample_id}/kallisto/kallisto.log",
             sample_id = samples.keys()),
-        fc_logs = expand("results/annotation/{{assembler}}/{{source}}/{sample_id}/featureCounts/fc.tab.summary",
+        fc = expand("results/annotation/{{assembler}}/{sample_id}/featureCounts/fc.tsv.summary",
             sample_id = samples.keys()),
-        rs_logs = expand("results/annotation/{{assembler}}/{{source}}/{sample_id}/rseqc/rseqc.out",
+        rsem = expand("results/map/{{assembler}}/{sample_id}/RSEM/RSEM.stat/RSEM.cnt",
             sample_id = samples.keys())
     output:
-        "results/report/map/{assembler}_{source}_map_report.html",
-        "results/report/map/{assembler}_{source}_map_report_data/multiqc_bowtie2.txt"
-    params:
-        dir = "qc",
-        outdir = "results/report/map",
-        config = "config/multiqc_{assembler}_config.yaml"
+        kallisto = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.log",
+            sample_id = samples.keys()),
+        fc = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.cnt",
+            sample_id = samples.keys())
     run:
-        assembler = wildcards.assembler
-        source = wildcards.source
-        for sample_id in samples.keys():
-            tmp_dir = "{dir}/{sample_id}".format(dir=params.dir, sample_id=sample_id)
-            shell("mkdir -p {tmp_dir}")
-            bt_log = "results/map/{assembler}/{source}/{sample_id}/bowtie.log".format(
-                assembler=assembler, source=source, sample_id=sample_id)
-            fc_log = "results/annotation/{assembler}/{source}/{sample_id}/featureCounts/fc.tab.summary".format(
-                assembler=assembler, source=source, sample_id=sample_id)
-            rs_log = "results/annotation/{assembler}/{source}/{sample_id}/rseqc/rseqc.out".format(
-                assembler=assembler, source=source, sample_id=sample_id)
-            shell("cp {bt_log} {tmp_dir}/{sample_id}.bowtie.log")
-            shell("cp {rs_log} {tmp_dir}/{sample_id}.rseqc.log")
-            with open(fc_log, 'r') as fhin, open("{}/{}.fc.log".format(tmp_dir,sample_id), 'w') as fhout:
-                for line in fhin:
-                    if line[0:6]=="Status":
-                        fhout.write("Status\t{}\n".format(sample_id))
-                    else:
-                        fhout.write(line)
-        shell("cd {params.dir}; multiqc -f -c ../{params.config} -n {wildcards.assembler}_{wildcards.source}_map_report -o ../{params.outdir} .; cd -")
-        shell("rm -rf {params.dir}")
+        copy_logs(input.kallisto, output.kallisto)
+        copy_logs(input.fc, output.fc)
+        copy_logs(input.rsem, output.rsem)
+
+rule multiqc_map_report:
+    """
+    Generate a multiqc report for individual assemblies.
+    """
+    input:
+        kallisto = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.kallisto.log",
+            sample_id = samples.keys()),
+        fc = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.summary",
+            sample_id = samples.keys()),
+        rsem = expand("results/report/map/_input_files/{{assembler}}/{sample_id}.cnt",
+            sample_id = samples.keys())
+    output:
+        "results/report/map/{assembler}_map_report.html",
+    log:
+        "results/report/map/{assembler}_map_report.log"
+    params:
+        outdir = lambda wildcards, output: os.path.dirname(output[0]),
+        config = workflow.source_path("../../config/multiqc_map_config.yaml")
+    shell:
+        """
+        multiqc -f -c {params.config} -n {wildcards.assembler}_map_report \
+            -o {params.outdir} {input.kallisto} {input.fc} {input.rsem} >{log} 2>&1
+        """

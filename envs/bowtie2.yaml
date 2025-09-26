@@ -1,7 +1,8 @@
-name: trinity
+name: bowtie2
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
-  - trinity
+  - bowtie2
+  - samtools

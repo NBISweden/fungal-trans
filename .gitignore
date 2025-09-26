@@ -140,3 +140,13 @@ slurm/logs
 tmp
 .Rproj.user
 *.Rproj
+.quarto
+*/libs
+*.html
+.pixi
+pixi.lock
+
+.java
+
+.nextflow
+work

@@ -1,7 +1,6 @@
-name: sratools
+name: sortmerna
 channels:
   - bioconda
   - conda-forge
-  - defaults
 dependencies:
-  - sra-tools=3.1.0
+  - sortmerna=4.2.0

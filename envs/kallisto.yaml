@@ -1,7 +1,6 @@
-name: trinity
+name: kallisto
 channels:
   - conda-forge
   - bioconda
-  - defaults
 dependencies:
-  - trinity
+  - kallisto

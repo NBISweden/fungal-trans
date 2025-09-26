@@ -1,7 +1,6 @@
-name: trinity
+name: fastp
 channels:
   - conda-forge
   - bioconda
-  - defaults
 dependencies:
-  - trinity
+  - fastp
