@@ -562,6 +562,17 @@ rule quantify_eggnog:
         df_sum.set_index(feature_cols[0], inplace=True)
         df_sum.to_csv(output[0], sep="\t")
 
+def merge_files(input):
+    import polars as pl
+    df = pl.DataFrame()
+    for i, f in enumerate(sorted(input)):
+        _df = pl.read_csv(f, separator="\t")
+        if i==0:
+            on = _df.select(pl.col(pl.String)).columns
+            df = _df
+            continue
+        df = df.join(_df, on=on, how="full", coalesce=True).fill_null(0)
+    return df
 
 rule eggnog_merge_and_sum:
     """
@@ -575,15 +586,7 @@ rule eggnog_merge_and_sum:
             sample_id=samples.keys(),
         ),
     run:
-        import polars as pl
-        df = pl.DataFrame()
-        for i, f in enumerate(sorted(input)):
-            _df = pl.read_csv(f, separator="\t")
-            if i==0:
-                on = _df.select(pl.col(pl.String)).columns
-                df = _df
-                continue
-            df = df.join(_df, on=on, how="full", coalesce=True).fill_null(0)
+        df = merge_files(input)
         df.write_csv(output[0], separator="\t")
 
 ##########################
@@ -617,59 +620,18 @@ rule sum_taxonomy:
         # Write results
         species_quant.to_csv(output.quant, sep="\t", index=False)
 
-
-def merge_tax(files):
-    """
-    Merge taxonomic count tables
-
-    Parameters
-    ----------
-    files : list
-        List of file paths
-
-    Returns
-    -------
-    pandas.DataFrame
-    """
-    df = pd.DataFrame()
-    for f in files:
-        _df = pd.read_csv(f, header=0, sep="\t")
-        ranks = list(_df.columns[0:-1])
-        # Set unique index
-        index = []
-        for j in _df.index:
-            index.append(";".join(_df.loc[j, ranks].values))
-        _df.index = index
-        _df.drop(ranks, axis=1, inplace=True)
-        df = pd.merge(df, _df, left_index=True, right_index=True, how="outer")
-    cols = {}
-    # Reset columns
-    for item in df.index:
-        names = item.split(";")
-        for i, name in enumerate(names):
-            rank = ranks[i]
-            try:
-                cols[rank].append(name)
-            except KeyError:
-                cols[rank] = [name]
-    df.index = list(range(0, len(df)))
-    df = pd.merge(pd.DataFrame(cols)[ranks], df, left_index=True, right_index=True)
-    df.fillna(0, inplace=True)
-    return df
-
-
 rule collate_taxonomy:
     """
     Collate taxonomic counts for all samples
     """
     output:
-        quant="results/collated/{assembler}/taxonomy/taxonomy.{quant_type}.tsv",
+        "results/collated/{assembler}/taxonomy/taxonomy.{quant_type}.tsv",
     input:
-        quant=expand(
+        expand(
             "results/annotation/{assembler}/{sample_id}/taxonomy/taxonomy.{{quant_type}}.tsv",
             assembler=config["assembler"],
             sample_id=samples.keys(),
         ),
     run:
-        quant = merge_tax(input.quant)
-        quant.to_csv(output.quant, sep="\t", index=False)
+        df = merge_files(input)
+        df.write_csv(output[0], separator="\t")
