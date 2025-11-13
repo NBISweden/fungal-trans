@@ -96,6 +96,8 @@ rule mmseqs_firstpass_taxonomy_co:
         output=lambda wildcards, output: f"{os.path.dirname(output[0])}/{wildcards.td_db}-taxaDB",
         ranks="superkingdom,kingdom,phylum,class,order,family,genus,species",
         aln_dir=lambda wildcards, output: os.path.dirname(output.aln[0]),
+    resources:
+        mem_mb = 32000
     shell:
         """
         mkdir -p {params.tmp}
@@ -443,6 +445,8 @@ rule interproscan_co:
         profile = config["interproscan_profiles"],
         outdir = lambda wildcards, output: os.path.dirname(output.tsv),
         outprefix = "interproscan"
+    resources:
+        slurm_account = ""
     handover: True
     wrapper:
         "v7.2.0/utils/nextflow"
