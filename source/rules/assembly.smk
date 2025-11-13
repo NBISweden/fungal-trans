@@ -297,6 +297,8 @@ rule trinity_co_inchworm:
         min_contig_len=config["min_contig_len"],
         outdir=lambda wildcards, output: os.path.dirname(output.inchworm_finished),
         max_mem = lambda wildcards, resources: int(resources.mem_mb / 1000)
+    resources:
+        mem_mb = 32000
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
@@ -330,6 +332,8 @@ rule trinity_co_chrysalis:
         min_contig_len = config["min_contig_len"],
         max_mem = lambda wildcards, resources: int(resources.mem_mb / 1000),
         outdir=lambda wildcards, output: os.path.dirname(output.cmds)
+    resources:
+        mem_mb = 32000
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
@@ -425,6 +429,8 @@ rule trinity_co_final:
         min_contig_len = config["min_contig_len"],
         max_mem = lambda wildcards, resources: int(resources.mem_mb /1000),
         outdir=lambda wildcards, input: os.path.dirname(input.cmds_completed)
+    resources:
+        mem_mb = 32000
     conda: "../../envs/trinity.yaml"
     container: "docker://trinityrnaseq/trinityrnaseq:2.15.2"
     shell:
