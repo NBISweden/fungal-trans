@@ -189,11 +189,12 @@ jgi_password: "your-password"
 then modify your configuration file so that the `jgi_account_info` parameter
 points to the file with your credentials.
 
-The `fungi_info` parameter specifies the path to a JGI Genome portal listing in
-HTML format. Previously, this file could be parsed directly from the URL
-https://mycocosm.jgi.doe.gov/fungi/fungi.info.html but this is not possible
-anymore because of a CAPTCHA introduced by JGI. Instead you can download this
-file in your browser and supply the HTML file with the `fungi_info` parameter.
+> [!NOTE]  
+> The `fungi_info` parameter specifies the path to a JGI Genome portal listing
+> in HTML format. Previously, this file could be parsed directly from the URL
+> https://mycocosm.jgi.doe.gov/fungi/fungi.info.html but this is not possible
+> anymore because of a CAPTCHA introduced by JGI. Instead you can download this
+> file in your browser and supply the HTML file with the `fungi_info` parameter.
 
 The `fungi_genomes_file` specifies where to save information for genomes parsed
 from the `fungi_info` HTML file. This file will be available after a dry-run of the
