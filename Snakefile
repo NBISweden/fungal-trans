@@ -68,6 +68,11 @@ envdir = '/'.join(pythonpath.split("/")[0:-2])
 system = platform.system()
 config["system"] = system
 
+if config["host_fna"] == "":
+    config["host_fna"] = []
+if config["host_gff"] == "":
+    config["host_gff"] = []
+
 # Include rules
 include: "source/rules/db.smk"
 include: "source/rules/preprocess.smk"
