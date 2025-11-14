@@ -72,6 +72,13 @@ def parse_sample_list(f, config):
         elif sample_string == "kraken.":
             R1_f = f"results/kraken/{kraken_db}/{sample}/taxbins/Fungi_R1.fastq.gz"
             R2_f = f"results/kraken/{kraken_db}/{sample}/taxbins/Fungi_R2.fastq.gz"
+        elif sample_string == "nohost.kraken.":
+            R1_f = (
+                f"results/kraken/{kraken_db}/{sample}/taxbins/Fungi_R1.nohost.fastq.gz"
+            )
+            R2_f = (
+                f"results/kraken/{kraken_db}/{sample}/taxbins/Fungi_R2.nohost.fastq.gz"
+            )
         else:
             R1_f = f"results/filtered/{sample}/{sample}_R1.{sample_string}fastq.gz"
             R2_f = f"results/filtered/{sample}/{sample}_R2.{sample_string}fastq.gz"
@@ -147,28 +154,31 @@ def get_mmseq_taxdb(wildcards):
         return config["mmseqs_refine_db"]
     return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
 
+
 def get_eggnog_parser_extra_cmd(wildcards):
     cmd = ""
     db2cols = {
-            "kos": "KEGG_ko",
-            "enzymes": "EC",
-            "modules": "KEGG_Module",
-            "pathways": "KEGG_Pathway",
-            "tc": "KEGG_TC",
-            "cazy": "CAZy"
-        }
+        "kos": "KEGG_ko",
+        "enzymes": "EC",
+        "modules": "KEGG_Module",
+        "pathways": "KEGG_Pathway",
+        "tc": "KEGG_TC",
+        "cazy": "CAZy",
+    }
     col = db2cols[wildcards.db]
     cmd += f"--col {col}"
-    if wildcards.db in ["modules","pathways","kos"]:
-        cmd+=f" --info_file resources/kegg/kegg_{wildcards.db}.tsv"
+    if wildcards.db in ["modules", "pathways", "kos"]:
+        cmd += f" --info_file resources/kegg/kegg_{wildcards.db}.tsv"
     return cmd
+
 
 def merge_files(input, output):
     import polars as pl
+
     df = pl.DataFrame()
     for i, f in enumerate(sorted(input)):
         _df = pl.read_csv(f, separator="\t")
-        if i==0:
+        if i == 0:
             on = _df.select(pl.col(pl.String)).columns
             df = _df
             continue
