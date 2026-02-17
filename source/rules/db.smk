@@ -27,10 +27,11 @@ rule download_interproscan_data:
     shadow: "minimal"
     shell:
         """
-        curl -O {params.url} > {log.log}
+        exec &>{log.log}
+        curl -O {params.url}
         curl -s -O {params.url}.md5
         echo -e "version: {params.version}" > {log.version}
-        md5sum -c {params.basename}.md5 >> {log.log}
+        md5sum -c {params.basename}.md5
         tar -pxzf {params.basename} --strip-components=1 -C {params.outdir}
         """
 
@@ -244,9 +245,13 @@ rule mmseqs_create_taxidmap:
     input:
         mapfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}_mapping"),
         lookupfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}.lookup"),
+    params:
+        outdir=lambda wc, output: os.path.dirname(output.tsv)
     threads: 1
     run:
         import polars as pl
+        import os
+        os.makedirs(params.outdir, exist_ok=True)
         protmap = pl.scan_csv(
             input.lookupfile, 
             separator="\t", 
