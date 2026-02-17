@@ -492,9 +492,11 @@ rule assembly_stats:
     input:
         expand("results/assembly/{{assembler}}/{sample_id}/final.fa",
             sample_id = samples.keys())
+    params:
+        src=workflow.source_path("../utils/assembly_stats.py"),
     run:
         names = [x.split("/")[-2] for x in input]
-        shell("python source/utils/assembly_stats.py -i {input} -n {names} --size-dist-file {output[1]} > {output[0]}")
+        shell("python {params.src} -i {input} -n {names} --size-dist-file {output[1]} > {output[0]}")
 
 rule co_assembly_stats:
     """
@@ -505,7 +507,9 @@ rule co_assembly_stats:
         "results/report/co-assembly/{assembler}.{assembly}_assembly_size_dist.tsv"
     input:
         "results/co-assembly/{assembler}/{assembly}/final.fa"
+    params:
+        src=workflow.source_path("../utils/assembly_stats.py"),
     shell:
         """
-        python source/utils/assembly_stats.py -i {input[0]} -n {wildcards.assembler}.{wildcards.assembly} --size-dist-file {output[1]} > {output[0]}
+        python {params.src} -i {input[0]} -n {wildcards.assembler}.{wildcards.assembly} --size-dist-file {output[1]} > {output[0]}
         """

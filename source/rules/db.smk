@@ -85,10 +85,12 @@ rule download_jgi_transcripts:
         cookies=rules.init_jgi.output.cookies,
     log:
         "resources/JGI/genomes/download_jgi_transcripts.{portal}.log"
+    params:
+        src=workflow.source_path("../utils/download_jgi_transcripts.py"),
     retries: 3
     shell:
         """
-        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {output.transcripts} 2>{log}
+        python {params.src} -p {wildcards.portal} -c {input.cookies} -o {output.transcripts} 2>{log}
         """
 
 rule filter_transcripts:
