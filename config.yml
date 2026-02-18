@@ -166,6 +166,9 @@ extra_genomes: "extra_JGI_genomes.tsv"
 # this path must contain the 'eggnog.db', 'eggnog_proteins.dmnd', 'eggnog.taxa.db' files
 # and 'mmseqs/' directory
 emapper_db_dir: "/sw/data/eggNOG_data/5.0.0/rackham"
+# Whether to run interproscan Nextflow pipeline 
+# This is currently experimental and may cause issues
+run_interproscan: False
 # interproscan_url is the URL path where the pipeline will fetch interproscan data
 interproscan_url: "http://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.75-106.0/alt/interproscan-data-5.75-106.0.tar.gz"
 # interproscan_profiles is a list of profiles to use for running the external interproscan nextflow pipeline

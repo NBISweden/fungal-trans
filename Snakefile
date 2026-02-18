@@ -310,13 +310,14 @@ def all_input(wildcards):
         )
         # interproscan
         # rule interproscan_co (rules/annotate_co.smk)
-        inputs.extend(
-            expand(
-                "results/annotation/co-assembly/{assembler}/{assembly}/interproscan/interproscan.tsv",
-                assembler=config["assembler"],
-                assembly=assemblies.keys()
+        if config["run_interproscan"]:
+            inputs.extend(
+                expand(
+                    "results/annotation/co-assembly/{assembler}/{assembly}/interproscan/interproscan.tsv",
+                    assembler=config["assembler"],
+                    assembly=assemblies.keys()
+                )
             )
-        )
         # count tables
         # rule collate_featurecount_co (rules/annotate_co.smk)
         inputs.extend(
