@@ -1,269 +1,210 @@
 #!/usr/bin/env python
 
-import xml.etree.ElementTree as ET
-import pycurl
-from datetime import datetime
-import pytz
-import tempfile
-import os
-from argparse import ArgumentParser
-import sys
 import gzip as gz
+import json
+import sys
+import zipfile
+from argparse import ArgumentParser
+from io import BytesIO
+
+import pandas as pd
+import pycurl
 from Bio.SeqIO import parse
 
-
-def tz_convert(timestamp):
-    """
-    Converts timestamp to UTC
-    """
-    timezones = {
-        "PDT": "America/Los_Angeles",
-        "PST": "America/Los_Angeles"
-                 }
-    tz = timestamp.split(" ")[-2]
-    timestamp = " ".join(timestamp.split(" ")[0:-2]+timestamp.split(" ")[-1:])
-    t = datetime.strptime(timestamp, "%a %b %d %H:%M:%S %Y")
-    tz = pytz.timezone(timezones[tz])
-    return tz.localize(t).astimezone(pytz.utc)
+SEARCH_URL = "https://files.jgi.doe.gov/mycocosm_file_list/"
+DOWNLOAD_URL = "https://files-download.jgi.doe.gov/download_files/"
+# Preferred file locations/names, in order, when several candidate files match a type
+LOCATION_PRIORITY = ['Filtered Models ("best")', "All models"]
+NAME_PRIORITY = ["GeneCatalog", "primary_alleles", "secondary_alleles", "all_"]
 
 
-def get_xml(portal, cookie):
+def read_token(path):
     """
-    Get XML tree from JGI portal
-    The xml file is stored in a temporary file and read into an ElementTree object
+    Read a JGI Data Portal session token from file, adding the 'Bearer' prefix if missing
     """
-    url=f"https://genome-downloads.jgi.doe.gov/portal/ext-api/downloads/get-directory?organism={portal}"
-    with tempfile.TemporaryFile() as fp:
-        c = pycurl.Curl()
+    with open(path) as fh:
+        token = fh.read().strip()
+    if not token.lower().startswith("bearer "):
+        token = f"Bearer {token}"
+    return token
+
+
+def curl_request(url, cookie=None, headers=None, postfields=None):
+    """
+    Perform an HTTP request with pycurl and return the (status_code, response_body) tuple
+    """
+    buf = BytesIO()
+    c = pycurl.Curl()
+    c.setopt(c.URL, url)
+    c.setopt(c.WRITEDATA, buf)
+    c.setopt(c.VERBOSE, False)
+    if cookie is not None:
         c.setopt(c.COOKIEFILE, cookie)
-        c.setopt(c.URL, url)
-        c.setopt(c.WRITEDATA, fp)
-        c.setopt(c.VERBOSE, False)
-        c.perform()
-        c.close()
-        fp.seek(0)
-        tree = ET.fromstring(fp.read())
-    return tree
+    if headers is not None:
+        c.setopt(c.HTTPHEADER, headers)
+    if postfields is not None:
+        c.setopt(c.POSTFIELDS, postfields)
+    c.perform()
+    status = c.getinfo(c.RESPONSE_CODE)
+    c.close()
+    return status, buf.getvalue()
 
 
-def check_filtered(root, ft="transcripts"):
-    url = False
-    timestamp = False
-    files = []
-    for _folder in root.findall("folder"):
-        _foldername = _folder.attrib["name"]
-        # exclude the Mycocosm folder
-        if _foldername == "Mycocosm":
-            continue
-        _files=_folder.findall(".//file")
-        for f in _files:
-            _filename = f.attrib["filename"]
-            if "filteredmodels" in _filename.lower() and ft in _filename and _filename.endswith(".gz"):
-                if ft == "proteins" and "fasta" not in _filename:
-                    continue
-                files.append(f)
-    for _file in files:
-        _filename = _file.attrib["filename"]
-        _url = _file.attrib["url"]
-        _timestamp = tz_convert(_file.attrib["timestamp"])
-        if not timestamp:
-            sys.stderr.write(f"Found file {_filename} with timestamp {_timestamp}\n")
-            url = _url
-            timestamp = _timestamp
-        elif timestamp and _timestamp>timestamp:
-            sys.stderr.write(f"Found newer file {_filename} with timestamp {_timestamp}\n")
-            url = _url
-            timestamp = _timestamp
-    return url
-
-
-def check_filtered_folder(root, ft="transcripts", ft_folder="Transcripts"):
-    url = False
-    timestamp = False
-    files = []
-    for folder in root.findall("folder"):
-        foldername = folder.attrib["name"]
-        if foldername == "Mycocosm":
-            continue
-        for subfolder in folder.findall(".//folder"):
-            subfoldername = subfolder.attrib["name"]
-            if 'Filtered Models ("best")' in subfoldername:
-                sys.stderr.write(f"Found folder {foldername}/{subfoldername}\n")
-                for _subfolder in subfolder.findall(".//folder"):
-                    _subfoldername = _subfolder.attrib["name"]
-                    if _subfoldername == ft_folder:
-                        sys.stderr.write(f"Found folder {foldername}/{subfoldername}/{_subfoldername}\n")
-                        files = _subfolder.findall(".//file")
-                        break
-                if len(files) > 0:
-                    break
-    for file_element in files:
-        _filename = file_element.attrib["filename"]
-        if ft=="transcripts" and "transcripts" in _filename or "GeneModels" in _filename and _filename.endswith(".gz"):
-            _url = file_element.attrib["url"]
-            _timestamp = tz_convert(file_element.attrib["timestamp"])
-        elif ft=="proteins" and "proteins" in _filename and _filename.endswith(".gz"):
-            _url = file_element.attrib["url"]
-            _timestamp = tz_convert(file_element.attrib["timestamp"])
-        else:
-            continue
-        # if timestamp is not set, set it to the first file found
-        if not timestamp:
-            sys.stderr.write(f"Found file {_filename} with timestamp {_timestamp}\n")
-            url = _url
-            timestamp = _timestamp
-        # if timestamp is set, check if the current file is newer
-        elif timestamp and _timestamp>timestamp:
-            sys.stderr.write(f"Found newer file {_filename} with timestamp {_timestamp}\n")
-            url = _url
-            timestamp = _timestamp
-    return url
-
-
-def find_mycocosm_file(root, ft="transcripts", ft_folder="Transcripts"):
-    md5 = False
-    url = False
-    for folder in root.findall("folder"):
-        foldername = folder.attrib["name"]
-        if foldername == "Mycocosm":
-            for subfolder in folder.findall(".//folder"):
-                subfoldername = subfolder.attrib["name"]
-                if 'Filtered Models ("best")' in subfoldername:
-                    sys.stderr.write(f"Found folder {foldername}/{subfoldername}\n")
-                    for _subfolder in subfolder.findall(".//folder"):
-                        _subfoldername = _subfolder.attrib["name"]
-                        if _subfoldername == "Transcripts":
-                            sys.stderr.write(f"Found folder {foldername}/{subfoldername}/{_subfoldername}\n")
-                            for f in _subfolder.findall(".//file"):
-                                filename = f.attrib["filename"]
-                                if "transcripts" in filename or "GeneModels" in filename or filename.endswith("fasta.gz") and filename.endswith(".gz"):
-                                    md5 = f.attrib["md5"]
-                                    break
-                    if md5:
-                        break
-    if not md5:
-        return False
-    files = []
-    for folder in root.findall("folder"):
-        foldername = folder.attrib["name"]
-        if foldername == "Mycocosm":
-            continue
-        files+=folder.findall(".//file")
-    for f in files:
-        if "md5" in f.attrib.keys() and f.attrib["md5"] == md5:
-            url = f.attrib["url"]
-            timestamp = tz_convert(f.attrib["timestamp"])
-            sys.stderr.write(f"Found file by md5 checksum {f.attrib['filename']} with timestamp {timestamp}\n")
-    return url
-
-def find_smallest(root):
-    url = False
-    size = False
-    sizeinbytes = False
-    for folder in root.findall("folder"):
-        foldername = folder.attrib["name"]
-        if foldername == "Mycocosm":
-            continue
-        for f in folder.findall(".//file"):
-            filename = f.attrib["filename"]
-            _size = f.attrib["size"]
-            _sizeinbytes = f.attrib["sizeInBytes"]
-            if "transcripts" in filename and filename.endswith(".gz"):
-                if not sizeinbytes:
-                    sizeinbytes = int(_sizeinbytes)
-                    size = _size
-                    url = f.attrib["url"]
-                    sys.stderr.write(f"Found file {filename} with size {size}\n")
-                elif sizeinbytes and int(_sizeinbytes)<sizeinbytes:
-                    sizeinbytes = int(_sizeinbytes)
-                    url = f.attrib["url"]
-                    sizeinbytes = _sizeinbytes
-                    sys.stderr.write(f"Found smaller file {filename} with size {size}\n")
-    return url
-
-def find_files(root, ft="transcripts"):
+def get_json(portal, cookie):
     """
-    Find files in the XML tree
-    Searches for the latest transcript file in the folder "Filtered Models ("best")/Transcripts"
+    Search the JGI Mycocosm file list for a portal and return the parsed JSON response
     """
-    ft_folder = ft[0].upper()+ft[1:]
-    url = False
-    # check for files matching 'FilteredModels3.transcripts.fasta.gz'
-    sys.stderr.write(f"Searching for FilteredModels {ft} file\n")
-    url = check_filtered(root, ft=ft)
-    if url:
-        return url
-    sys.stderr.write("No FilteredModels file found\n")
-    # if no url found, check folders to locate the Filtered Models ("best")/Transcripts or Proteins folder
-    sys.stderr.write(f'Searching for Filtered Models ("best")/{ft_folder} folder \n')
-    url = check_filtered_folder(root, ft=ft, ft_folder=ft_folder)
-    if url:
-        return url
-    # if no such folder exists with file, try searching for a filtered transcripts file under Mycocosm subfolder
-    sys.stderr.write(f'No Filtered Models ("best")/{ft_folder} folder found\n')
-    sys.stderr.write(f"Searching for Mycocosm {ft} file\n")
-    url = find_mycocosm_file(root, ft=ft, ft_folder=ft_folder)
-    if url:
-        return url
-    # as a last resort, download the smallest transcript file found
-    sys.stderr.write(f"No file found, falling back to finding smallest {ft} file\n")
-    url = find_smallest(root)
-    return url
+    url = f"{SEARCH_URL}?organism={portal}#&api_version=2&a=false&h=false&d=asc&p=1&x=10&t=simple"
+    status, body = curl_request(url, cookie=cookie)
+    if status != 200:
+        raise RuntimeError(f"Failed to fetch file list for {portal}: HTTP {status}")
+    return json.loads(body)
 
 
-def write_file(url, outfile, cookie):
-    with open(outfile, 'wb') as fhout:
-        c = pycurl.Curl()
-        c.setopt(c.COOKIEFILE, cookie)
-        c.setopt(c.URL, url)
-        c.setopt(c.WRITEDATA, fhout)
-        c.setopt(c.VERBOSE, True)
-        c.perform()
-        c.close()
+def parse_files(json_dict):
+    """
+    Flatten the JGI file list JSON response into a DataFrame of file metadata indexed by file id
+
+    :param json_dict: dict, parsed JSON response from get_json
+    :return: (organism_id, DataFrame) tuple. organism_id identifies the organism when
+             requesting downloads via download_file.
+    """
+    organism = json_dict["organisms"][0]
+    records = {}
+    for f in organism["files"]:
+        meta = f["metadata"]
+        records[f["_id"]] = {
+            "name": f["file_name"],
+            "type": f["file_type"],
+            "md5": f["md5sum"],
+            "format": meta.get("file_format"),
+            "location": ";".join(meta["portal"]["display_location"]),
+            "size": f["file_size"],
+            "date": f["modified_date"],
+        }
+    file_df = pd.DataFrame(records).T
+    file_df["dt"] = pd.to_datetime(file_df["date"])
+    return organism["id"], file_df
+
+
+def select_file(file_df, ft="transcripts"):
+    """
+    Select the file id and name of the best matching file of the given type ('transcripts' or
+    'proteins') among a portal's files, preferring (in order): files under "Filtered Models
+    (best)" over "All models", and within those, the canonical "GeneCatalog" file over
+    primary/secondary allele or other variants.
+
+    :param file_df: DataFrame, as returned by parse_files
+    :param ft: str, 'transcripts' or 'proteins'
+    :return: (file_id, file_name) tuple, or (None, None) if no matching file was found
+    """
+    target_type = ft.rstrip("s")
+    is_type = file_df["type"].apply(lambda t: target_type in t)
+    is_fasta = file_df["format"] == "fasta"
+    is_gz = file_df["name"].str.endswith(".gz")
+    not_deflines = ~file_df["name"].str.contains("deflines")
+    candidates = file_df[is_type & is_fasta & is_gz & not_deflines]
+    if candidates.empty:
+        return None, None
+
+    def rank(patterns, value):
+        for i, pattern in enumerate(patterns):
+            if pattern in value:
+                return i
+        return len(patterns)
+
+    ranked = candidates.assign(
+        _loc_rank=candidates["location"].apply(lambda v: rank(LOCATION_PRIORITY, v)),
+        _name_rank=candidates["name"].apply(lambda v: rank(NAME_PRIORITY, v)),
+        _size=candidates["size"].astype(int),
+    ).sort_values(["_loc_rank", "_name_rank", "_size"])
+    file_id = ranked.index[0]
+    return file_id, candidates.loc[file_id, "name"]
+
+
+def download_file(organism_id, file_id, filename, outfile, token):
+    """
+    Request and download a single file from JGI. The download API returns a zip archive
+    containing a file manifest plus the requested file, so extract just the requested file.
+    """
+    payload = json.dumps({"ids": {organism_id: [file_id]}, "api_version": "2"})
+    headers = [
+        "accept: application/json",
+        f"Authorization: {token}",
+        "Content-Type: application/json",
+    ]
+    status, body = curl_request(DOWNLOAD_URL, headers=headers, postfields=payload)
+    if status != 200:
+        raise RuntimeError(f"Failed to download {filename}: HTTP {status}")
+    with zipfile.ZipFile(BytesIO(body)) as zf:
+        matches = [n for n in zf.namelist() if n.endswith(filename)]
+        if not matches:
+            raise RuntimeError(f"{filename} not found in downloaded archive")
+        with zf.open(matches[0]) as fh_in, open(outfile, "wb") as fh_out:
+            fh_out.write(fh_in.read())
 
 
 def main(args):
     """
     Main function
     """
-    root = get_xml(args.portal, args.cookie)
+    token = read_token(args.token)
+    json_dict = get_json(args.portal, args.cookie)
+    organism_id, file_df = parse_files(json_dict)
+
     if args.outfile:
-        outfile = args.outfile
-        url = find_files(root, ft="transcripts")
-        if not url:
-            sys.stderr.write("No files found\n")
-            url=""
-            sys.exit(0)
-        url = f"{args.base}{url}"
-        sys.stderr.write(f"Downloading {url} to {outfile}\n")
-        write_file(url, outfile, args.cookie)
+        file_id, filename = select_file(file_df, ft="transcripts")
+        if file_id is None:
+            sys.stderr.write(f"No transcripts file found for {args.portal}\n")
+            sys.exit(1)
+        sys.stderr.write(f"Downloading {filename} to {args.outfile}\n")
+        download_file(organism_id, file_id, filename, args.outfile, token)
+
     if args.protein_out:
-        url = find_files(root, ft="proteins")
-        if not url:
-            sys.stderr.write("No files found\n")
-            url=""
-            sys.exit(0)
-        url = f"{args.base}{url}"
-        outfile = args.protein_out
-        sys.stderr.write(f"Downloading {url} to {outfile}\n")
-        write_file(url, outfile, args.cookie)
+        file_id, filename = select_file(file_df, ft="proteins")
+        if file_id is None:
+            sys.stderr.write(f"No proteins file found for {args.portal}\n")
+            sys.exit(1)
+        sys.stderr.write(f"Downloading {filename} to {args.protein_out}\n")
+        download_file(organism_id, file_id, filename, args.protein_out, token)
         if args.taxidmap:
-            with open(args.taxidmap, 'w') as fhout, gz.open(args.protein_out, 'rt') as fhin:
-                for record in parse(fhin, "fasta"):
-                    fhout.write(f"{record.id}\t{args.taxid}\n")
+            with (
+                open(args.taxidmap, "w") as fhout,
+                gz.open(args.protein_out, "rt") as fhin,
+            ):
+                fhout.writelines(
+                    f"{record.id}\t{args.taxid}\n" for record in parse(fhin, "fasta")
+                )
 
-    
-    
 
-if __name__ == '__main__':
-    parser = ArgumentParser(description='Download transcript files from JGI Mycocosm')
-    parser.add_argument('-p', '--portal', help='Portal shorthand name (e.g. Aaoar1)', required=True)
-    parser.add_argument('-c', '--cookie', help="Cookie file for JGI", required=True)
-    parser.add_argument('-o', '--outfile', help='Output file name for transcript file. Omit this to skip download of transcript file')
-    parser.add_argument('-b', '--base', help='Base URL for JGI downloads (default: https://genome-downloads.jgi.doe.gov)', default="https://genome-downloads.jgi.doe.gov")
-    parser.add_argument('--protein_out', help='Attempt to find protein file for portal and write to file')
-    parser.add_argument("--taxidmap", help="Output file with protein id to taxid mapping")
-    parser.add_argument('--taxid', help='Taxid of portal', type=int)
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Download transcript files from JGI Mycocosm")
+    parser.add_argument(
+        "-p", "--portal", help="Portal shorthand name (e.g. Aaoar1)", required=True
+    )
+    parser.add_argument(
+        "-c", "--cookie", help="Cookie file for JGI file search", required=True
+    )
+    parser.add_argument(
+        "-t",
+        "--token",
+        help="File containing a JGI Data Portal session token, used for downloads "
+        "(Avatar menu > Copy My Session Token on the JGI Data Portal)",
+        required=True,
+    )
+    parser.add_argument(
+        "-o",
+        "--outfile",
+        help="Output file name for transcript file. Omit this to skip download of transcript file",
+    )
+    parser.add_argument(
+        "--protein_out",
+        help="Attempt to find protein file for portal and write to file",
+    )
+    parser.add_argument(
+        "--taxidmap", help="Output file with protein id to taxid mapping"
+    )
+    parser.add_argument("--taxid", help="Taxid of portal", type=int)
     args = parser.parse_args()
     if not args.outfile and not args.protein_out:
         sys.stderr.write("No output file specified\n")
