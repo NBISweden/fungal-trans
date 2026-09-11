@@ -152,7 +152,7 @@ def parse_extra_genomes(f):
 def get_mmseq_taxdb(wildcards):
     if config["refine_taxonomy"]:
         return config["mmseqs_refine_db"]
-    return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"], "_taxonomy")
+    return os.path.join(config["mmseqs_db_dir"], config["mmseqs_db"] + "_taxonomy")
 
 
 def get_eggnog_parser_extra_cmd(wildcards):

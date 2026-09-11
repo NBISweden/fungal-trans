@@ -160,6 +160,10 @@ properties:
     description: Parameters for kallisto
     default: "--rf-stranded"
   ## ANNOTATION ##
+  run_interproscan:
+    type: boolean
+    description: Whether to run the interproscan Nextflow pipeline (experimental)
+    default: false
   interproscan_url:
     type: string
     description: URL to InterProScan tar.gz file

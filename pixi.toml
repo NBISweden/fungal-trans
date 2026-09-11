@@ -14,8 +14,8 @@ init = "conda config --set channel_priority strict"
 
 [dependencies]
 python = "*"
-mamba = "*"
-snakemake = ">=9"
+conda = "*"
+snakemake = ">9,<=9.13"
 biopython = "*"
 tqdm = "*"
 pandas = "*"

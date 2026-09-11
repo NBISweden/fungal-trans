@@ -9,42 +9,53 @@ localrules:
     download_jgi_proteins,
     concat_proteins,
     mmseqs_filter_fungalDB,
-    mmseqs_create_taxidmap
+    mmseqs_create_taxidmap,
+
 
 # interproscan
 
+
 rule download_interproscan_data:
     output:
-        data=directory("resources/interproscan/data")
+        data=directory("resources/interproscan/data"),
     log:
         log="resources/interproscan/log",
-        version="resources/interproscan/version"
+        version="resources/interproscan/version",
     params:
         url=config["interproscan_url"],
         basename=os.path.basename(config["interproscan_url"]),
         version=os.path.basename(config["interproscan_url"]).replace(".tar.gz", ""),
-        outdir=lambda wildcards, output: os.path.dirname(output.data)
-    shadow: "minimal"
+        outdir=lambda wildcards, output: os.path.dirname(output.data),
+    shadow:
+        "minimal"
     shell:
         """
-        curl -O {params.url} > {log.log}
+        exec &>{log.log}
+        curl -O {params.url}
         curl -s -O {params.url}.md5
         echo -e "version: {params.version}" > {log.version}
-        md5sum -c {params.basename}.md5 >> {log.log}
+        md5sum -c {params.basename}.md5
         tar -pxzf {params.basename} --strip-components=1 -C {params.outdir}
         """
 
+
 # eggnog
+
 
 rule download_eggnog:
     """
     Downloads the eggnog database and proteins
     """
     output:
-        expand("{emapper_db_dir}/{f}", emapper_db_dir=config["emapper_db_dir"], f = ["eggnog.db","eggnog_proteins.dmnd"])
+        expand(
+            "{emapper_db_dir}/{f}",
+            emapper_db_dir=config["emapper_db_dir"],
+            f=["eggnog.db", "eggnog_proteins.dmnd"],
+        ),
     params:
-        data_dir = "resources/eggnog"
-    conda: "../../envs/emapper.yaml"
+        data_dir="resources/eggnog",
+    conda:
+        "../../envs/emapper.yaml"
     shell:
         """
         mkdir -p {params.data_dir}
@@ -52,19 +63,21 @@ rule download_eggnog:
         download_eggnog_data.py --data_dir resources/eggnog -y
         """
 
+
 ## Fungal transcripts ##
 rule init_jgi:
     """
     Creates a cookie file for JGI authentication using user-defined credentials
     """
     output:
-        cookies="resources/JGI/cookies"
+        cookies="resources/JGI/cookies",
     log:
-        "resources/JGI/init_jgi.log"
-    shadow: "shallow"
+        "resources/JGI/init_jgi.log",
+    shadow:
+        "shallow"
     params:
-        user_name = config["jgi_user"] if "jgi_user" in config.keys() else "",
-        password = config["jgi_password"] if "jgi_password" in config.keys() else ""
+        user_name=config["jgi_user"] if "jgi_user" in config.keys() else "",
+        password=config["jgi_password"] if "jgi_password" in config.keys() else "",
     retries: 3
     shell:
         """
@@ -72,6 +85,7 @@ rule init_jgi:
             --data-urlencode 'login={params.user_name}' \
             --data-urlencode 'password={params.password}' -c {output.cookies} > /dev/null 2>{log}
         """
+
 
 rule download_jgi_transcripts:
     """
@@ -84,12 +98,15 @@ rule download_jgi_transcripts:
         cookies=rules.init_jgi.output.cookies,
         token="resources/JGI/token",
     log:
-        "resources/JGI/genomes/download_jgi_transcripts.{portal}.log"
+        "resources/JGI/genomes/download_jgi_transcripts.{portal}.log",
+    params:
+        src=workflow.source_path("../utils/download_jgi_transcripts.py"),
     retries: 3
     shell:
         """
-        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -t {input.token} -o {output.transcripts} 2>{log}
+        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {output.transcripts} 2>{log}
         """
+
 
 rule filter_transcripts:
     """
@@ -97,11 +114,11 @@ rule filter_transcripts:
     Also renames sequences so as to be compatible with downstream mapping
     """
     output:
-        touch("resources/JGI/genomes/{portal}.transcripts.filt.fna.gz")
+        touch("resources/JGI/genomes/{portal}.transcripts.filt.fna.gz"),
     input:
-        rules.download_jgi_transcripts.output.transcripts
+        rules.download_jgi_transcripts.output.transcripts,
     log:
-        "resources/JGI/genomes/filter_transcripts.{portal}.log"
+        "resources/JGI/genomes/filter_transcripts.{portal}.log",
     shell:
         """
         exec &>{log}
@@ -111,6 +128,7 @@ rule filter_transcripts:
         fi
         """
 
+
 rule download_jgi_proteins:
     """
     For each 'portal', download the filtered proteins. Also output a mapping file
@@ -118,20 +136,22 @@ rule download_jgi_proteins:
     """
     output:
         proteins=temp(touch("resources/JGI/genomes/{portal}.proteins.faa.gz")),
-        mapping=temp(touch("resources/JGI/genomes/{portal}.mapping.tsv"))
+        mapping=temp(touch("resources/JGI/genomes/{portal}.mapping.tsv")),
     input:
         cookies=rules.init_jgi.output.cookies,
         token="resources/JGI/token",
     log:
-        "resources/JGI/genomes/download_jgi_proteins.{portal}.log"
+        "resources/JGI/genomes/download_jgi_proteins.{portal}.log",
     params:
-        taxid = lambda wildcards: extra_genomes[wildcards.portal]
+        taxid=lambda wildcards: extra_genomes[wildcards.portal],
+        src=workflow.source_path("../utils/download_jgi_transcripts.py"),
     retries: 3
     shell:
         """
-        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -t {input.token} \
+        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} \
             --protein_out {output.proteins} --taxidmap {output.mapping} --taxid {params.taxid} 2>{log}
         """
+
 
 rule concat_proteins:
     """
@@ -139,20 +159,27 @@ rule concat_proteins:
     """
     output:
         faa="resources/extra_genomes/proteins.faa.gz",
-        mapping="resources/extra_genomes/mapping.tsv"
+        mapping="resources/extra_genomes/mapping.tsv",
     input:
-        faa=expand(rules.download_jgi_proteins.output.proteins, portal=list(extra_genomes.keys())),
-        mapping=expand(rules.download_jgi_proteins.output.mapping, portal=list(extra_genomes.keys()))
+        faa=expand(
+            rules.download_jgi_proteins.output.proteins,
+            portal=list(extra_genomes.keys()),
+        ),
+        mapping=expand(
+            rules.download_jgi_proteins.output.mapping,
+            portal=list(extra_genomes.keys()),
+        ),
     log:
-        "resources/extra_genomes/concat_proteins.log"
+        "resources/extra_genomes/concat_proteins.log",
     params:
-        min_len = 100
+        min_len=100,
     run:
         from Bio.SeqIO import parse
         import gzip as gz
+
         with gz.open(output.faa, "wt") as fhout:
             for f in input.faa:
-                with gz.open(f, 'rt') as fhin:
+                with gz.open(f, "rt") as fhin:
                     for record in parse(fhin, "fasta"):
                         if len(record.seq) >= params.min_len:
                             newid = (record.id).replace("|", ".")
@@ -165,56 +192,64 @@ rule concat_proteins:
                         newid = seqid.replace("|", ".")
                         fhout.write(f"{newid}\t{taxid}\n")
 
+
 rule mmseqs_extract_fungalDB:
     """
     Uses the filtertaxseqdb command to extract fungal sequences from the official mmseqs2 database
     """
     output:
-        db="resources/mmseqs2/fungi-{mmseqs_db}"
+        db="resources/mmseqs2/fungi-{mmseqs_db}",
     input:
-        db=os.path.join(config["mmseqs_db_dir"],"{mmseqs_db}"),
+        db=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}"),
     log:
-        "resources/mmseqs2/extract_fungal_{mmseqs_db}_mmseqsDB.log"
-    conda: "../../envs/mmseqs.yaml"
-    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
+        "resources/mmseqs2/extract_fungal_{mmseqs_db}_mmseqsDB.log",
+    conda:
+        "../../envs/mmseqs.yaml"
+    container:
+        "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     threads: 1
     shell:
         """
         mmseqs filtertaxseqdb {input.db} {output.db} --taxon-list 4751 --threads {threads} > {log} 2>&1
         """
 
+
 rule mmseqs_convert2fasta_fungalDB:
     """
     Converts the extracted mmseqs2 database to fasta format
     """
     output:
-        fasta="resources/mmseqs2/fungi-{mmseqs_db}.fasta"
+        fasta="resources/mmseqs2/fungi-{mmseqs_db}.fasta",
     input:
-        db=rules.mmseqs_extract_fungalDB.output.db
-    conda: "../../envs/mmseqs.yaml"
-    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
+        db=rules.mmseqs_extract_fungalDB.output.db,
+    conda:
+        "../../envs/mmseqs.yaml"
+    container:
+        "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     threads: 1
     shell:
         """
         mmseqs convert2fasta {input.db} {output.fasta}
         """
 
+
 rule mmseqs_filter_fungalDB:
     """
     Filters the extracted fungal database to remove sequences shorter than a minimum length
     """
     output:
-        fasta="resources/mmseqs2/filtered-fungi-{mmseqs_db}.fasta"
+        fasta="resources/mmseqs2/filtered-fungi-{mmseqs_db}.fasta",
     input:
-        rules.mmseqs_convert2fasta_fungalDB.output.fasta
+        rules.mmseqs_convert2fasta_fungalDB.output.fasta,
     log:
-        "resources/mmseqs2/filter_fungi_{mmseqs_db}_mmseqsDB.log"
+        "resources/mmseqs2/filter_fungi_{mmseqs_db}_mmseqsDB.log",
     params:
-        min_len = 100
+        min_len=100,
     shell:
         """
         seqkit seq -m {params.min_len} {input} > {output.fasta}
         """
+
 
 rule mmseqs_createseqdb:
     """
@@ -222,44 +257,72 @@ rule mmseqs_createseqdb:
     """
     output:
         db="resources/mmseqs2/combined-fungi-{mmseqs_db}",
-        db_files=expand("resources/mmseqs2/combined-fungi-{{mmseqs_db}}{ext}", 
-            ext=[".dbtype","_h","_h.dbtype","_h.index",".index",".lookup",".source"])
+        db_files=expand(
+            "resources/mmseqs2/combined-fungi-{{mmseqs_db}}{ext}",
+            ext=[
+                ".dbtype",
+                "_h",
+                "_h.dbtype",
+                "_h.index",
+                ".index",
+                ".lookup",
+                ".source",
+            ],
+        ),
     input:
         jgi_fasta=rules.concat_proteins.output.faa,
-        mmseqs_fasta=rules.mmseqs_filter_fungalDB.output.fasta
+        mmseqs_fasta=rules.mmseqs_filter_fungalDB.output.fasta,
     log:
-        "resources/mmseqs2/create-fungi-{mmseqs_db}-seqdb.log"
-    conda: "../../envs/mmseqs.yaml"
-    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
+        "resources/mmseqs2/create-fungi-{mmseqs_db}-seqdb.log",
+    conda:
+        "../../envs/mmseqs.yaml"
+    container:
+        "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
     threads: 1
     shell:
         """
         mmseqs createdb {input.jgi_fasta} {input.mmseqs_fasta} {output.db} --dbtype 1 > {log} 2>&1
         """
 
+
 rule mmseqs_create_taxidmap:
     """
     Create taxid mapping file for the official mmseqs2 database
     """
     output:
-        tsv="resources/mmseqs2/{mmseqs_db}.taxidmap.tsv"
+        tsv="resources/mmseqs2/{mmseqs_db}.taxidmap.tsv",
     input:
         mapfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}_mapping"),
         lookupfile=os.path.join(config["mmseqs_db_dir"], "{mmseqs_db}.lookup"),
+    params:
+        outdir=lambda wc, output: os.path.dirname(output.tsv),
     threads: 1
     run:
         import polars as pl
+        import os
+
+        os.makedirs(params.outdir, exist_ok=True)
         protmap = pl.scan_csv(
-            input.lookupfile, 
-            separator="\t", 
-            has_header=False, 
-            with_column_names=lambda cols: [{"column_1": "id", "column_2": "accession", "column_3": "column_3"}[col] for col in cols]).select(["id","accession"])
+            input.lookupfile,
+            separator="\t",
+            has_header=False,
+            with_column_names=lambda cols: [
+                {"column_1": "id", "column_2": "accession", "column_3": "column_3"}[col]
+                for col in cols
+            ],
+        ).select(["id", "accession"])
         taxmap = pl.scan_csv(
-            input.mapfile, 
-            separator="\t", 
-            has_header=False, 
-            with_column_names=lambda cols: [{"column_1": "id", "column_2": "taxid", "column_3": "column_3"}[col] for col in cols]).select(["id","taxid"])
-        protmap.join(taxmap, on="id").select(["accession","taxid"]).sink_csv(output.tsv, separator="\t", include_header=False)
+            input.mapfile,
+            separator="\t",
+            has_header=False,
+            with_column_names=lambda cols: [
+                {"column_1": "id", "column_2": "taxid", "column_3": "column_3"}[col]
+                for col in cols
+            ],
+        ).select(["id", "taxid"])
+        protmap.join(taxmap, on="id").select(["accession", "taxid"]).sink_csv(
+            output.tsv, separator="\t", include_header=False
+        )
 
 
 rule download_taxdump:
@@ -267,15 +330,19 @@ rule download_taxdump:
     Downloads the NCBI taxonomy dump
     """
     output:
-        expand("resources/ncbi-taxdump/{pref}.dmp", pref=["nodes","delnodes","gencode","merged","names"]),
+        expand(
+            "resources/ncbi-taxdump/{pref}.dmp",
+            pref=["nodes", "delnodes", "gencode", "merged", "names"],
+        ),
     log:
-        "resources/ncbi-taxdump/download_taxdump.log"
+        "resources/ncbi-taxdump/download_taxdump.log",
     params:
-        outdir = lambda wc, output: os.path.dirname(output[0])
+        outdir=lambda wc, output: os.path.dirname(output[0]),
     shell:
         """
         wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz -O - 2>{log} | tar -xz -C {params.outdir} 
         """
+
 
 rule mmseqs_createtaxdb:
     """
@@ -283,19 +350,25 @@ rule mmseqs_createtaxdb:
     """
     output:
         taxonomy="resources/mmseqs2/combined-fungi-{mmseqs_db}_taxonomy",
-        mapping="resources/mmseqs2/combined-fungi-{mmseqs_db}_mapping"
+        mapping="resources/mmseqs2/combined-fungi-{mmseqs_db}_mapping",
     input:
         db=rules.mmseqs_createseqdb.output.db,
         db_files=rules.mmseqs_createseqdb.output.db_files,
-        mapfiles=[rules.mmseqs_create_taxidmap.output.tsv, rules.concat_proteins.output.mapping],
-        taxdump=rules.download_taxdump.output
+        mapfiles=[
+            rules.mmseqs_create_taxidmap.output.tsv,
+            rules.concat_proteins.output.mapping,
+        ],
+        taxdump=rules.download_taxdump.output,
     log:
-        "resources/mmseqs2/createtaxdb-combined-fungi-{mmseqs_db}.log"
-    conda: "../../envs/mmseqs.yaml"
-    container: "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
-    shadow: "copy-minimal"
+        "resources/mmseqs2/createtaxdb-combined-fungi-{mmseqs_db}.log",
+    conda:
+        "../../envs/mmseqs.yaml"
+    container:
+        "docker://quay.io/biocontainers/mmseqs2:17.b804f--hd6d6fdc_0"
+    shadow:
+        "copy-minimal"
     params:
-        taxdump = lambda wc, input: os.path.dirname(input.taxdump[0]),
+        taxdump=lambda wc, input: os.path.dirname(input.taxdump[0]),
     threads: 1
     shell:
         """
@@ -303,13 +376,14 @@ rule mmseqs_createtaxdb:
         mmseqs createtaxdb {input.db} tmp --ncbi-tax-dump {params.taxdump} --tax-mapping-file mapfile.tsv --threads {threads} > {log} 2>&1
         """
 
+
 ## Protein databases ##
 rule download_refseq_db:
     output:
         "resources/refseq/{domain}/refseq_{domain}.faa",
-        "resources/refseq/{domain}/refseq_{domain}.version"
+        "resources/refseq/{domain}/refseq_{domain}.version",
     params:
-        dir = "resources/refseq/{domain}"
+        dir="resources/refseq/{domain}",
     shell:
         """
         mkdir -p {params.dir}
@@ -319,20 +393,29 @@ rule download_refseq_db:
         wget -O - ftp://ftp.ncbi.nlm.nih.gov/refseq/release/RELEASE_NUMBER > {output[1]}
         """
 
+
 ## KEGG info ##
 rule get_kegg_files:
     """
     Downloads KEGG files
     """
     output:
-        expand("resources/kegg/{f}",
-            f = ["kegg_ec2pathways.tsv","kegg_ko2ec.tsv",
-                 "kegg_ko2pathways.tsv","kegg_kos.tsv","kegg_modules.tsv","kegg_pathways.tsv"])
+        expand(
+            "resources/kegg/{f}",
+            f=[
+                "kegg_ec2pathways.tsv",
+                "kegg_ko2ec.tsv",
+                "kegg_ko2pathways.tsv",
+                "kegg_kos.tsv",
+                "kegg_modules.tsv",
+                "kegg_pathways.tsv",
+            ],
+        ),
     log:
-        "resources/kegg/get_kegg_files.log"
+        "resources/kegg/get_kegg_files.log",
     params:
-        dldir = "resources/kegg",
-        src = workflow.source_path("../utils/eggnog-parser.py"),
+        dldir="resources/kegg",
+        src=workflow.source_path("../utils/eggnog-parser.py"),
     shell:
         """
         python {params.src} download {params.dldir} > {log} 2>&1

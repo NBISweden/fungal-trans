@@ -212,14 +212,15 @@ def all_input(wildcards):
             )
         )
         # interproscan
-        # rule interproscan (rules/annotate_single.smk)
-        inputs.extend(
-            expand(
-                "results/annotation/{assembler}/{sample_id}/interproscan/interproscan.tsv",
-                assembler=config["assembler"],
-                sample_id=samples.keys()
+        if config["run_interproscan"]:
+            # rule interproscan (rules/annotate_single.smk)
+            inputs.extend(
+                expand(
+                    "results/annotation/{assembler}/{sample_id}/interproscan/interproscan.tsv",
+                    assembler=config["assembler"],
+                    sample_id=samples.keys()
+                )
             )
-        )
         # collated taxonomy counts
         # rule collate_taxonomy (rules/annotation_single.smk)
         inputs.extend(
@@ -310,13 +311,14 @@ def all_input(wildcards):
         )
         # interproscan
         # rule interproscan_co (rules/annotate_co.smk)
-        inputs.extend(
-            expand(
-                "results/annotation/co-assembly/{assembler}/{assembly}/interproscan/interproscan.tsv",
-                assembler=config["assembler"],
-                assembly=assemblies.keys()
+        if config["run_interproscan"]:
+            inputs.extend(
+                expand(
+                    "results/annotation/co-assembly/{assembler}/{assembly}/interproscan/interproscan.tsv",
+                    assembler=config["assembler"],
+                    assembly=assemblies.keys()
+                )
             )
-        )
         # count tables
         # rule collate_featurecount_co (rules/annotate_co.smk)
         inputs.extend(
