@@ -82,12 +82,13 @@ rule download_jgi_transcripts:
         #proteins=temp(touch("resources/JGI/genomes/{portal}.proteins.faa.gz"))
     input:
         cookies=rules.init_jgi.output.cookies,
+        token="resources/JGI/token",
     log:
         "resources/JGI/genomes/download_jgi_transcripts.{portal}.log"
     retries: 3
     shell:
         """
-        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -o {output.transcripts} 2>{log}
+        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -t {input.token} -o {output.transcripts} 2>{log}
         """
 
 rule filter_transcripts:
@@ -120,6 +121,7 @@ rule download_jgi_proteins:
         mapping=temp(touch("resources/JGI/genomes/{portal}.mapping.tsv"))
     input:
         cookies=rules.init_jgi.output.cookies,
+        token="resources/JGI/token",
     log:
         "resources/JGI/genomes/download_jgi_proteins.{portal}.log"
     params:
@@ -127,7 +129,7 @@ rule download_jgi_proteins:
     retries: 3
     shell:
         """
-        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} \
+        python source/utils/download_jgi_transcripts.py -p {wildcards.portal} -c {input.cookies} -t {input.token} \
             --protein_out {output.proteins} --taxidmap {output.mapping} --taxid {params.taxid} 2>{log}
         """
 
