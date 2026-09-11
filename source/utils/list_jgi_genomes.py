@@ -2,9 +2,7 @@
 
 import pandas as pd
 import numpy as np
-import xml.etree.ElementTree as ET
 import os
-import sys
 from argparse import ArgumentParser
 
 
@@ -12,17 +10,17 @@ def parse_genomes(url, f=None):
     """
     Parses available genome portals at JGI (default: https://mycocosm.jgi.doe.gov/fungi/fungi.info.html)
 
+    If f is given and already exists, it is read from as a cache and url is ignored.
+
     :param url: str
     :return: dict
     """
 
     def extract_name_portal(genome_table):
-        df = {}
+        records = {}
         for _, items in genome_table.iterrows():
             name, portal = items["Name"]
             portal = os.path.basename(portal)
-            if name == "Name":
-                continue
             asm_length, _ = items["Assembly Length"]
             genes, _ = items["# Genes"]
             if asm_length == "NO DATA":
@@ -33,10 +31,10 @@ def parse_genomes(url, f=None):
                 genes = np.nan
             else:
                 genes = int(genes.replace(",", ""))
-            df[portal.lstrip("/")] = {"Name": name, "bp": asm_length, "genes": genes}
-        df = pd.DataFrame(df).T
-        df.index.name = "portal"
-        return df
+            records[portal.lstrip("/")] = {"Name": name, "bp": asm_length, "genes": genes}
+        records = pd.DataFrame(records).T
+        records.index.name = "portal"
+        return records
 
     if f is not None and os.path.exists(f):
         genomes = pd.read_csv(f, sep="\t", header=0, index_col=0)
@@ -46,7 +44,9 @@ def parse_genomes(url, f=None):
     genome_table.set_index("##", inplace=True)
     genomes = extract_name_portal(genome_table)
     if f is not None:
-        os.makedirs(os.path.dirname(f), exist_ok=True)
+        dirname = os.path.dirname(f)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
         genomes.to_csv(f, sep="\t")
     return genomes
 
@@ -56,6 +56,8 @@ def main(args):
     Main function
     """
     genomes = parse_genomes(args.info, args.file)
+    if args.file is None:
+        print(genomes.to_csv(sep="\t"))
 
 
 if __name__ == "__main__":
