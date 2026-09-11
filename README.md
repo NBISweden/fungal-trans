@@ -187,7 +187,23 @@ jgi_password: "your-password"
 ```
 
 then modify your configuration file so that the `jgi_account_info` parameter
-points to the file with your credentials.
+points to the file with your credentials. These credentials are used by the
+`init_jgi` rule to create a cookie file (`resources/JGI/cookies`) which is used
+to search for available files on a genome portal.
+
+> [!IMPORTANT]  
+> Actually downloading a file (as opposed to just searching for it) requires a
+> JGI Data Portal **session token** in addition to the cookie file above. This
+> token cannot be generated automatically and must be copied manually:
+>
+> 1. Log in at the [JGI Data Portal](https://data.jgi.doe.gov/).
+> 2. Open the avatar menu in the top right corner and select **Copy My Session
+>    Token**.
+> 3. Paste the copied token into a file at `resources/JGI/token`.
+>
+> Session tokens expire, so you will need to repeat these steps and refresh
+> `resources/JGI/token` if genome downloads start failing with an authentication
+> error.
 
 > [!NOTE]  
 > The `fungi_info` parameter specifies the path to a JGI Genome portal listing
